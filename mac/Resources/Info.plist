@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Veer</string>
+    <key>CFBundleDisplayName</key>
+    <string>Veer</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.usemonoma.veer</string>
+    <key>CFBundleExecutable</key>
+    <string>Veer</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Veer turns speech in your videos and recordings into subtitles. Recognition runs on this Mac; nothing is sent anywhere.</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>© 2026 Usemonoma</string>
+    <!-- Finder right-click → Services. NSMessage names a method on ServiceProvider. -->
+    <key>NSServices</key>
+    <array>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
+                <string>Convert with Veer</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>convertFiles</string>
+            <key>NSPortName</key>
+            <string>Veer</string>
+            <key>NSSendFileTypes</key>
+            <array>
+                <string>public.item</string>
+            </array>
+            <key>NSRequiredContext</key>
+            <dict/>
+        </dict>
+        <dict>
+            <key>NSMenuItem</key>
+            <dict>
+                <key>default</key>
+                <string>Veer Tools</string>
+            </dict>
+            <key>NSMessage</key>
+            <string>toolsForFiles</string>
+            <key>NSPortName</key>
+            <string>Veer</string>
+            <key>NSSendFileTypes</key>
+            <array>
+                <string>public.item</string>
+            </array>
+            <key>NSRequiredContext</key>
+            <dict/>
+        </dict>
+    </array>
+    <!-- Open With → Veer for any file, never as the default app. -->
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Any file</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.data</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>

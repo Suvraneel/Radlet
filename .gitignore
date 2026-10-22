@@ -1,0 +1,6 @@
+/target
+/dist
+/mac/.build
+/mac/.swiftpm
+.DS_Store
+Claude outputs

@@ -1,0 +1,243 @@
+import XCTest
+@testable import VeerKit
+
+final class ExtraActionTests: XCTestCase {
+    private func json(_ v: JSONValue) throws -> String {
+        let enc = JSONEncoder()
+        enc.outputFormatting = .sortedKeys
+        return String(decoding: try enc.encode(v), as: UTF8.self)
+    }
+
+    /// Also checked by the engine's `tool_window_actions_are_accepted`.
+    func testShapes() throws {
+        XCTAssertEqual(try json(ToolAction.pageNumbers(position: .bottomRight, style: .pageOfTotal, start: 5,
+                                                       size: 10, skipFirst: true)),
+                       #"{"kind":"steps","steps":[{"op":"page_numbers","position":"bottom_right","size":10,"skip_first":true,"start":5,"style":"page_of_total"}]}"#)
+        XCTAssertEqual(try json(ToolAction.watermark(text: "DRAFT", opacity: 0.2, diagonal: true)),
+                       #"{"kind":"steps","steps":[{"diagonal":true,"op":"watermark","opacity":0.2,"text":"DRAFT"}]}"#)
+        XCTAssertEqual(try json(ToolAction.protectPDF(password: "pw")), #"{"kind":"protect_pdf","password":"pw"}"#)
+        XCTAssertEqual(try json(ToolAction.unlockPDF(password: "pw")), #"{"kind":"unlock_pdf","password":"pw"}"#)
+        XCTAssertEqual(try json(ToolAction.trim(start: 1.5, end: 4)),
+                       #"{"kind":"steps","steps":[{"end":4,"op":"trim","start":1.5}]}"#)
+        XCTAssertEqual(try json(ToolAction.gif(start: 1, end: 2)),
+                       #"{"kind":"steps","steps":[{"end":2,"op":"trim","start":1},{"op":"convert","to":"gif"}]}"#)
+        XCTAssertEqual(try json(ToolAction.gif(start: 0, end: nil)),
+                       #"{"kind":"steps","steps":[{"op":"convert","to":"gif"}]}"#)
+        XCTAssertEqual(try json(ToolAction.pages([2, 1], rotate: [2: 90, 3: 180, 1: 360])),
+                       #"{"kind":"steps","steps":[{"op":"pages","pages":[2,1],"rotate":[{"degrees":90,"page":2}]}]}"#)
+        XCTAssertEqual(try json(ToolAction.pages([2, 1], rotate: [:])),
+                       #"{"kind":"steps","steps":[{"op":"pages","pages":[2,1]}]}"#)
+    }
+
+    func testTimes() {
+        XCTAssertEqual(TimeText.parse("90"), 90)
+        XCTAssertEqual(TimeText.parse("1:30"), 90)
+        XCTAssertEqual(TimeText.parse(" 1:02:03.5 "), 3723.5)
+        XCTAssertNil(TimeText.parse("soon"))
+        XCTAssertNil(TimeText.parse("1:2:3:4"))
+        XCTAssertNil(TimeText.parse("-5"))
+        XCTAssertEqual(TimeText.format(65.3), "1:05.3")
+        XCTAssertEqual(TimeText.format(3723.5), "1:02:03.5")
+        XCTAssertEqual(TimeText.format(0), "0:00.0")
+    }
+
+    func testStepDescriptions() {
+        XCTAssertEqual(StepText.describe(.object(["op": .string("convert"), "to": .string("webp"), "quality": .int(80)])),
+                       "Convert to WebP (quality 80)")
+        XCTAssertEqual(StepText.describe(.object(["op": .string("resize"), "percent": .int(50)])), "Resize to 50%")
+        XCTAssertEqual(StepText.describe(.object(["op": .string("trim"), "start": .double(1), "end": .double(65.3)])),
+                       "Trim 0:01.0 to 1:05.3")
+        XCTAssertEqual(StepText.describe(.object(["op": .string("page_numbers"), "style": .string("fraction")])),
+                       "Page numbers (3 / 12)")
+        XCTAssertEqual(StepText.describe(.object(["op": .string("future_thing")])), "Future Thing")
+    }
+}
+
+final class WheelLayoutTests: XCTestCase {
+    private func slots(_ n: Int) -> [Slot] {
+        (0..<n).map { Slot(id: "s\($0)", label: "S\($0)", symbol: "circle", group: "tool", action: .null) }
+    }
+
+    func testOverflowGoesBehindMore() {
+        let fitting = WheelLayout.fit(slots(12), max: 12)
+        XCTAssertEqual(fitting.visible.count, 12)
+        XCTAssertTrue(fitting.overflow.isEmpty)
+        let over = WheelLayout.fit(slots(15), max: 12)
+        XCTAssertEqual(over.visible.count, 12)
+        XCTAssertEqual(over.visible.last?.id, WheelLayout.moreID)
+        XCTAssertEqual(over.overflow.map(\.id), ["s11", "s12", "s13", "s14"])
+    }
+
+    func testRenameSitsBeforeChecksum() {
+        let tools = slots(2) + [Slot(id: "checksum", label: "Copy SHA-256", symbol: "number", group: "tool",
+                                     action: .object(["kind": .string("checksum")]))]
+        let with = WheelLayout.withAppTools(tools)
+        XCTAssertEqual(with.map(\.id), ["s0", "s1", "rename", "checksum"])
+        XCTAssertEqual(WheelLayout.withAppTools(with).count, 4)  // added once
+        XCTAssertEqual(WheelLayout.withAppTools([]).map(\.id), ["rename"])
+    }
+}
+
+final class HistoryTests: XCTestCase {
+    func testNewestFirstCappedAndUndoOrder() {
+        var h = JobHistory()
+        for i in 0..<(JobHistory.limit + 5) {
+            h.add(HistoryEntry(title: "job \(i)", outputs: ["/out/\(i).jpg"]))
+        }
+        XCTAssertEqual(h.entries.count, JobHistory.limit)
+        XCTAssertEqual(h.entries.first?.title, "job \(JobHistory.limit + 4)")
+        let first = h.nextUndo!
+        h.markUndone(first.id)
+        XCTAssertNotEqual(h.nextUndo?.id, first.id)
+        XCTAssertEqual(h.entries.first?.summary, "1 file · undone")
+        h.add(HistoryEntry(title: "checksum"))  // nothing to undo
+        XCTAssertNotEqual(h.nextUndo?.title, "checksum")
+    }
+
+    func testSurvivesARoundTrip() {
+        var h = JobHistory()
+        h.add(HistoryEntry(title: "Rename", renames: [.init(from: "/a/x.jpg", to: "/a/y.jpg")]))
+        h.add(HistoryEntry(title: "Compress", outputs: ["/a/z.jpg"],
+                           restores: [.init(trashed: "/T/z.jpg", original: "/a/z.jpg")]))
+        let back = JobHistory.decode(h.encoded())
+        XCTAssertEqual(back.entries.map(\.title), ["Compress", "Rename"])
+        XCTAssertEqual(back.entries[1].summary, "Renamed 1 file")
+        XCTAssertEqual(back.entries[0].summary, "1 file · 1 original in the Trash")
+        XCTAssertEqual(JobHistory.decode(Data("nope".utf8)).entries.count, 0)
+    }
+}
+
+final class RenamePlanTests: XCTestCase {
+    private let utc: Calendar = {
+        var c = Calendar(identifier: .gregorian)
+        c.timeZone = TimeZone(identifier: "UTC")!
+        return c
+    }()
+
+    private func input(_ path: String, _ date: TimeInterval? = nil) -> RenamePlan.Input {
+        RenamePlan.Input(url: URL(fileURLWithPath: path), date: date.map { Date(timeIntervalSince1970: $0) })
+    }
+
+    func testPatternsNumbersAndDates() throws {
+        let files = (1...12).map { input("/p/IMG_\($0).JPG", 1_700_000_000 + Double($0) * 3600) }
+        let changes = try RenamePlan.make(files, pattern: "Trip {date} {n}", calendar: utc, exists: { _ in false }).get()
+        XCTAssertEqual(changes.count, 12)
+        XCTAssertEqual(changes[0].to.lastPathComponent, "Trip 2023-11-14 01.JPG")
+        XCTAssertEqual(changes[11].to.lastPathComponent, "Trip 2023-11-15 12.JPG")
+        let timed = try RenamePlan.make([input("/p/a.png", 0)], pattern: "{name} {time} {n:3}", start: 7,
+                                        calendar: utc, exists: { _ in false }).get()
+        XCTAssertEqual(timed[0].to.lastPathComponent, "a 00.00.00 007.png")
+    }
+
+    func testNeverClashes() throws {
+        // b.txt exists and isn't being renamed; a.txt is.
+        let exists: (URL) -> Bool = { ["/d/b.txt", "/d/a.txt"].contains($0.path) }
+        let changes = try RenamePlan.make([input("/d/a.txt"), input("/d/c.txt")], pattern: "b",
+                                          exists: exists).get()
+        XCTAssertEqual(changes.map(\.to.lastPathComponent), ["b 2.txt", "b 3.txt"])
+        // Swapping names within the batch is fine (applied in two steps).
+        let swap = try RenamePlan.make([input("/d/a.txt"), input("/d/b.txt")], pattern: "{n}", start: 1,
+                                       exists: exists).get()
+        XCTAssertEqual(swap.map(\.to.lastPathComponent), ["1.txt", "2.txt"])
+    }
+
+    func testUnchangedNamesAreSkippedAndBadPatternsExplained() {
+        let same = try? RenamePlan.make([input("/d/a.txt")], pattern: "{name}", exists: { _ in true }).get()
+        XCTAssertEqual(same, [])
+        XCTAssertEqual(RenamePlan.make([input("/d/a.txt")], pattern: "  ", exists: { _ in false }),
+                       .failure(.empty))
+        XCTAssertEqual(RenamePlan.make([input("/d/a.txt")], pattern: "{colour}", exists: { _ in false }),
+                       .failure(.unknownToken("colour")))
+        let cleaned = try? RenamePlan.make([input("/d/a.txt")], pattern: "a/b:c", exists: { _ in false }).get()
+        XCTAssertEqual(cleaned?.first?.to.lastPathComponent, "a-b-c.txt")
+    }
+}
+
+final class RecipeEditingTests: XCTestCase {
+    private func obj(_ v: JSONValue) -> [String: JSONValue] {
+        if case .object(let o) = v { return o }
+        return [:]
+    }
+
+    func testFieldsRoundTripAndKeepUnknownOptions() throws {
+        let step: JSONValue = .object(["op": .string("compress"), "level": .string("strong"),
+                                       "target_bytes": .int(500_000)])
+        let f = StepFields(step)
+        XCTAssertEqual(f.level, "strong")
+        XCTAssertEqual(try f.build().get(), step)
+        let crop: JSONValue = .object(["op": .string("crop"),
+                                       "rect": .object(["x": .double(0.1), "y": .int(0), "w": .double(0.5), "h": .int(1)])])
+        XCTAssertFalse(StepFields(crop).hasOptions)
+        XCTAssertEqual(try StepFields(crop).build().get(), crop)
+    }
+
+    func testEditingChangesOnlyWhatsShown() throws {
+        var resize = StepFields(.object(["op": .string("resize"), "max": .int(2048)]))
+        XCTAssertEqual(resize.sizeMode, .max)
+        resize.sizeMode = .percent
+        resize.size = "50"
+        XCTAssertEqual(obj(try resize.build().get()), ["op": .string("resize"), "percent": .int(50)])
+        resize.size = "150"
+        XCTAssertThrowsError(try resize.build().get())
+
+        var convert = StepFields(.object(["op": .string("convert"), "to": .string("avif"), "quality": .int(60)]))
+        XCTAssertEqual(convert.formatChoices.last, "avif")
+        convert.quality = ""
+        XCTAssertEqual(obj(try convert.build().get()), ["op": .string("convert"), "to": .string("avif")])
+        convert.quality = "101"
+        XCTAssertThrowsError(try convert.build().get())
+
+        var trim = StepFields(.object(["op": .string("trim"), "start": .double(90)]))
+        XCTAssertEqual(trim.start, "1:30.0")
+        XCTAssertEqual(trim.end, "")
+        trim.end = "1:00"
+        XCTAssertThrowsError(try trim.build().get())
+        trim.end = "2:00"
+        XCTAssertEqual(obj(try trim.build().get())["end"], .double(120))
+
+        var mark = StepFields(.object(["op": .string("watermark"), "text": .string("DRAFT")]))
+        mark.opacity = 0.1234
+        XCTAssertEqual(obj(try mark.build().get())["opacity"], .double(0.12))
+        mark.text = "  "
+        XCTAssertThrowsError(try mark.build().get())
+    }
+
+    func testWholeRecipeChecks() throws {
+        let steps = [StepFields(.object(["op": .string("strip_metadata")]))]
+        XCTAssertEqual(RecipeCheck.build(name: " ", description: "", steps: steps).failureMessage,
+                       "Give the recipe a name.")
+        XCTAssertEqual(RecipeCheck.build(name: "A", description: "", steps: []).failureMessage,
+                       "Add at least one step.")
+        let bad = [StepFields(.object(["op": .string("watermark"), "text": .string("")]))]
+        XCTAssertEqual(RecipeCheck.build(name: "A", description: "", steps: bad).failureMessage,
+                       "Step 1: Type the watermark's text.")
+        let ok = try RecipeCheck.build(name: " Web ", description: " For the blog ", steps: steps).get()
+        XCTAssertEqual(ok, .object(["name": .string("Web"), "description": .string("For the blog"),
+                                    "steps": .array([.object(["op": .string("strip_metadata")])])]))
+    }
+}
+
+private extension Result where Failure == EditProblem {
+    var failureMessage: String? {
+        if case .failure(let p) = self { return p.message }
+        return nil
+    }
+}
+
+final class RenameHelpersTests: XCTestCase {
+    func testFreeNamesAndDates() {
+        let taken: Set<String> = ["/d/a.txt", "/d/a 2.txt"]
+        XCTAssertEqual(RenamePlan.freeName(URL(fileURLWithPath: "/d/a.txt")) { taken.contains($0.path) }.path, "/d/a 3.txt")
+        XCTAssertEqual(RenamePlan.freeName(URL(fileURLWithPath: "/d/b.txt")) { taken.contains($0.path) }.path, "/d/b.txt")
+        XCTAssertTrue(RenamePlan.needsDates("Trip {Date} {n}"))
+        XCTAssertFalse(RenamePlan.needsDates("{name} {n}"))
+    }
+
+    func testTrimTimesKeepTheirPrecision() throws {
+        let f = StepFields(.object(["op": .string("trim"), "start": .double(1.234), "end": .double(5.678)]))
+        XCTAssertEqual(f.start, "0:01.2")
+        let built = try f.build().get()
+        XCTAssertEqual(built["start"], .double(1.234))
+        XCTAssertEqual(built["end"], .double(5.678))
+    }
+}

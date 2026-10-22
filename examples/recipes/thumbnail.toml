@@ -1,0 +1,15 @@
+# Copy into your recipes folder (Veer → Open Recipes Folder) to add it to the wheel.
+name = "Square-ish thumbnail"
+description = "Longest side 512 px, JPEG at quality 75, no metadata"
+
+[[steps]]
+op = "resize"
+max = 512
+
+[[steps]]
+op = "convert"
+to = "jpeg"
+quality = 75
+
+[[steps]]
+op = "strip_metadata"

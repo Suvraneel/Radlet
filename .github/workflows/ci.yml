@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  engine:
+    name: Engine (Linux)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: Install FFmpeg for media tests
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Download PDFium for PDF-to-image tests
+        run: |
+          mkdir -p "$RUNNER_TEMP/pdfium"
+          curl -fsSL "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F8111/pdfium-linux-x64.tgz" | tar xz -C "$RUNNER_TEMP/pdfium"
+          echo "VEER_PDFIUM=$RUNNER_TEMP/pdfium/lib/libpdfium.so" >> "$GITHUB_ENV"
+      - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test --all
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check licenses
+
+  mac:
+    name: Mac app
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: brew install ffmpeg
+      - run: cargo test --all
+      - run: cargo build --release -p veer-cli
+      - name: Record a live helper session
+        timeout-minutes: 5
+        run: mac/scripts/contract-session.sh target/release/veer "$RUNNER_TEMP/contract"
+      - name: Swift tests (VeerKit, plus the live protocol contract)
+        timeout-minutes: 15
+        run: VEER_CONTRACT_DIR="$RUNNER_TEMP/contract" swift test --package-path mac
+      - name: Build Veer.app
+        run: mac/scripts/build-app.sh
+      - name: Smoke-test the bundled helpers
+        run: |
+          echo '{"id":1,"method":"hello"}' | dist/Veer.app/Contents/Helpers/veer serve | grep '"vision":true'
+          dist/Veer.app/Contents/Helpers/veer-vision selftest
+      - run: ditto -c -k --keepParent dist/Veer.app dist/Veer.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Veer-mac
+          path: dist/Veer.zip
