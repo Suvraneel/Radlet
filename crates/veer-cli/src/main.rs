@@ -13,7 +13,9 @@ use std::sync::Mutex;
 use anyhow::{bail, Context as _, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use veer_core::job::{self, Event, Executor, RunOptions, Status};
-use veer_core::ops::{NumberPosition, NumberStyle, PageTurn, Rect, RedactStyle, SplitMode};
+use veer_core::ops::{
+    IconKind, NumberPosition, NumberStyle, PageTurn, Rect, RedactStyle, SplitMode,
+};
 use veer_core::{
     catalog, format, Action, Capabilities, CompressLevel, Format, OutputLocation, Recipe, Step,
 };
@@ -56,6 +58,26 @@ enum Style {
     Black,
     Pixelate,
     Blur,
+}
+
+impl Style {
+    fn redact(self) -> RedactStyle {
+        match self {
+            Style::Black => RedactStyle::Black,
+            Style::Pixelate => RedactStyle::Pixelate,
+            Style::Blur => RedactStyle::Blur,
+        }
+    }
+}
+
+#[derive(Copy, Clone, ValueEnum)]
+enum IconSetArg {
+    /// favicon.ico, PNGs, Apple touch and Android icons, manifest, HTML
+    Favicon,
+    /// A macOS .icns file
+    Mac,
+    /// AppIcon.appiconset for Xcode
+    Ios,
 }
 
 fn parse_rect(s: &str) -> std::result::Result<Rect, String> {
@@ -442,6 +464,47 @@ enum Command {
         #[command(flatten)]
         run: RunArgs,
     },
+    /// Put tables (CSV, TSV, JSON, Excel) into one Excel workbook.
+    Workbook {
+        #[command(flatten)]
+        run: RunArgs,
+    },
+    /// Print the contents of QR codes in pictures.
+    Codes {
+        #[command(flatten)]
+        run: RunArgs,
+    },
+    /// Make a QR code picture from each text file.
+    Qr {
+        #[command(flatten)]
+        run: RunArgs,
+    },
+    /// Make icons from pictures: a favicon set, a macOS .icns, or an iOS
+    /// app icon set.
+    Icons {
+        #[command(flatten)]
+        run: RunArgs,
+        #[arg(long, value_enum, default_value = "favicon")]
+        set: IconSetArg,
+    },
+    /// Hide the faces in pictures, found on-device (macOS app).
+    Faces {
+        #[command(flatten)]
+        run: RunArgs,
+        #[arg(long, value_enum, default_value = "pixelate")]
+        style: Style,
+    },
+    /// Translate documents and subtitles on-device (macOS 26 app).
+    Translate {
+        #[command(flatten)]
+        run: RunArgs,
+        /// Language to translate into, such as fr or pt-BR.
+        #[arg(long)]
+        to: String,
+        /// Language of the text (default: detected).
+        #[arg(long)]
+        from: Option<String>,
+    },
     /// Print SHA-256 checksums.
     Checksum {
         #[command(flatten)]
@@ -610,7 +673,7 @@ fn run(args: &RunArgs, action: Action, json_out: bool) -> Result<ExitCode> {
         _ => Executor::Inline,
     };
     let is_checksum = matches!(action, Action::Checksum);
-    let is_text = matches!(action, Action::CopyText);
+    let is_text = matches!(action, Action::CopyText | Action::ReadCodes);
     let is_count = matches!(action, Action::WordCount);
     let many = args.files.len() > 1;
     let units = job::plan(&args.files, &action, &options.output, &job::new_job_tag());
@@ -798,7 +861,7 @@ fn dispatch(cli: Cli) -> Result<ExitCode> {
         Command::Inspect { files, recipes_dir } => {
             let detected: Vec<Option<Format>> =
                 files.iter().map(|f| format::detect(f).ok()).collect();
-            let wheel = catalog::wheel(&detected, caps, &recipes(recipes_dir.as_ref()));
+            let wheel = catalog::wheel_for(&files, &detected, caps, &recipes(recipes_dir.as_ref()));
             if json_out {
                 println!("{}", serde_json::to_string(&wheel)?);
             } else {
@@ -828,6 +891,26 @@ fn dispatch(cli: Cli) -> Result<ExitCode> {
             quality,
         } => {
             let to = Format::parse(&to).with_context(|| format!("unknown format \"{to}\""))?;
+            // Folders: convert what's inside (a folder to ZIP stays as it is).
+            let folders = !r.files.is_empty() && r.files.iter().all(|f| f.is_dir());
+            if folders && to != Format::Zip {
+                // PDF means documents made into PDFs; otherwise files of
+                // the target's own kind (images to JPEG, audio to MP3...).
+                let only = if to == Format::Pdf {
+                    veer_core::Category::Document
+                } else {
+                    to.category()
+                };
+                return run(
+                    &r,
+                    Action::ConvertInside {
+                        steps: vec![Step::Convert { to, quality }],
+                        only,
+                        label: None,
+                    },
+                    json_out,
+                );
+            }
             run(&r, Action::single(Step::Convert { to, quality }), json_out)
         }
         Command::Resize {
@@ -857,11 +940,7 @@ fn dispatch(cli: Cli) -> Result<ExitCode> {
             rects,
             style,
         } => {
-            let style = match style {
-                Style::Black => RedactStyle::Black,
-                Style::Pixelate => RedactStyle::Pixelate,
-                Style::Blur => RedactStyle::Blur,
-            };
+            let style = style.redact();
             run(&r, Action::single(Step::Redact { rects, style }), json_out)
         }
         Command::Split {
@@ -1048,6 +1127,29 @@ fn dispatch(cli: Cli) -> Result<ExitCode> {
             json_out,
         ),
         Command::Duplicates { run: r } => run(&r, Action::FindDuplicates, json_out),
+        Command::Workbook { run: r } => run(&r, Action::CombineWorkbook, json_out),
+        Command::Codes { run: r } => run(&r, Action::ReadCodes, json_out),
+        Command::Qr { run: r } => run(&r, Action::MakeQr, json_out),
+        Command::Icons { run: r, set } => {
+            let action = match set {
+                IconSetArg::Favicon => Action::IconSet {
+                    set: IconKind::Favicon,
+                },
+                IconSetArg::Ios => Action::IconSet { set: IconKind::Ios },
+                IconSetArg::Mac => Action::convert(Format::Icns),
+            };
+            run(&r, action, json_out)
+        }
+        Command::Faces { run: r, style } => run(
+            &r,
+            Action::single(Step::BlurFaces {
+                style: style.redact(),
+            }),
+            json_out,
+        ),
+        Command::Translate { run: r, to, from } => {
+            run(&r, Action::single(Step::Translate { to, from }), json_out)
+        }
         Command::Checksum { run: r } => run(&r, Action::Checksum, json_out),
         Command::Recipe {
             recipe,

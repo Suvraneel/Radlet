@@ -220,6 +220,7 @@ pub fn encode(
             DynamicImage::ImageRgba8(fitted.to_rgba8()).write_to(&mut w, ImageFormat::Ico)?;
             w.flush()?;
         }
+        Format::Icns => std::fs::write(out, crate::engines::icons::icns(img)?)?,
         Format::Heic => {
             let scratch = tempfile::tempdir()?;
             let png = scratch.path().join("source.png");

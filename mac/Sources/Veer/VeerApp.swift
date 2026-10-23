@@ -58,6 +58,8 @@ private struct MenuContent: View {
         Button("Run a Recipe…") { state.pickFiles(mode: .recipes) }
         Button("Convert Clipboard") { state.convertClipboard() }
             .keyboardShortcut("v", modifiers: [.command, .shift])
+        Button("Convert Finder Selection") { state.convertFinderSelection() }
+            .keyboardShortcut("v", modifiers: [.control, .option])
         Divider()
         Button("Undo Last Job") { state.undo() }
             .disabled(!state.canUndo)
@@ -153,6 +155,17 @@ final class AppState: ObservableObject {
             }
         }
         hud.onDragging = { [weak self] dragging in self?.draggingOut = dragging }
+        // Next…: the wheel again, for what the job made.
+        hud.onNext = { [weak self] outputs in
+            guard let self else { return }
+            let still = outputs.filter { FileManager.default.fileExists(atPath: $0.path) }
+            guard !still.isEmpty else { return }
+            self.hud.hide()
+            self.showWheel(for: still, mode: .convert)
+        }
+
+        FinderShortcut.shared.onPress = { [weak self] result in self?.openFinderSelection(result) }
+        FinderShortcut.shared.setEnabled(Prefs.finderShortcut)
 
         WatchManager.shared.start()
         Task { await checkEngine() }
@@ -193,6 +206,21 @@ final class AppState: ObservableObject {
         wheel.show(files: files, at: NSPoint(x: screen.midX, y: screen.midY), mode: mode, keyboard: true)
     }
 
+    /// ⌃⌥V and the menu: the wheel for the files selected in Finder.
+    func convertFinderSelection() {
+        openFinderSelection(FinderSelection.read())
+    }
+
+    private func openFinderSelection(_ result: Result<[URL], FinderSelectionError>) {
+        switch result {
+        case .success(let files):
+            Log.app("Finder selection: \(describeFiles(files))")
+            showWheel(for: files, mode: .convert)
+        case .failure(let problem):
+            notify("Finder selection", detail: problem.message)
+        }
+    }
+
     /// Opens the wheel for what's on the clipboard: copied files, or a
     /// copied image saved as a PNG.
     func convertClipboard() {
@@ -212,13 +240,15 @@ final class AppState: ObservableObject {
         let toClipboard: Bool
         /// The inputs are copied images in Caches, never replaced.
         let temporary: Bool
+        /// The results stand in for the originals (see Slot.replacesOriginal).
+        let replaces: Bool
     }
 
     func run(_ slot: Slot, files: [URL]) {
         // Copy path, Copy name and Open in Terminal happen here and now.
         if let quick = QuickAction(slot: slot) {
             Usage.shared.record(slot)
-            runQuick(quick, files: files)
+            runQuick(quick, slot: slot, files: files)
             return
         }
         // Tools with options (Crop, Compress, Split…) open their window
@@ -231,10 +261,12 @@ final class AppState: ObservableObject {
         let fromClipboard = clipboardFiles == Set(files.map(\.standardizedFileURL))
         clipboardFiles = nil
         let context = JobContext(generation: UUID(), toClipboard: fromClipboard,
-                                 temporary: ClipboardInput.isTemporary(files))
-        let title = self.title(for: slot, files: files)
+                                 temporary: ClipboardInput.isTemporary(files), replaces: slot.replacesOriginal)
+        let title = slot.jobTitle(files: files)
         let total = slot.isWholeSelection ? 1 : files.count
-        let kind: JobProgress.ValueKind = slot.isCopyText ? .text : (slot.isWordCount ? .count : .checksum)
+        let kind: JobProgress.ValueKind = slot.isCopyText ? .text
+            : slot.isReadCodes ? .code
+            : slot.isWordCount ? .count : .checksum
         Log.app("running \(slot.id) on \(describeFiles(files))\(fromClipboard ? " from the clipboard" : "")")
         // The HUD shows the newest job. Each job also keeps its own record,
         // so one the HUD has moved on from still reaches History.
@@ -268,7 +300,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    private func runQuick(_ action: QuickAction, files: [URL]) {
+    private func runQuick(_ action: QuickAction, slot: Slot, files: [URL]) {
         Log.app("quick action \(action.rawValue) on \(describeFiles(files))")
         switch action {
         case .copyPath, .copyName:
@@ -290,6 +322,16 @@ final class AppState: ObservableObject {
             NSWorkspace.shared.open(folders, withApplicationAt: terminal, configuration: config) { _, error in
                 if let error { Log.app("open in Terminal failed: \(Log.code(error))") }
             }
+        case .share:
+            if let problem = Sharing.shared.share(files, via: QuickAction.shareVia(slot)) {
+                notify("Share", detail: problem)
+            }
+        case .copyImage:
+            guard let file = files.first, Sharing.shared.copyImage(file) else {
+                notify("Copy image", detail: "Couldn't read this picture")
+                return
+            }
+            notify(action.doneTitle(count: 1), detail: "Paste it into any app")
         }
     }
 
@@ -301,7 +343,7 @@ final class AppState: ObservableObject {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
         }
-        if Prefs.replaceOriginals && !context.temporary && !record.replaceable.isEmpty {
+        if Prefs.replaceOriginals && context.replaces && !context.temporary && !record.replaceable.isEmpty {
             // Recorded once the originals are in the Trash, so Undo can put
             // them back.
             replaceOriginals(record, context)
@@ -390,13 +432,5 @@ final class AppState: ObservableObject {
         let dir = Prefs.recipesDir
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         NSWorkspace.shared.open(dir)
-    }
-
-    private func title(for slot: Slot, files: [URL]) -> String {
-        let what = files.count == 1 ? files[0].lastPathComponent : "\(files.count) files"
-        switch slot.group {
-        case "convert": return "Converting \(what) to \(slot.label)"
-        default: return "\(slot.plainLabel): \(what)"
-        }
     }
 }

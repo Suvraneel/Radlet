@@ -1090,6 +1090,7 @@ pub fn read(path: &Path, fmt: Format) -> Result<Doc> {
         Format::Docx => docx::read(path)?,
         Format::Rtf => rtf::read(&std::fs::read(path)?)?,
         Format::Csv | Format::Tsv => data::table_doc(path, fmt)?,
+        Format::Xlsx => crate::engines::sheet::doc(path)?,
         Format::Srt | Format::Vtt => {
             let cues = text::parse_subtitles(&text::read_text(path)?)?;
             from_text(&text::subtitles_to_text(&cues))

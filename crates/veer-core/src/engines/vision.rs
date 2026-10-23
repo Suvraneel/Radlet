@@ -17,6 +17,11 @@
 //! veer-vision document-pdf <input.html> <output.pdf>
 //!                                              a document (as HTML Veer
 //!                                              wrote) laid out on A4 pages
+//! veer-vision faces <input> <output.json>      faces as [{"x","y","w","h"}],
+//!                                              fractions from the top left
+//! veer-vision translate <to> <from|auto> <input.json> <output.json>
+//!                                              a JSON list of strings,
+//!                                              translated (macOS 26)
 //! ```
 //!
 //! `transcribe` writes `{"locale": "en-US", "chunks": [[{"t": "Hello,",
@@ -90,6 +95,56 @@ pub fn document_pdf(
     cancel: &AtomicBool,
 ) -> Result<()> {
     run(caps, "document-pdf", html, out, cancel, &mut |_| {})
+}
+
+/// Finds faces in an upright picture: rectangles as fractions of its
+/// width and height, from the top left.
+pub fn faces(
+    caps: &Capabilities,
+    input: &Path,
+    scratch: &Path,
+    cancel: &AtomicBool,
+) -> Result<Vec<crate::ops::Rect>> {
+    let out = scratch.join("faces.json");
+    std::fs::File::create(&out)?;
+    run(caps, "faces", input, &out, cancel, &mut |_| {})?;
+    let rects: Vec<crate::ops::Rect> = serde_json::from_slice(&std::fs::read(&out)?)
+        .map_err(|e| Error::Helper(format!("the Vision helper's faces don't read ({e})")))?;
+    Ok(rects)
+}
+
+/// Translates strings into `to` (from `from`, or the detected language)
+/// with the Mac's on-device translation.
+pub fn translate(
+    caps: &Capabilities,
+    texts: &[String],
+    to: &str,
+    from: Option<&str>,
+    scratch: &Path,
+    cancel: &AtomicBool,
+    progress: &mut dyn FnMut(f32),
+) -> Result<Vec<String>> {
+    let input = scratch.join("translate-in.json");
+    let out = scratch.join("translate-out.json");
+    std::fs::write(
+        &input,
+        serde_json::to_vec(texts).map_err(|e| Error::Internal(e.to_string()))?,
+    )?;
+    std::fs::File::create(&out)?;
+    let args = [
+        OsStr::new("translate"),
+        OsStr::new(to),
+        OsStr::new(from.unwrap_or("auto")),
+        input.as_os_str(),
+        out.as_os_str(),
+    ];
+    run_args(caps, &args, &out, cancel, progress)?;
+    let back: Vec<String> = serde_json::from_slice(&std::fs::read(&out)?)
+        .map_err(|e| Error::Helper(format!("the translation doesn't read ({e})")))?;
+    if back.len() != texts.len() {
+        return Err(Error::Helper("the translation came back incomplete".into()));
+    }
+    Ok(back)
 }
 
 /// Runs the helper's speech recognition on WAV chunks and writes its

@@ -1,5 +1,6 @@
-// veer-vision: on-device text recognition, subject masks and searchable
-// PDFs for the Veer engine, using Apple's Vision framework and PDFKit.
+// veer-vision: on-device text recognition, subject masks, faces,
+// searchable PDFs, speech and translation for the Veer engine, using
+// Apple's Vision, PDFKit, Speech and Translation frameworks.
 // Nothing leaves the Mac.
 //
 //   veer-vision text <input> <output.txt>        image or PDF
@@ -11,6 +12,11 @@
 //   veer-vision document-pdf <input.html> <output.pdf>
 //                                                a document laid out on
 //                                                A4 pages (DocumentPDF.swift)
+//   veer-vision faces <input> <output.json>      faces as [{"x","y","w","h"}],
+//                                                fractions from the top left
+//   veer-vision translate <to> <from|auto> <input.json> <output.json>
+//                                                a JSON list of strings,
+//                                                translated (Translate.swift)
 //   veer-vision selftest                         checks this Mac can do them
 //   veer-vision --version
 //
@@ -294,6 +300,24 @@ func writeGray(_ buffer: CVPixelBuffer, to url: URL) throws {
     }
     CGImageDestinationAddImage(dest, image, nil)
     guard CGImageDestinationFinalize(dest) else { throw Failure.failed("couldn't write the mask") }
+}
+
+// MARK: - Faces
+
+/// Every face in a picture, as fractions of the upright picture measured
+/// from its top left, the way the engine draws rectangles.
+func faces(_ input: URL, _ output: URL) throws {
+    let (image, orientation) = try ImageFile(input).page(0)
+    let request = VNDetectFaceRectanglesRequest()
+    try VNImageRequestHandler(cgImage: image, orientation: orientation, options: [:]).perform([request])
+    let found = request.results ?? []
+    if found.isEmpty { throw Failure.nothingFound("no faces found") }
+    // Vision's boxes are normalised with the origin at the bottom left.
+    let rects: [[String: Double]] = found.map {
+        let b = $0.boundingBox
+        return ["x": Double(b.minX), "y": Double(1 - b.maxY), "w": Double(b.width), "h": Double(b.height)]
+    }
+    try JSONSerialization.data(withJSONObject: rects).write(to: output)
 }
 
 // MARK: - Searchable PDF
@@ -593,6 +617,16 @@ func selftest() throws {
         print("mask: unavailable here (\(error.localizedDescription))")
     }
 
+    do {
+        try faces(png, dir.appendingPathComponent("faces.json"))
+        print("faces: ok")
+    } catch Failure.nothingFound {
+        print("faces: ok (none in the test picture)")
+    } catch {
+        print("faces: unavailable here (\(error.localizedDescription))")
+    }
+    print(translationStatus())
+
     // Speech needs permission and a downloaded language, so it's reported
     // rather than required.
     do {
@@ -620,12 +654,16 @@ do {
         try transcribe(Array(args.dropFirst()))
     case "document-pdf" where args.count == 3:
         try documentPDF(URL(fileURLWithPath: args[1]), URL(fileURLWithPath: args[2]))
+    case "faces" where args.count == 3:
+        try faces(URL(fileURLWithPath: args[1]), URL(fileURLWithPath: args[2]))
+    case "translate" where args.count == 5:
+        try translateTexts(Array(args.dropFirst()))
     case "selftest":
         try selftest()
     case "--version":
-        print("veer-vision 1")
+        print("veer-vision 2")
     default:
-        FileHandle.standardError.write(Data("usage: veer-vision text|mask|searchable|document-pdf <input> <output>, transcribe <language> <output.json> <chunk>..., or selftest\n".utf8))
+        FileHandle.standardError.write(Data("usage: veer-vision text|mask|searchable|document-pdf|faces <input> <output>, transcribe <language> <output.json> <chunk>..., translate <to> <from|auto> <input.json> <output.json>, or selftest\n".utf8))
         exit(2)
     }
 } catch Failure.nothingFound(let message) {

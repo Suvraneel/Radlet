@@ -24,8 +24,12 @@ Veer's own code is original. It depends on the following open-source components,
 | zip | Making and extracting ZIP archives; reading Word files | MIT |
 | quick-xml | Reading Word documents | MIT |
 | csv | Reading and writing CSV and TSV | Unlicense OR MIT |
+| calamine | Reading Excel workbooks | MIT |
+| rust_xlsxwriter | Writing Excel workbooks | MIT OR Apache-2.0 |
+| rqrr | Reading QR codes (its decoder includes code under the ISC licence) | (MIT OR Apache-2.0) AND ISC |
+| qrcode | Making QR codes | MIT OR Apache-2.0 |
 
-Transitive dependencies are also permissive: MIT, Apache-2.0, BSD-2/3-Clause, Zlib, 0BSD, Unlicense, Unicode-3.0. Run `cargo deny list` for the full set.
+Transitive dependencies are also permissive: MIT, Apache-2.0, BSD-2/3-Clause, ISC, Zlib, 0BSD, Unlicense, Unicode-3.0. Run `cargo deny list` for the full set.
 
 A shipped app should include these notices in an About → Acknowledgements screen. That's tracked on the roadmap.
 

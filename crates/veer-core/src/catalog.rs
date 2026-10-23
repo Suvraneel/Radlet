@@ -7,7 +7,7 @@ use std::sync::OnceLock;
 use serde::Serialize;
 
 use crate::format::{Category, Format};
-use crate::ops::{Action, CompressLevel, Rect, SplitMode, Step};
+use crate::ops::{Action, CompressLevel, IconKind, Rect, RedactStyle, SplitMode, Step};
 use crate::recipe::Recipe;
 
 /// Optional external programs. Everything else is built in.
@@ -83,7 +83,7 @@ impl Capabilities {
 
     /// Formats that pixels can be encoded into.
     pub fn can_encode_raster(&self, f: Format) -> bool {
-        f.is_builtin_raster() || (self.sips.is_some() && f == Format::Heic)
+        f.is_builtin_raster() || f == Format::Icns || (self.sips.is_some() && f == Format::Heic)
     }
 }
 
@@ -147,9 +147,13 @@ fn is_executable(p: &Path) -> bool {
 
 use Format::*;
 
-const IMAGE_TARGETS: &[Format] = &[Jpeg, Png, Webp, Heic, Pdf, Tiff, Gif, Bmp, Ico, Tga, Qoi];
+const IMAGE_TARGETS: &[Format] = &[
+    Jpeg, Png, Webp, Heic, Pdf, Tiff, Gif, Bmp, Ico, Icns, Tga, Qoi,
+];
 /// A drawing keeps its transparency best as PNG; its PDF stays vector.
-const SVG_TARGETS: &[Format] = &[Png, Jpeg, Webp, Pdf, Ico, Tiff, Gif, Bmp, Tga, Qoi, Heic];
+const SVG_TARGETS: &[Format] = &[
+    Png, Jpeg, Webp, Pdf, Ico, Icns, Tiff, Gif, Bmp, Tga, Qoi, Heic,
+];
 const AUDIO_TARGETS: &[Format] = &[Mp3, M4a, Wav, Flac, Aiff, Ogg, Opus, Wma];
 const VIDEO_TARGETS: &[Format] = &[Mp4, Mov, Webm, Mkv, Gif, Mp3, M4a, Avi, Wmv];
 
@@ -194,9 +198,10 @@ pub fn targets(from: Format, caps: &Capabilities) -> Vec<Format> {
         Html => out.extend_from_slice(&[Pdf, Md, Docx, Txt, Rtf]),
         Docx => out.extend_from_slice(&[Pdf, Md, Txt, Html, Rtf]),
         Rtf => out.extend_from_slice(&[Pdf, Docx, Md, Txt, Html]),
-        Csv => out.extend_from_slice(&[Json, Tsv, Md, Html]),
-        Tsv => out.extend_from_slice(&[Csv, Json, Md, Html]),
-        Json => out.extend_from_slice(&[Csv, Tsv]),
+        Csv => out.extend_from_slice(&[Xlsx, Json, Tsv, Md, Html, Pdf]),
+        Tsv => out.extend_from_slice(&[Xlsx, Csv, Json, Md, Html, Pdf]),
+        Json => out.extend_from_slice(&[Csv, Xlsx, Tsv]),
+        Xlsx => out.extend_from_slice(&[Csv, Json, Tsv, Pdf, Html, Md]),
         Folder => out.push(Zip),
         Zip => out.push(Folder),
         _ => {}
@@ -279,6 +284,20 @@ pub fn step_accepts(step: &Step, f: Format, caps: &Capabilities) -> bool {
         // Not CSV or TSV: trailing tabs are empty cells, and quoted cells
         // can hold line breaks of their own.
         Step::CleanText => matches!(f, Txt | Md | Html | Json | Srt | Vtt),
+        Step::BlurFaces { .. } => {
+            caps.vision.is_some()
+                && caps.can_decode_raster(f)
+                && caps.can_encode_raster(f)
+                && f != Svg
+        }
+        Step::Translate { to, from } => {
+            caps.vision.is_some()
+                && crate::engines::speech::valid_language(to)
+                && from
+                    .as_deref()
+                    .is_none_or(crate::engines::speech::valid_language)
+                && matches!(f, Txt | Md | Html | Docx | Rtf | Srt | Vtt)
+        }
         Step::FormatJson { .. } => f == Json,
     }
 }
@@ -479,7 +498,10 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
     let images = every(&|f| caps.can_decode_raster(f));
     let svgs = every(&|f| f == Svg);
     let pdfable = |f: Format| {
-        f == Pdf || caps.can_decode_raster(f) || f.is_document_text() || matches!(f, Csv | Tsv)
+        f == Pdf
+            || caps.can_decode_raster(f)
+            || f.is_document_text()
+            || matches!(f, Csv | Tsv | Xlsx)
     };
     let combinable = known
         .as_ref()
@@ -954,6 +976,66 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
         ));
     }
 
+    let faces = |style: RedactStyle| Action::single(Step::BlurFaces { style });
+    if all(&Step::BlurFaces {
+        style: RedactStyle::Pixelate,
+    }) {
+        w.tools.push(
+            tool(
+                "blur_faces",
+                "Hide faces",
+                "face.dashed",
+                faces(RedactStyle::Pixelate),
+                None,
+            )
+            .with_variants(vec![
+                variant(
+                    "blur_faces",
+                    "pixelate",
+                    "Pixelate",
+                    "Faces as large blocks",
+                    faces(RedactStyle::Pixelate),
+                ),
+                variant(
+                    "blur_faces",
+                    "blur",
+                    "Blur",
+                    "Faces blurred",
+                    faces(RedactStyle::Blur),
+                ),
+                variant(
+                    "blur_faces",
+                    "black",
+                    "Black",
+                    "Faces covered in black",
+                    faces(RedactStyle::Black),
+                ),
+            ]),
+        );
+    }
+    if every(&|f| f == Txt) {
+        w.tools.push(tool(
+            "make_qr",
+            "Make QR code",
+            "qrcode",
+            Action::MakeQr,
+            None,
+        ));
+    }
+    let translate = Step::Translate {
+        to: "en".into(),
+        from: None,
+    };
+    if all(&translate) {
+        w.tools.push(tool(
+            "translate",
+            "Translate…",
+            "character.bubble",
+            Action::single(translate),
+            Some("translate"),
+        ));
+    }
+
     let cutout = Step::RemoveBackground { crop: false };
     if all(&cutout) {
         w.tools.push(
@@ -1013,6 +1095,58 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
             "Remove metadata",
             "eye.slash",
             Action::single(Step::StripMetadata),
+            None,
+        ));
+    }
+    // Pictures: QR codes and icon sets (after the everyday tools).
+    if every(&|f| caps.can_decode_raster(f)) {
+        w.tools.push(tool(
+            "read_codes",
+            "Read QR code",
+            "qrcode.viewfinder",
+            Action::ReadCodes,
+            None,
+        ));
+        let set = |kind: IconKind| Action::IconSet { set: kind };
+        w.tools.push(
+            tool(
+                "make_icons",
+                "Make icons",
+                "app.badge",
+                set(IconKind::Favicon),
+                None,
+            )
+            .with_variants(vec![
+                variant(
+                    "make_icons",
+                    "favicon",
+                    "Favicons",
+                    "favicon.ico, PNGs and the HTML for a website",
+                    set(IconKind::Favicon),
+                ),
+                variant(
+                    "make_icons",
+                    "mac",
+                    "macOS",
+                    "A macOS .icns icon, 16 to 1024 pixels",
+                    Action::convert(Icns),
+                ),
+                variant(
+                    "make_icons",
+                    "ios",
+                    "iOS",
+                    "An app icon set for Xcode",
+                    set(IconKind::Ios),
+                ),
+            ]),
+        );
+    }
+    if formats.len() >= 2 && every(&|f| matches!(f, Csv | Tsv | Json | Xlsx)) {
+        w.tools.push(tool(
+            "combine_workbook",
+            "Combine into workbook",
+            "tablecells",
+            Action::CombineWorkbook,
             None,
         ));
     }
@@ -1124,6 +1258,86 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
     w
 }
 
+/// Conversions of what's inside folders: for each kind of file found
+/// (`inside`, as from `folder::formats_inside`), the usual targets, run on
+/// every such file into a mirrored folder.
+/// Whether a file of format `f` is of the kind a folder conversion
+/// covers: its category, except that "documents" also takes text,
+/// Markdown and HTML, and pictures must be ones Veer can decode (not the
+/// icon files it makes).
+pub fn inside_kind(only: Category, f: Format, caps: &Capabilities) -> bool {
+    match only {
+        Category::Document => f.category() == Category::Document || f.is_document_text(),
+        Category::Image => f.category() == Category::Image && caps.can_decode_raster(f),
+        other => f.category() == other,
+    }
+}
+
+pub fn inside_slots(inside: &[Format], caps: &Capabilities) -> Vec<Slot> {
+    let mut out = Vec::new();
+    let has = |test: &dyn Fn(Format) -> bool| inside.iter().any(|&f| test(f));
+    let slot = |id: &str, label: &str, kind: Category, to: Format, short: &str| Slot {
+        id: format!("inside_{id}"),
+        label: label.into(),
+        symbol: kind.symbol().into(),
+        group: SlotGroup::Convert,
+        action: Action::ConvertInside {
+            steps: vec![Step::Convert { to, quality: None }],
+            only: kind,
+            label: Some(short.into()),
+        },
+        window: None,
+        variants: Vec::new(),
+    };
+    let image = |f: Format| inside_kind(Category::Image, f, caps);
+    for to in [Jpeg, Png, Webp] {
+        // Worth offering when some image isn't already in that format.
+        if has(&|f| image(f) && f != to) {
+            out.push(slot(
+                to.id(),
+                &format!("Images to {}", to.label()),
+                Category::Image,
+                to,
+                to.label(),
+            ));
+        }
+    }
+    if has(&|f| f.is_document_text()) {
+        out.push(slot(
+            "pdf",
+            "Documents to PDF",
+            Category::Document,
+            Pdf,
+            "PDF",
+        ));
+    }
+    if caps.media() {
+        if has(&|f| f.category() == Category::Audio && f != Mp3) {
+            out.push(slot("mp3", "Audio to MP3", Category::Audio, Mp3, "MP3"));
+        }
+        if has(&|f| f.category() == Category::Video && f != Mp4) {
+            out.push(slot("mp4", "Videos to MP4", Category::Video, Mp4, "MP4"));
+        }
+    }
+    out
+}
+
+/// The wheel for chosen paths: [`wheel`], plus conversions of what's
+/// inside when every path is a folder.
+pub fn wheel_for(
+    paths: &[PathBuf],
+    formats: &[Option<Format>],
+    caps: &Capabilities,
+    recipes: &[Recipe],
+) -> Wheel {
+    let mut w = wheel(formats, caps, recipes);
+    if !formats.is_empty() && formats.iter().all(|f| *f == Some(Folder)) {
+        let inside = crate::engines::folder::formats_inside(paths, 20_000);
+        w.convert.extend(inside_slots(&inside, caps));
+    }
+    w
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1229,6 +1443,8 @@ mod tests {
                 "rotate_left",
                 "privacy_check",
                 "strip_metadata",
+                "read_codes",
+                "make_icons",
                 "combine_pdf",
                 "zip_all",
                 "checksum"
@@ -1507,7 +1723,10 @@ mod tests {
             labels(&w.tools, "resize"),
             ["1024 px", "2048 px", "512 px", "4×"]
         );
-        assert_eq!(ids(&w.tools), ["resize", "checksum"]);
+        assert_eq!(
+            ids(&w.tools),
+            ["resize", "read_codes", "make_icons", "checksum"]
+        );
         let resize = Step::resize_max(512);
         assert_eq!(step_output(&resize, Svg), Png);
         assert!(chain_accepts(
@@ -1531,8 +1750,12 @@ mod tests {
     #[test]
     fn data_files() {
         let caps = Capabilities::none();
-        assert_eq!(targets(Csv, &caps), [Json, Tsv, Md, Html]);
-        assert_eq!(targets(Json, &caps), [Csv, Tsv]);
+        assert_eq!(targets(Csv, &caps), [Xlsx, Json, Tsv, Md, Html, Pdf]);
+        assert_eq!(targets(Json, &caps), [Csv, Xlsx, Tsv]);
+        assert_eq!(targets(Xlsx, &caps), [Csv, Json, Tsv, Pdf, Html, Md]);
+        let w = wheel(&[Some(Csv), Some(Xlsx)], &caps, &[]);
+        assert!(ids(&w.tools).contains(&"combine_workbook"));
+        assert!(ids(&w.tools).contains(&"combine_pdf"));
         let w = wheel(&[Some(Json)], &caps, &[]);
         assert_eq!(
             ids(&w.tools),
@@ -1547,7 +1770,7 @@ mod tests {
         let w = wheel(&[Some(Csv), Some(Tsv)], &caps, &[]);
         assert_eq!(
             ids(&w.convert),
-            ["to_json", "to_tsv", "to_md", "to_html", "to_csv"]
+            ["to_xlsx", "to_json", "to_tsv", "to_md", "to_html", "to_pdf", "to_csv"]
         );
         assert!(
             !ids(&w.tools).contains(&"clean_text"),
@@ -1591,6 +1814,31 @@ mod tests {
         assert_eq!(ids(&zip.convert), ["to_folder"]);
         assert_eq!(zip.convert[0].label, "Unzip");
         assert_eq!(ids(&zip.tools), ["checksum"]);
+    }
+
+    #[test]
+    fn conversions_inside_folders() {
+        let caps = Capabilities::none();
+        let s = inside_slots(&[Jpeg, Heic, Md, Mp3], &caps);
+        let ids: Vec<&str> = s.iter().map(|s| s.id.as_str()).collect();
+        // HEIC needs sips; JPEG is already JPEG; no FFmpeg, no audio.
+        assert_eq!(ids, ["inside_png", "inside_webp", "inside_pdf"]);
+        assert_eq!(s[0].label, "Images to PNG");
+        let json = serde_json::to_value(&s[0].action).unwrap();
+        assert_eq!(json["kind"], "convert_inside");
+        assert_eq!(json["only"], "image");
+        assert_eq!(json["label"], "PNG");
+        assert!(inside_slots(&[Txt, Zip], &caps)
+            .iter()
+            .all(|s| s.id == "inside_pdf"));
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("a.heic"), "x").unwrap();
+        let w = wheel_for(&[dir.path().to_path_buf()], &[Some(Folder)], &caps, &[]);
+        assert_eq!(w.convert[0].id, "to_zip");
+        assert!(
+            w.convert.iter().all(|s| s.id != "inside_jpeg"),
+            "HEIC without sips"
+        );
     }
 
     #[test]

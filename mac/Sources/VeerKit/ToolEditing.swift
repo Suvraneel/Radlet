@@ -435,6 +435,45 @@ extension ToolAction {
         return steps([.object(step)])
     }
 
+    /// A translation into `to` (a tag such as "fr"), from `from` (nil to
+    /// detect it).
+    public static func translate(to: String, from: String?) -> JSONValue {
+        var step: [String: JSONValue] = ["op": .string("translate"), "to": .string(to)]
+        if let from, !from.isEmpty, from != "auto" { step["from"] = .string(from) }
+        return steps([.object(step)])
+    }
+
+    /// Languages the Mac translates between (macOS 26), for when the
+    /// system can't be asked; the app asks it when it can.
+    public static let translationLanguages = [
+        "ar", "de", "en-GB", "en-US", "es", "fr", "hi", "id", "it", "ja", "ko", "nl", "pl", "pt-BR",
+        "ru", "th", "tr", "uk", "vi", "zh-Hans", "zh-Hant",
+    ]
+
+    /// The language to translate into by default: the Mac's own, when it
+    /// is one of `available` (matching language and script), else English.
+    public static func defaultTranslationTarget(preferred: [String], available: [String]) -> String {
+        func base(_ tag: String) -> String {
+            let parts = tag.replacingOccurrences(of: "_", with: "-").split(separator: "-").map(String.init)
+            guard let lang = parts.first?.lowercased() else { return tag }
+            // Chinese is told apart by script; Taiwan and Hong Kong use
+            // Traditional.
+            if lang == "zh" {
+                if parts.contains("Hant") || parts.contains("TW") || parts.contains("HK") || parts.contains("MO") {
+                    return "zh-Hant"
+                }
+                return "zh-Hans"
+            }
+            return lang
+        }
+        for wanted in preferred {
+            let tag = wanted.replacingOccurrences(of: "_", with: "-")
+            if let exact = available.first(where: { $0.caseInsensitiveCompare(tag) == .orderedSame }) { return exact }
+            if let same = available.first(where: { base($0) == base(tag) }) { return same }
+        }
+        return available.first { $0.hasPrefix("en") } ?? available.first ?? "en"
+    }
+
     /// A language tag the engine accepts: letters, digits, "-" and "_".
     public static func isLanguageTag(_ tag: String) -> Bool {
         let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")

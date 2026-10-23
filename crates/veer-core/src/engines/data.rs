@@ -103,7 +103,7 @@ fn header_names(header: &[String], cols: usize) -> Vec<String> {
 }
 
 #[derive(Clone, Copy, PartialEq)]
-enum Kind {
+pub(crate) enum Kind {
     Number,
     Bool,
     Text,
@@ -111,7 +111,7 @@ enum Kind {
 
 /// A plain decimal number: no leading zeros (so postcodes and IDs stay
 /// text), no exponent, at most 15 digits before the point.
-fn is_number(t: &str) -> bool {
+pub(crate) fn is_number(t: &str) -> bool {
     let unsigned = t.strip_prefix('-').unwrap_or(t);
     let (int, frac) = match unsigned.split_once('.') {
         Some((i, f)) => (i, Some(f)),
@@ -126,7 +126,7 @@ fn is_number(t: &str) -> bool {
 
 /// A column holds numbers (or true/false) only when every filled cell
 /// does; otherwise all of it stays text, so one column has one type.
-fn column_kinds(body: &[Vec<String>], cols: usize) -> Vec<Kind> {
+pub(crate) fn column_kinds(body: &[Vec<String>], cols: usize) -> Vec<Kind> {
     (0..cols)
         .map(|i| {
             let cells: Vec<&str> = body
@@ -138,7 +138,10 @@ fn column_kinds(body: &[Vec<String>], cols: usize) -> Vec<Kind> {
                 Kind::Text
             } else if cells.iter().all(|c| is_number(c)) {
                 Kind::Number
-            } else if cells.iter().all(|c| *c == "true" || *c == "false") {
+            } else if cells
+                .iter()
+                .all(|c| c.eq_ignore_ascii_case("true") || c.eq_ignore_ascii_case("false"))
+            {
                 Kind::Bool
             } else {
                 Kind::Text
@@ -150,7 +153,8 @@ fn column_kinds(body: &[Vec<String>], cols: usize) -> Vec<Kind> {
 fn json_cell(s: &str, kind: Kind) -> String {
     match kind {
         Kind::Number | Kind::Bool if s.is_empty() => "null".into(),
-        Kind::Number | Kind::Bool => s.to_string(),
+        Kind::Number => s.to_string(),
+        Kind::Bool => s.to_ascii_lowercase(),
         Kind::Text => serde_json::to_string(s).unwrap_or_else(|_| "\"\"".into()),
     }
 }
@@ -296,6 +300,30 @@ pub fn convert(input: &Path, from: Format, to: Format, out: &Path) -> Result<()>
         (Format::Csv | Format::Tsv, t) if doc::writable(t) => {
             let d = table_doc(input, from)?;
             return doc::write(&d, t, &doc::title_of(input), out);
+        }
+        (Format::Csv | Format::Tsv | Format::Json, Format::Xlsx) => {
+            let sheets = crate::engines::sheet::as_sheets(input, from)?;
+            std::fs::write(out, crate::engines::sheet::write(&sheets)?)?;
+            return Ok(());
+        }
+        (Format::Xlsx, t) if doc::writable(t) => {
+            let d = crate::engines::sheet::doc(input)?;
+            return doc::write(&d, t, &doc::title_of(input), out);
+        }
+        (Format::Xlsx, Format::Csv | Format::Tsv | Format::Json) => {
+            // The first sheet with anything in it (the pipeline splits a
+            // workbook of several sheets into one file each).
+            let sheets = crate::engines::sheet::read(input)?;
+            let rows = sheets
+                .into_iter()
+                .map(|(_, rows)| rows)
+                .next()
+                .ok_or_else(|| Error::NothingToDo("the workbook is empty".into()))?;
+            if to == Format::Json {
+                rows_to_json(&rows)
+            } else {
+                write_rows(&rows, delim(to))?
+            }
         }
         _ => {
             return Err(Error::UnsupportedRoute {

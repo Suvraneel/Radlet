@@ -289,4 +289,16 @@ final class JobValueTests: XCTestCase {
         XCTAssertEqual(p.clipboardText, "a.md: 1 word · 1 min read\nb.md: 2 words · 1 min read")
         XCTAssertEqual(p.detail, "Word counts copied to the clipboard")
     }
+
+    func testQRCodesShowWhatTheySay() {
+        let p = JobProgress()
+        p.reset(title: "Read QR code", total: 2)
+        p.valueKind = .code
+        finish(p, 0, "/s/menu.png", value: "https://example.com/menu")
+        p.handle(.jobFinished(Summary(done: 1, skipped: 0, failed: 0, cancelled: 0), cancelled: false))
+        XCTAssertEqual(p.clipboardText, "https://example.com/menu")
+        XCTAssertEqual(p.detail, "https://example.com/menu · copied")
+        finish(p, 1, "/s/cat.png", value: nil, status: "skipped")
+        XCTAssertEqual(p.detail, "QR codes copied to the clipboard · 1 without")
+    }
 }

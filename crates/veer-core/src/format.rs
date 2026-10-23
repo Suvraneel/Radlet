@@ -23,6 +23,8 @@ pub enum Format {
     Bmp,
     Tiff,
     Ico,
+    /// A macOS icon. Veer writes these; it doesn't read them.
+    Icns,
     Tga,
     Qoi,
     Heic,
@@ -59,6 +61,8 @@ pub enum Format {
     Csv,
     Tsv,
     Json,
+    /// An Excel workbook.
+    Xlsx,
     // Archives
     Zip,
     /// A folder on disk. Not a file format, but it gets its own actions.
@@ -100,9 +104,9 @@ use Format::*;
 
 impl Format {
     pub const ALL: &'static [Format] = &[
-        Png, Jpeg, Webp, Gif, Bmp, Tiff, Ico, Tga, Qoi, Heic, Avif, Svg, Pdf, Docx, Rtf, Mp3, M4a,
-        Wav, Flac, Ogg, Opus, Aiff, Wma, Mp4, Mov, Mkv, Webm, Avi, Wmv, Txt, Md, Html, Srt, Vtt,
-        Csv, Tsv, Json, Zip, Folder,
+        Png, Jpeg, Webp, Gif, Bmp, Tiff, Ico, Icns, Tga, Qoi, Heic, Avif, Svg, Pdf, Docx, Rtf, Mp3,
+        M4a, Wav, Flac, Ogg, Opus, Aiff, Wma, Mp4, Mov, Mkv, Webm, Avi, Wmv, Txt, Md, Html, Srt,
+        Vtt, Csv, Tsv, Json, Xlsx, Zip, Folder,
     ];
 
     /// Stable identifier used on the wire and in recipes.
@@ -115,6 +119,7 @@ impl Format {
             Bmp => "bmp",
             Tiff => "tiff",
             Ico => "ico",
+            Icns => "icns",
             Tga => "tga",
             Qoi => "qoi",
             Heic => "heic",
@@ -145,6 +150,7 @@ impl Format {
             Csv => "csv",
             Tsv => "tsv",
             Json => "json",
+            Xlsx => "xlsx",
             Zip => "zip",
             Folder => "folder",
         }
@@ -160,6 +166,7 @@ impl Format {
             Bmp => "BMP",
             Tiff => "TIFF",
             Ico => "ICO",
+            Icns => "ICNS",
             Tga => "TGA",
             Qoi => "QOI",
             Heic => "HEIC",
@@ -190,6 +197,7 @@ impl Format {
             Csv => "CSV",
             Tsv => "TSV",
             Json => "JSON",
+            Xlsx => "Excel",
             Zip => "ZIP",
             Folder => "Folder",
         }
@@ -208,7 +216,7 @@ impl Format {
 
     pub fn category(self) -> Category {
         match self {
-            Png | Jpeg | Webp | Gif | Bmp | Tiff | Ico | Tga | Qoi | Heic | Avif | Svg => {
+            Png | Jpeg | Webp | Gif | Bmp | Tiff | Ico | Icns | Tga | Qoi | Heic | Avif | Svg => {
                 Category::Image
             }
             Pdf | Docx | Rtf => Category::Document,
@@ -216,7 +224,7 @@ impl Format {
             Mp4 | Mov | Mkv | Webm | Avi | Wmv => Category::Video,
             Txt | Md | Html => Category::Text,
             Srt | Vtt => Category::Subtitle,
-            Csv | Tsv | Json => Category::Data,
+            Csv | Tsv | Json | Xlsx => Category::Data,
             Zip => Category::Archive,
             Folder => Category::Folder,
         }
@@ -240,6 +248,7 @@ impl Format {
             "word" => Docx,
             "tab" => Tsv,
             "geojson" => Json,
+            "excel" => Xlsx,
             _ => return Format::ALL.iter().copied().find(|f| f.id() == n),
         };
         Some(f)
@@ -327,6 +336,9 @@ fn classify_zip(path: &Path, by_ext: Option<Format>) -> Option<Format> {
     let has = |n: &str| names.iter().any(|x| x == n);
     if has("word/document.xml") {
         return Some(Docx);
+    }
+    if has("xl/workbook.xml") {
+        return Some(Xlsx);
     }
     let container = has("[Content_Types].xml")
         || has("mimetype")

@@ -106,6 +106,46 @@ pub fn walk(root: &Path, cancel: &AtomicBool) -> Result<Vec<Entry>> {
     Ok(out)
 }
 
+/// The formats (by extension) of files inside `folders`, to decide which
+/// conversions of their contents to offer. Looks at no more than
+/// `limit` files, and never follows links.
+pub fn formats_inside(folders: &[PathBuf], limit: usize) -> Vec<Format> {
+    // The wheel waits for this, so it stops early on huge trees and slow
+    // network shares: after `limit` entries (folders count) or a second
+    // and a half, whichever comes first.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_millis(1500);
+    let mut found: Vec<Format> = Vec::new();
+    let mut seen = 0usize;
+    let mut stack: Vec<PathBuf> = folders.to_vec();
+    while let Some(dir) = stack.pop() {
+        if std::time::Instant::now() > deadline {
+            break;
+        }
+        let Ok(rd) = fs::read_dir(&dir) else { continue };
+        for e in rd.flatten() {
+            seen += 1;
+            if seen >= limit {
+                return found;
+            }
+            let name = e.file_name();
+            if ignored(&name.to_string_lossy()) {
+                continue;
+            }
+            let Ok(t) = e.file_type() else { continue };
+            if t.is_dir() {
+                stack.push(e.path());
+            } else if t.is_file() {
+                if let Some(f) = Format::from_path(&e.path()) {
+                    if !found.contains(&f) {
+                        found.push(f);
+                    }
+                }
+            }
+        }
+    }
+    found
+}
+
 /// A path's parts joined with "/", for archives and reports.
 pub fn slash_path(rel: &Path) -> String {
     rel.components()

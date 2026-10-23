@@ -179,6 +179,20 @@ pub enum Step {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         language: Option<String>,
     },
+    /// Hide every face in a picture (found on-device by the Vision
+    /// helper) as `style`: pixelated (default), blurred or black.
+    BlurFaces {
+        #[serde(default = "pixelate")]
+        style: RedactStyle,
+    },
+    /// Translate a document or subtitles into the language `to` (a tag
+    /// such as "fr" or "pt-BR"), on-device (Mac helper, macOS 26). `from`
+    /// absent: detected.
+    Translate {
+        to: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        from: Option<String>,
+    },
     /// Tidy a text file: UTF-8 without a byte-order mark, one kind of line
     /// ending (`\n`), no spaces at line ends, one newline at the end.
     CleanText,
@@ -188,6 +202,10 @@ pub enum Step {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         minify: bool,
     },
+}
+
+fn pixelate() -> RedactStyle {
+    RedactStyle::Pixelate
 }
 
 fn subtitle_format() -> Format {
@@ -270,6 +288,9 @@ impl Step {
             Step::MakeSearchable => Some("searchable"),
             Step::Transcribe { .. } => Some("transcript"),
             Step::CleanText => Some("cleaned"),
+            Step::BlurFaces { .. } => Some("faces hidden"),
+            // The output is named after the language instead.
+            Step::Translate { .. } => Some("translated"),
             Step::FormatJson { minify: false } => Some("formatted"),
             Step::FormatJson { minify: true } => Some("minified"),
         }
@@ -368,6 +389,9 @@ pub enum Action {
     /// Join the selected documents, in order, into one file in the first
     /// one's format (Markdown when that can't be written).
     CombineText,
+    /// Put the selected tables (CSV, TSV, JSON, Excel) into one Excel
+    /// workbook, a sheet for each.
+    CombineWorkbook,
     /// Split each selected PDF into several.
     SplitPdf { mode: SplitMode },
     /// Compute a SHA-256 checksum for every selected file. Writes nothing.
@@ -380,6 +404,14 @@ pub enum Action {
     WordCount,
     /// Put everything selected (files and folders) into one ZIP archive.
     ZipAll,
+    /// The contents of every QR code in each picture, for the clipboard.
+    /// Writes nothing.
+    ReadCodes,
+    /// A QR code picture (PNG) of each text file's contents.
+    MakeQr,
+    /// Icons made from each picture: a website's favicon set, or an Xcode
+    /// app icon set.
+    IconSet { set: IconKind },
     /// Copy two or more folders into one new folder. Files with the same
     /// name and different contents are both kept (the second renamed);
     /// identical ones are kept once.
@@ -399,6 +431,15 @@ pub enum Action {
     /// Report files with identical contents in the selected folders (and
     /// files), compared byte for byte by SHA-256. Changes nothing.
     FindDuplicates,
+    /// Run `steps` on every file of category `only` inside each folder
+    /// (and its subfolders), into a new folder that mirrors its structure,
+    /// named "<folder> (<label>)". Files the steps can't take are left out.
+    ConvertInside {
+        steps: Vec<Step>,
+        only: crate::format::Category,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        label: Option<String>,
+    },
     /// Save `count` evenly spaced stills from each video.
     ExtractFrames {
         #[serde(default = "frame_count")]
@@ -412,6 +453,18 @@ pub enum Action {
     ProtectPdf { password: Secret },
     /// Remove the password from each PDF.
     UnlockPdf { password: Secret },
+}
+
+/// Which icons [`Action::IconSet`] makes. (A macOS icon is a conversion
+/// to ICNS.)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IconKind {
+    /// favicon.ico, PNGs, the Apple touch icon, Android icons, a web
+    /// manifest and the HTML that links them.
+    Favicon,
+    /// AppIcon.appiconset for Xcode.
+    Ios,
 }
 
 /// A password. It travels as a plain string (the app and workers need
@@ -470,6 +523,7 @@ impl Action {
             self,
             Action::CombinePdf
                 | Action::CombineText
+                | Action::CombineWorkbook
                 | Action::ZipAll
                 | Action::MergeFolders
                 | Action::FindDuplicates
@@ -677,6 +731,16 @@ mod tests {
             r#"{"kind":"steps","steps":[{"op":"convert","to":"folder"}]}"#,
             r#"{"kind":"steps","steps":[{"op":"resize","percent":400},{"op":"convert","to":"png"}]}"#,
             r#"{"kind":"combine_text"}"#,
+            r#"{"kind":"combine_workbook"}"#,
+            r#"{"kind":"read_codes"}"#,
+            r#"{"kind":"make_qr"}"#,
+            r#"{"kind":"icon_set","set":"favicon"}"#,
+            r#"{"kind":"icon_set","set":"ios"}"#,
+            r#"{"kind":"steps","steps":[{"op":"blur_faces"}]}"#,
+            r#"{"kind":"steps","steps":[{"op":"blur_faces","style":"black"}]}"#,
+            r#"{"kind":"steps","steps":[{"op":"translate","to":"fr"}]}"#,
+            r#"{"kind":"steps","steps":[{"from":"de","op":"translate","to":"pt-BR"}]}"#,
+            r#"{"kind":"steps","steps":[{"op":"convert","to":"icns"}]}"#,
             r#"{"kind":"word_count"}"#,
             r#"{"kind":"zip_all"}"#,
             r#"{"kind":"merge_folders"}"#,
@@ -685,6 +749,7 @@ mod tests {
             r#"{"kind":"list_contents"}"#,
             r#"{"format":"csv","kind":"list_contents"}"#,
             r#"{"kind":"find_duplicates"}"#,
+            r#"{"kind":"convert_inside","only":"image","steps":[{"op":"convert","to":"jpeg"}],"label":"JPEG"}"#,
         ];
         for json in sent {
             let a: Action = serde_json::from_str(json).unwrap_or_else(|e| panic!("{json}: {e}"));

@@ -181,7 +181,7 @@ pub fn serve(
                     })
                     .collect();
                 let (recipes, recipe_errors) = all_recipes(p.recipes_dir.as_ref());
-                let wheel = catalog::wheel(&detected, caps, &recipes);
+                let wheel = catalog::wheel_for(&p.paths, &detected, caps, &recipes);
                 send(
                     &out,
                     &json!({ "id": id, "result": { "files": files, "wheel": wheel, "recipe_errors": recipe_errors } }),

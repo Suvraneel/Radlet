@@ -57,7 +57,7 @@ impl PdfBuilder {
             Format::Jpeg => self.add_jpeg(path, caps),
             // Drawings stay vector.
             Format::Svg => self.import_pages(load_mem(svg::to_pdf(path)?)?, None),
-            f if f.is_document_text() || matches!(f, Format::Csv | Format::Tsv) => {
+            f if f.is_document_text() || matches!(f, Format::Csv | Format::Tsv | Format::Xlsx) => {
                 let d = doc::read(path, f)?;
                 let cancel = std::sync::atomic::AtomicBool::new(false);
                 let bytes = docpdf::render(&d, &doc::title_of(path), caps, &cancel)?;

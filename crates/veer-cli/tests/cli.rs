@@ -877,3 +877,46 @@ fn documents_and_folders_from_the_command_line() {
     assert_eq!(code, 0);
     assert!(dir.path().join("Box (contents).csv").is_file());
 }
+
+#[test]
+fn tables_codes_icons_and_folder_contents_from_the_command_line() {
+    let dir = tempfile::tempdir().unwrap();
+    let d = dir.path();
+    std::fs::write(d.join("a.csv"), "x,y\n1,2\n").unwrap();
+    std::fs::write(d.join("b.tsv"), "z\n3\n").unwrap();
+    assert_eq!(veer(&["workbook", "a.csv", "b.tsv"], d).0, 0);
+    assert!(d.join("a (combined).xlsx").is_file());
+    assert_eq!(veer(&["convert", "a.csv", "--to", "xlsx"], d).0, 0);
+    let (code, out, _) = veer(&["--json", "inspect", "a.xlsx"], d);
+    assert_eq!(code, 0);
+    assert!(
+        out.contains("\"to_csv\"") && !out.contains("to_xlsx"),
+        "{out}"
+    );
+
+    std::fs::write(d.join("link.txt"), "https://example.com/\n").unwrap();
+    assert_eq!(veer(&["qr", "link.txt"], d).0, 0);
+    let (code, out, _) = veer(&["codes", "link (QR code).png"], d);
+    assert_eq!(code, 0);
+    assert_eq!(out.trim(), "https://example.com/");
+
+    png(d, "logo.png", 64, 32);
+    assert_eq!(veer(&["icons", "logo.png", "--set", "mac"], d).0, 0);
+    assert!(d.join("logo.icns").is_file());
+    assert_eq!(veer(&["icons", "logo.png", "--set", "favicon"], d).0, 0);
+    assert!(d.join("logo (favicons)/favicon.ico").is_file());
+
+    std::fs::create_dir_all(d.join("Shots/old")).unwrap();
+    png(&d.join("Shots/old"), "one.png", 8, 8);
+    png(&d.join("Shots"), "two.png", 8, 8);
+    let (code, _, err) = veer(&["convert", "Shots", "--to", "webp"], d);
+    assert_eq!(code, 0, "{err}");
+    assert!(d.join("Shots (WebP)/old/one.webp").is_file());
+    assert!(d.join("Shots (WebP)/two.webp").is_file());
+    let (_, out, _) = veer(&["--json", "inspect", "Shots"], d);
+    assert!(out.contains("inside_jpeg"), "{out}");
+
+    // Faces and translation need the Mac helper.
+    assert_ne!(veer(&["faces", "logo.png"], d).0, 0);
+    assert_ne!(veer(&["translate", "link.txt", "--to", "fr"], d).0, 0);
+}

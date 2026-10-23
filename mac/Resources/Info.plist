@@ -24,6 +24,8 @@
     <true/>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>Veer turns speech in your videos and recordings into subtitles. Recognition runs on this Mac; nothing is sent anywhere.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Veer reads which files are selected in Finder when you press its shortcut, to open the wheel for them. It doesn't change anything in Finder.</string>
     <key>NSHumanReadableCopyright</key>
     <string>© 2026 Usemonoma</string>
     <!-- Finder right-click → Services. NSMessage names a method on ServiceProvider. -->

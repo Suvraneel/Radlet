@@ -18,6 +18,7 @@ printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ
   | base64 --decode > "$WORK/dot.png"
 "$VEER" combine "$WORK/dot.png" "$WORK/dot.png" "$WORK/dot.png" --out "$WORK/pdf" > /dev/null
 PDF="$(ls "$WORK"/pdf/*.pdf | head -n 1)"
+mkdir -p "$WORK/Album" && cp "$WORK/dot.png" "$WORK/Album/dot.png"
 {
   printf '{"id":1,"method":"hello"}\n'
   printf '{"id":2,"method":"inspect","params":{"paths":["%s","%s"]}}\n' "$WORK/subs.srt" "$WORK/notes.md"
@@ -37,6 +38,8 @@ PDF="$(ls "$WORK"/pdf/*.pdf | head -n 1)"
   printf '{"id":11,"method":"recipes","params":{"recipes_dir":"%s"}}\n' "$WORK/recipes"
   # What two files reveal (the Privacy check window).
   printf '{"id":12,"method":"privacy","params":{"paths":["%s","%s"]}}\n' "$WORK/dot.png" "$PDF"
+  # A folder: conversions of what's inside it.
+  printf '{"id":13,"method":"inspect","params":{"paths":["%s"]}}\n' "$WORK/Album"
   # Wait (up to 30 s) for all three jobs to finish: shutdown cancels running jobs.
   for _ in $(seq 300); do
     [ "$(grep -c '"event":"job_finished"' "$OUT/session.jsonl" 2>/dev/null || true)" -ge 3 ] && break
