@@ -40,14 +40,18 @@ fn part<R: Read + std::io::Seek>(zip: &mut ZipArchive<R>, name: &str) -> Result<
 }
 
 fn local(e: &BytesStart) -> String {
-    String::from_utf8_lossy(e.local_name().as_ref()).into_owned()
+    e.local_name().as_ref().to_string()
 }
 
 /// An attribute by local name ("val" finds `w:val`).
 fn get(e: &BytesStart, name: &str) -> Option<String> {
     e.attributes().flatten().find_map(|a| {
-        (a.key.local_name().as_ref() == name.as_bytes())
-            .then(|| a.unescape_value().ok().map(|v| v.into_owned()))
+        (a.key.local_name().as_ref() == name)
+            .then(|| {
+                a.normalized_value(quick_xml::XmlVersion::Implicit1_0)
+                    .ok()
+                    .map(|v| v.into_owned())
+            })
             .flatten()
     })
 }
@@ -56,12 +60,12 @@ fn entity(r: &BytesRef) -> String {
     if let Ok(Some(c)) = r.resolve_char_ref() {
         return c.to_string();
     }
-    match r.decode().as_deref() {
-        Ok("amp") => "&",
-        Ok("lt") => "<",
-        Ok("gt") => ">",
-        Ok("quot") => "\"",
-        Ok("apos") => "'",
+    match r.as_ref() {
+        "amp" => "&",
+        "lt" => "<",
+        "gt" => ">",
+        "quot" => "\"",
+        "apos" => "'",
         _ => "",
     }
     .to_string()
@@ -123,7 +127,7 @@ fn parse_styles(xml: &str) -> HashMap<String, StyleInfo> {
                     _ => {}
                 }
             }
-            Ok(Event::End(e)) if e.local_name().as_ref() == b"style" => {
+            Ok(Event::End(e)) if e.local_name().as_ref() == "style" => {
                 if let Some((id, info)) = current.take() {
                     map.insert(id, info);
                 }
@@ -164,9 +168,9 @@ fn parse_numbering(xml: &str) -> HashMap<String, HashMap<u8, bool>> {
                 _ => {}
             },
             Ok(Event::End(e)) => match e.local_name().as_ref() {
-                b"abstractNum" => abs = None,
-                b"lvl" => lvl = None,
-                b"num" => num = None,
+                "abstractNum" => abs = None,
+                "lvl" => lvl = None,
+                "num" => num = None,
                 _ => {}
             },
             Ok(Event::Eof) | Err(_) => break,
@@ -222,9 +226,9 @@ fn core_title(xml: &str) -> Option<String> {
     let mut title = String::new();
     loop {
         match r.read_event() {
-            Ok(Event::Start(e)) if e.local_name().as_ref() == b"title" => in_title = true,
-            Ok(Event::End(e)) if e.local_name().as_ref() == b"title" => break,
-            Ok(Event::Text(t)) if in_title => title.push_str(&t.decode().unwrap_or_default()),
+            Ok(Event::Start(e)) if e.local_name().as_ref() == "title" => in_title = true,
+            Ok(Event::End(e)) if e.local_name().as_ref() == "title" => break,
+            Ok(Event::Text(t)) if in_title => title.push_str(&t.xml10_content()),
             Ok(Event::GeneralRef(g)) if in_title => title.push_str(&entity(&g)),
             Ok(Event::Eof) | Err(_) => break,
             _ => {}
@@ -383,7 +387,7 @@ fn parse_document(xml: &str, styles: &Styles, rels: &HashMap<String, String>) ->
         if let Some((name, depth)) = &mut skip {
             match &ev {
                 Event::Start(e) if local(e) == *name => *depth += 1,
-                Event::End(e) if e.local_name().as_ref() == name.as_bytes() => {
+                Event::End(e) if e.local_name().as_ref() == name => {
                     *depth -= 1;
                     if *depth == 0 {
                         skip = None;
@@ -517,7 +521,7 @@ fn parse_document(xml: &str, styles: &Styles, rels: &HashMap<String, String>) ->
         }
         match ev {
             Event::Text(t) => {
-                let s = t.decode().unwrap_or_default();
+                let s = t.xml10_content();
                 if in_instr {
                     if let Some(i) = &mut field_instr {
                         i.push_str(&s);
@@ -537,14 +541,14 @@ fn parse_document(xml: &str, styles: &Styles, rels: &HashMap<String, String>) ->
                 }
             }
             Event::End(e) => match e.local_name().as_ref() {
-                b"t" => in_text = false,
-                b"instrText" => in_instr = false,
-                b"rPr" => in_rpr = false,
-                b"r" => in_run = in_run.saturating_sub(1),
-                b"hyperlink" | b"fldSimple" => {
+                "t" => in_text = false,
+                "instrText" => in_instr = false,
+                "rPr" => in_rpr = false,
+                "r" => in_run = in_run.saturating_sub(1),
+                "hyperlink" | "fldSimple" => {
                     links.pop();
                 }
-                b"p" => {
+                "p" => {
                     let Some(mut p) = paras.pop() else { continue };
                     let text = p.buf.take();
                     if let Some(cell) = tables.last_mut().and_then(|t| t.cell.as_mut()) {
@@ -609,14 +613,14 @@ fn parse_document(xml: &str, styles: &Styles, rels: &HashMap<String, String>) ->
                     };
                     doc.blocks.push(block);
                 }
-                b"tc" => {
+                "tc" => {
                     if let Some(t) = tables.last_mut() {
                         if let Some(cell) = t.cell.take() {
                             t.row.push(join_paras(cell.paras));
                         }
                     }
                 }
-                b"tr" => {
+                "tr" => {
                     if let Some(t) = tables.last_mut() {
                         let row = std::mem::take(&mut t.row);
                         if !row.is_empty() {
@@ -624,7 +628,7 @@ fn parse_document(xml: &str, styles: &Styles, rels: &HashMap<String, String>) ->
                         }
                     }
                 }
-                b"tbl" => {
+                "tbl" => {
                     let Some(t) = tables.pop() else { continue };
                     if t.rows.is_empty() {
                         continue;

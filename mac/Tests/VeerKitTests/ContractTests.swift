@@ -175,6 +175,17 @@ final class ContractTests: XCTestCase {
                 XCTAssertEqual(try StepFields(step).build().get(), step, "\(recipe.name) changed in the editor")
             }
         }
+        // A folder offers conversions of the files inside it, titled for
+        // the HUD without "Converting … to".
+        let folder = try XCTUnwrap(t.reply(13)?["result"]).decode(InspectResult.self)
+        let inside = try XCTUnwrap(folder.wheel.convert.first { $0.id == "inside_jpeg" })
+        XCTAssertEqual(inside.action["kind"]?.string, "convert_inside")
+        XCTAssertEqual(inside.jobTitle(files: [URL(fileURLWithPath: "/x/Album")]), "\(inside.label): Album")
+        // Image tools' new presets come through intact (checked above for
+        // every image preset); the icon set names its kind.
+        let icons = try XCTUnwrap(image.wheel.tools.first { $0.id == "make_icons" })
+        XCTAssertEqual(icons.action["set"]?.string, "favicon")
+        XCTAssertEqual(icons.variants.map(\.label), ["Favicons", "macOS", "iOS"])
     }
 
     func testIntegersStayIntegers() throws {

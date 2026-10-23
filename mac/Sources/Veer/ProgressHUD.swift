@@ -6,6 +6,7 @@ struct HUDView: View {
     @ObservedObject var progress: JobProgress
     var onCancel: () -> Void
     var onUndo: () -> Void
+    var onNext: () -> Void
     var onClose: () -> Void
     var onDragging: (Bool) -> Void
 
@@ -42,6 +43,8 @@ struct HUDView: View {
                                   : "Drag all \(progress.outputs.count) into Finder, Mail or any app to copy them there")
                         Button("Open") { NSWorkspace.shared.open(progress.outputs.first!) }
                         Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting(progress.outputs) }
+                        Button("Next…", action: onNext)
+                            .help("Open the wheel for the results, to convert or use a tool on them next")
                         Button("Undo", action: onUndo)
                     }
                     .controlSize(.small)
@@ -71,6 +74,8 @@ final class HUDController {
     let progress = JobProgress()
     var onCancel: (() -> Void)?
     var onUndo: (() -> Void)?
+    /// Next…: the wheel for these results.
+    var onNext: (([URL]) -> Void)?
     /// Results are being dragged out of the HUD.
     var onDragging: ((Bool) -> Void)?
 
@@ -93,6 +98,10 @@ final class HUDController {
             progress: progress,
             onCancel: { [weak self] in self?.onCancel?() },
             onUndo: { [weak self] in self?.onUndo?() },
+            onNext: { [weak self] in
+                guard let self else { return }
+                self.onNext?(self.progress.outputs)
+            },
             onClose: { [weak self] in self?.hide() },
             onDragging: { [weak self] dragging in
                 // Stay up while dragging; the drag needs its source window.

@@ -9,7 +9,7 @@ public enum StepText {
         "mp4": "MP4", "mov": "MOV", "webm": "WebM", "mkv": "MKV", "mp3": "MP3", "m4a": "M4A",
         "wav": "WAV", "flac": "FLAC", "ogg": "OGG", "opus": "Opus", "srt": "SRT", "vtt": "WebVTT",
         "svg": "SVG", "docx": "Word", "rtf": "RTF", "csv": "CSV", "tsv": "TSV", "json": "JSON",
-        "zip": "ZIP", "folder": "Folder",
+        "zip": "ZIP", "folder": "Folder", "xlsx": "Excel", "icns": "ICNS", "ico": "ICO",
     ]
 
     public static func formatName(_ id: String) -> String {
@@ -18,7 +18,7 @@ public enum StepText {
 
     /// Formats offered when adding a Convert step.
     public static let convertTargets = ["jpeg", "png", "webp", "heic", "pdf", "gif", "tiff", "txt",
-                                        "md", "html", "docx", "csv", "json",
+                                        "md", "html", "docx", "csv", "xlsx", "json",
                                         "mp4", "mov", "webm", "mp3", "m4a", "wav"]
 
     public static func describe(_ step: JSONValue) -> String {
@@ -83,6 +83,18 @@ public enum StepText {
             return "Clean up text"
         case "format_json":
             return step["minify"]?.bool == true ? "Minify JSON" : "Format JSON"
+        case "blur_faces":
+            switch step["style"]?.string ?? "pixelate" {
+            case "blur": return "Blur faces"
+            case "black": return "Cover faces in black"
+            default: return "Pixelate faces"
+            }
+        case "translate":
+            let to = languageName(step["to"]?.string ?? "en")
+            if let from = step["from"]?.string, !from.isEmpty {
+                return "Translate \(languageName(from)) into \(to)"
+            }
+            return "Translate into \(to)"
 
         default:
             return op.replacingOccurrences(of: "_", with: " ").capitalized
@@ -104,5 +116,12 @@ public enum StepText {
         ("Make subtitles", .object(["op": .string("transcribe"), "to": .string("srt")])),
         ("Clean up text", .object(["op": .string("clean_text")])),
         ("Format JSON", .object(["op": .string("format_json")])),
+        ("Hide faces", .object(["op": .string("blur_faces"), "style": .string("pixelate")])),
+        ("Translate", .object(["op": .string("translate"), "to": .string("en")])),
     ]
+
+    /// A language's English name ("fr" is French), or the tag itself.
+    public static func languageName(_ tag: String) -> String {
+        Locale(identifier: "en_US").localizedString(forIdentifier: tag) ?? tag
+    }
 }

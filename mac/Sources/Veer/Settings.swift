@@ -21,6 +21,9 @@ enum Prefs {
 
     static var gestureEnabled: Bool { d.object(forKey: "gestureEnabled") as? Bool ?? true }
 
+    /// ⌃⌥V opens the wheel for Finder's selection.
+    static var finderShortcut: Bool { d.object(forKey: "finderShortcut") as? Bool ?? true }
+
     static var excludedApps: [String] { d.stringArray(forKey: "excludedApps") ?? [] }
 
     private static var supportDir: URL {
@@ -173,6 +176,7 @@ final class ExcludedApps: ObservableObject {
 
 private struct GeneralSettings: View {
     @AppStorage("gestureEnabled") private var gestureEnabled = true
+    @AppStorage("finderShortcut") private var finderShortcut = true
     @ObservedObject private var login = LoginItem.shared
     @StateObject private var excluded = ExcludedApps()
 
@@ -181,6 +185,11 @@ private struct GeneralSettings: View {
             Section {
                 Toggle("Open the wheel while dragging files", isOn: $gestureEnabled)
                 Text("Hold Shift to convert, Command for tools, Control for recipes. Veer never reads your keystrokes, so it needs no special permissions.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Toggle("Open the wheel for Finder's selection with \(FinderShortcut.keys) in Finder", isOn: $finderShortcut)
+                    .onChange(of: finderShortcut) { _, on in FinderShortcut.shared.setEnabled(on) }
+                Text("Select files in Finder and press the shortcut: no drag needed. It works only while Finder is in front, so other apps keep it. macOS asks once to let Veer read Finder's selection.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Toggle("Start Veer when I log in", isOn: $login.enabled)

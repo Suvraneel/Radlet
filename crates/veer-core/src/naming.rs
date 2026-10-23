@@ -246,8 +246,18 @@ pub fn publish_group(
     }
     // Rename into final names inside the temporary folder, then move the
     // whole set at once.
+    // Two outputs may want the same name (or names this disk treats as
+    // the same, by case or accents): later ones are numbered, never
+    // written over.
     for (path, name) in &files {
-        fs::rename(path, tmp.path().join(name))?;
+        let wanted = tmp.path().join(name);
+        let mut target = wanted.clone();
+        let mut n = 2;
+        while fs::symlink_metadata(&target).is_ok() {
+            target = numbered(&wanted, n);
+            n += 1;
+        }
+        fs::rename(path, &target)?;
     }
     Ok(vec![publish_dir(tmp, &dir.join(folder))?])
 }
@@ -267,6 +277,32 @@ pub fn size_of(path: &Path) -> u64 {
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn group_names_that_clash_are_numbered() {
+        let dir = tempfile::tempdir().unwrap();
+        let tmp = temp_dir_in(dir.path(), "t").unwrap();
+        let mut files = Vec::new();
+        for i in 0..5 {
+            let p = tmp.path().join(format!("raw{i}"));
+            fs::write(&p, i.to_string()).unwrap();
+            let name = if i < 2 {
+                "same.csv".to_string()
+            } else {
+                format!("{i}.csv")
+            };
+            files.push((p, name));
+        }
+        let out = publish_group(tmp, files, dir.path(), "Set").unwrap();
+        assert_eq!(out.len(), 1);
+        let mut names: Vec<String> = fs::read_dir(&out[0])
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        assert_eq!(names.len(), 5, "{names:?}");
+        assert!(names.contains(&"same.csv".to_string()));
+    }
 
     #[test]
     fn desired_and_numbered_names() {

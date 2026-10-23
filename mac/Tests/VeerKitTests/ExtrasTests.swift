@@ -99,6 +99,91 @@ final class WheelLayoutTests: XCTestCase {
         XCTAssertTrue(engine.isWholeSelection)
         XCTAssertFalse(QuickAction.copyPath.slot.isWholeSelection)
     }
+
+    func testShareAndCopyImage() {
+        let photo = [URL(fileURLWithPath: "/p/IMG_1.HEIC")]
+        let two = photo + [URL(fileURLWithPath: "/p/IMG_2.jpg")]
+        XCTAssertEqual(QuickAction.offered(for: photo), [.copyPath, .copyName, .openTerminal, .share, .copyImage])
+        XCTAssertEqual(QuickAction.offered(for: two), [.copyPath, .copyName, .openTerminal, .share])
+        XCTAssertFalse(QuickAction.offered(for: [URL(fileURLWithPath: "/p/a.pdf")]).contains(.copyImage))
+        XCTAssertEqual(WheelLayout.withAppTools([], files: photo).map(\.id),
+                       ["rename", "copy_path", "copy_name", "open_terminal", "share", "copy_image"])
+
+        // Share opens the share menu; its presets name a service.
+        let share = QuickAction.share.slot
+        XCTAssertNil(QuickAction.shareVia(share))
+        XCTAssertEqual(share.variants.map(\.label), ["AirDrop", "Mail", "Messages"])
+        let mail = share.running(share.variants[1])
+        XCTAssertEqual(QuickAction(slot: mail), .share)
+        XCTAssertEqual(QuickAction.shareVia(mail), .mail)
+        XCTAssertEqual(mail.label, "Share · Mail")
+    }
+
+    func testJobTitles() {
+        let one = [URL(fileURLWithPath: "/p/Trip")]
+        let jpeg = Slot(id: "to_jpeg", label: "JPEG", symbol: "photo", group: "convert",
+                        action: .object(["kind": .string("steps")]))
+        XCTAssertEqual(jpeg.jobTitle(files: [URL(fileURLWithPath: "/p/a.png")]), "Converting a.png to JPEG")
+        let inside = Slot(id: "inside_jpeg", label: "Images to JPEG", symbol: "photo", group: "convert",
+                          action: .object(["kind": .string("convert_inside")]))
+        XCTAssertEqual(inside.jobTitle(files: one), "Images to JPEG: Trip")
+        let translate = Slot(id: "translate", label: "Translate…", symbol: "character.bubble", group: "tool",
+                             action: .object(["kind": .string("steps")]), window: "translate")
+        XCTAssertEqual(translate.jobTitle(files: one + one), "Translate: 2 files")
+        let book = Slot(id: "combine_workbook", label: "Combine into workbook", symbol: "tablecells", group: "tool",
+                        action: .object(["kind": .string("combine_workbook")]))
+        XCTAssertTrue(book.isWholeSelection)
+        let codes = Slot(id: "read_codes", label: "Read QR code", symbol: "qrcode", group: "tool",
+                         action: .object(["kind": .string("read_codes")]))
+        XCTAssertTrue(codes.isReadCodes)
+    }
+
+    func testOnlyReplacementsReplaceOriginals() {
+        func slot(_ action: JSONValue) -> Slot {
+            Slot(id: "x", label: "X", symbol: "x", group: "tool", action: action)
+        }
+        func steps(_ list: [JSONValue]) -> JSONValue { .object(["kind": .string("steps"), "steps": .array(list)]) }
+        let convert = steps([.object(["op": .string("convert"), "to": .string("jpeg")])])
+        XCTAssertTrue(slot(convert).replacesOriginal)
+        XCTAssertTrue(slot(steps([.object(["op": .string("compress"), "level": .string("smart")])])).replacesOriginal)
+        XCTAssertTrue(slot(.object(["kind": .string("protect_pdf")])).replacesOriginal)
+        XCTAssertFalse(slot(ToolAction.translate(to: "fr", from: nil)).replacesOriginal)
+        XCTAssertFalse(slot(ToolAction.transcribe(to: "srt", language: nil)).replacesOriginal)
+        XCTAssertFalse(slot(steps([.object(["op": .string("convert"), "to": .string("zip")])])).replacesOriginal)
+        for kind in ["make_qr", "icon_set", "convert_inside", "list_contents", "flatten", "sort_by_kind", "copy_text"] {
+            XCTAssertFalse(slot(.object(["kind": .string(kind)])).replacesOriginal, kind)
+        }
+        XCTAssertFalse(slot(steps([])).replacesOriginal)
+    }
+
+    func testTranslation() {
+        let action = ToolAction.translate(to: "fr", from: "auto")
+        XCTAssertEqual(action, .object(["kind": .string("steps"),
+                                        "steps": .array([.object(["op": .string("translate"), "to": .string("fr")])])]))
+        let from = ToolAction.translate(to: "de", from: "en-US")
+        guard case .array(let steps)? = from["steps"] else { return XCTFail("no steps") }
+        XCTAssertEqual(steps.first?["from"]?.string, "en-US")
+        XCTAssertEqual(StepText.describe(.object(["op": .string("translate"), "to": .string("fr")])),
+                       "Translate into French")
+        XCTAssertEqual(StepText.describe(.object(["op": .string("translate"), "to": .string("de"),
+                                                  "from": .string("en")])),
+                       "Translate English into German")
+        XCTAssertEqual(StepText.describe(.object(["op": .string("blur_faces"), "style": .string("black")])),
+                       "Cover faces in black")
+        XCTAssertEqual(StepText.describe(.object(["op": .string("blur_faces")])), "Pixelate faces")
+        XCTAssertEqual(StepText.formatName("xlsx"), "Excel")
+        XCTAssertTrue(StepText.templates.contains { $0.title == "Translate" })
+
+        let all = ToolAction.translationLanguages
+        XCTAssertTrue(all.allSatisfy(ToolAction.isLanguageTag))
+        XCTAssertEqual(ToolAction.defaultTranslationTarget(preferred: ["fr-CA", "en-US"], available: all), "fr")
+        XCTAssertEqual(ToolAction.defaultTranslationTarget(preferred: ["en-US"], available: all), "en-US")
+        XCTAssertEqual(ToolAction.defaultTranslationTarget(preferred: ["en-AU"], available: all), "en-GB")
+        XCTAssertEqual(ToolAction.defaultTranslationTarget(preferred: ["zh-Hant-TW"], available: all), "zh-Hant")
+        XCTAssertEqual(ToolAction.defaultTranslationTarget(preferred: ["zh-CN"], available: all), "zh-Hans")
+        XCTAssertEqual(ToolAction.defaultTranslationTarget(preferred: ["pt-PT"], available: all), "pt-BR")
+        XCTAssertEqual(ToolAction.defaultTranslationTarget(preferred: ["cy-GB"], available: all), "en-GB")
+    }
 }
 
 final class HistoryTests: XCTestCase {

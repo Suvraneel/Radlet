@@ -45,17 +45,20 @@ public enum WheelLayout {
                                         group: "tool", action: .object(["kind": .string("app_rename")]),
                                         window: "rename")
 
-    /// The app's own tools: Rename, then the quick actions.
-    public static var appTools: [Slot] { [renameSlot] + QuickAction.allCases.map(\.slot) }
+    /// The app's own tools for a selection: Rename, then the quick actions
+    /// that fit it (Copy image only for one picture).
+    public static func appTools(for files: [URL]) -> [Slot] {
+        [renameSlot] + QuickAction.offered(for: files).map(\.slot)
+    }
 
     /// Adds app-side tools to the engine's list, just before "Copy
     /// SHA-256", which stays last (folders have no checksum: then at the
     /// end).
-    public static func withAppTools(_ tools: [Slot]) -> [Slot] {
+    public static func withAppTools(_ tools: [Slot], files: [URL] = []) -> [Slot] {
         guard !tools.contains(where: { $0.id == renameSlot.id }) else { return tools }
         var out = tools
         let at = out.firstIndex { $0.id == "checksum" } ?? out.endIndex
-        out.insert(contentsOf: appTools, at: at)
+        out.insert(contentsOf: appTools(for: files), at: at)
         return out
     }
 }

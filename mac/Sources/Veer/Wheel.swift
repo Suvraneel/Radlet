@@ -220,6 +220,7 @@ final class WheelController {
 
         Log.wheel("shown: \(mode.title), \(model.style.title), \(describeFiles(files)), keyboard \(keyboard)")
         model.full = .empty
+        model.files = files
         model.loading = true
         model.title = files.count == 1 ? files[0].lastPathComponent : "\(files.count) files"
         apply(mode)

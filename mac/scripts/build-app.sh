@@ -93,6 +93,6 @@ else
   SIGN_FLAGS=(--options runtime --timestamp)
 fi
 codesign --force "${SIGN_FLAGS[@]}" --sign "$IDENTITY" "$APP/Contents/Helpers/"*
-codesign --force "${SIGN_FLAGS[@]}" --sign "$IDENTITY" "$APP"
+codesign --force "${SIGN_FLAGS[@]}" --entitlements mac/Resources/Veer.entitlements --sign "$IDENTITY" "$APP"
 codesign --verify --strict "$APP"
 echo "Built $APP"

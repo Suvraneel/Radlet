@@ -102,6 +102,9 @@ final class ToolWindowController: NSObject, NSWindowDelegate {
         case "subtitles":
             let m = SubtitlesModel(files: files, finish: finish)
             return Tool(view: AnyView(SubtitlesView(model: m)), resizable: false, stop: { m.stop() })
+        case "translate":
+            let m = TranslateModel(files: files, finish: finish)
+            return Tool(view: AnyView(TranslateView(model: m)), resizable: false, stop: {})
         default:
             return nil
         }
@@ -116,13 +119,6 @@ final class ToolWindowController: NSObject, NSWindowDelegate {
         stop?()
         stop = nil
         window = nil
-    }
-}
-
-extension Slot {
-    /// The label without its trailing "…", for titles.
-    var plainLabel: String {
-        label.hasSuffix("…") ? String(label.dropLast()) : label
     }
 }
 

@@ -7,7 +7,7 @@ public final class JobProgress: ObservableObject {
     public enum Phase: Sendable { case running, finished, failed }
     /// What a job that writes no files computes, which decides how the
     /// results go on the clipboard.
-    public enum ValueKind: Sendable { case checksum, text, count }
+    public enum ValueKind: Sendable { case checksum, text, count, code }
 
     /// A value computed for one file.
     public struct NamedValue: Equatable, Sendable {
@@ -104,8 +104,9 @@ public final class JobProgress: ObservableObject {
         case .finished, .failed:
             if let message { return message }
             if !values.isEmpty {
-                // One word count is worth showing, not just copying.
-                if valueKind == .count, values.count == 1, skipped.isEmpty, failures.isEmpty {
+                // One word count or QR code is worth showing, not just
+                // copying.
+                if valueKind == .count || valueKind == .code, values.count == 1, skipped.isEmpty, failures.isEmpty {
                     return "\(values[0].value) · copied"
                 }
                 let what: String
@@ -113,6 +114,7 @@ public final class JobProgress: ObservableObject {
                 case .text: what = "Text"
                 case .checksum: what = "SHA-256"
                 case .count: what = "Word counts"
+                case .code: what = "QR codes"
                 }
                 let problems = skipped.count + failures.filter { $0 != "Cancelled" }.count
                 return problems > 0 ? "\(what) copied to the clipboard · \(problems) without" : "\(what) copied to the clipboard"
@@ -140,7 +142,7 @@ public final class JobProgress: ObservableObject {
         case .checksum:
             if values.count == 1 { return values[0].value }
             return values.map { "\($0.value)  \($0.name)" }.joined(separator: "\n")
-        case .text:
+        case .text, .code:
             if values.count == 1 { return values[0].value }
             return values.map { "\($0.name)\n\n\($0.value)" }.joined(separator: "\n\n")
         case .count:

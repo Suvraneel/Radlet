@@ -176,14 +176,21 @@ fn execute_inner(
     let result = match (&unit.action, unit.inputs.as_slice()) {
         (Action::CombinePdf, inputs) => pipeline::combine_pdf(inputs, &mut ctx),
         (Action::CombineText, inputs) => pipeline::combine_text(inputs, &mut ctx),
+        (Action::CombineWorkbook, inputs) => pipeline::combine_workbook(inputs, &mut ctx),
         (Action::ZipAll, inputs) => pipeline::zip_all(inputs, &mut ctx),
         (Action::MergeFolders, inputs) => pipeline::merge_folders(inputs, &mut ctx),
         (Action::FindDuplicates, inputs) => pipeline::find_duplicates(inputs, &mut ctx),
         (Action::WordCount, [input]) => pipeline::word_count(input, &mut ctx),
+        (Action::ReadCodes, [input]) => pipeline::read_codes(input, &mut ctx),
+        (Action::MakeQr, [input]) => pipeline::make_qr(input, &mut ctx),
+        (Action::IconSet { set }, [input]) => pipeline::icon_set(input, *set, &mut ctx),
         (Action::Flatten, [input]) => pipeline::flatten(input, &mut ctx),
         (Action::SortByKind, [input]) => pipeline::sort_by_kind(input, &mut ctx),
         (Action::ListContents { format }, [input]) => {
             pipeline::list_contents(input, *format, &mut ctx)
+        }
+        (Action::ConvertInside { steps, only, label }, [input]) => {
+            pipeline::convert_inside(input, steps, *only, label.as_deref(), &mut ctx)
         }
         (Action::Steps { steps, label }, [input]) => {
             pipeline::run_steps(input, steps, label.as_deref(), &mut ctx)
@@ -258,6 +265,8 @@ fn involves_vision(unit: &Unit) -> bool {
                 Step::MakeSearchable
                     | Step::Transcribe { .. }
                     | Step::RemoveBackground { .. }
+                    | Step::BlurFaces { .. }
+                    | Step::Translate { .. }
                     | Step::Convert {
                         to: crate::format::Format::Txt | crate::format::Format::Md,
                         ..
@@ -276,7 +285,8 @@ fn involves_folders(unit: &Unit) -> bool {
         | Action::Flatten
         | Action::SortByKind
         | Action::ListContents { .. }
-        | Action::FindDuplicates => true,
+        | Action::FindDuplicates
+        | Action::ConvertInside { .. } => true,
         Action::Steps { steps, .. } => steps.iter().any(|s| {
             matches!(
                 s,
@@ -315,10 +325,11 @@ pub fn run_batch(
     cancel: &AtomicBool,
     on_event: &(dyn Fn(Event) + Sync),
 ) -> Summary {
-    // FFmpeg and Vision are heavy and multi-threaded themselves.
-    let any_heavy = units
-        .iter()
-        .any(|u| involves_media(u) || involves_vision(u));
+    // FFmpeg and Vision are heavy and multi-threaded themselves, and a
+    // folder's contents are converted several files at a time already.
+    let any_heavy = units.iter().any(|u| {
+        involves_media(u) || involves_vision(u) || matches!(u.action, Action::ConvertInside { .. })
+    });
     let cpus = std::thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(2);

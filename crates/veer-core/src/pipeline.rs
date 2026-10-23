@@ -11,7 +11,8 @@ use crate::catalog::{self, Capabilities};
 use crate::engines::image::{self as img, EncodeOptions, Picture, ResizeSpec};
 use crate::engines::media::{self, MediaJob};
 use crate::engines::{
-    archive, data, doc, docpdf, folder, meta, pdf, pdfedit, pdfium, speech, svg, text, vision,
+    archive, data, doc, docpdf, folder, meta, pdf, pdfedit, pdfium, sheet, speech, svg, text,
+    vision,
 };
 use crate::error::{Error, Result};
 use crate::format::{self, display_name, Category, Format};
@@ -217,6 +218,13 @@ pub fn run_steps(
     // Validate the whole chain before touching anything.
     let final_fmt = validate_chain(steps, from, caps)?;
 
+    // A workbook of several sheets becomes one table per sheet.
+    if let (Format::Xlsx, [Step::Convert { to, .. }]) = (from, steps) {
+        if matches!(to, Format::Csv | Format::Tsv | Format::Json) {
+            return sheets_to_files(input, *to, ctx);
+        }
+    }
+
     // A PDF turned into images fans out: one image per page.
     if let (Format::Pdf, Some(Step::Convert { to, quality })) = (from, steps.first()) {
         if caps.can_encode_raster(*to) {
@@ -302,12 +310,12 @@ fn output_suffix(
 ) -> Option<String> {
     if final_fmt.extension() == extension_of(input).as_deref().unwrap_or("") || final_fmt == from {
         Some(label.map(slug).unwrap_or_else(|| {
-            steps
-                .iter()
-                .rev()
-                .find_map(Step::suffix)
-                .unwrap_or("converted")
-                .to_string()
+            match steps.iter().rev().find(|s| s.suffix().is_some()) {
+                // "notes (fr).md"
+                Some(Step::Translate { to, .. }) => to.clone(),
+                Some(s) => s.suffix().unwrap_or("converted").to_string(),
+                None => "converted".to_string(),
+            }
         }))
     } else {
         None
@@ -470,6 +478,8 @@ fn step_name(step: &Step) -> &'static str {
         Step::MakeSearchable => "Make searchable",
         Step::Transcribe { .. } => "Make subtitles",
         Step::CleanText => "Clean up text",
+        Step::BlurFaces { .. } => "Hide faces",
+        Step::Translate { .. } => "Translate",
         Step::FormatJson { .. } => "Format JSON",
     }
 }
@@ -533,7 +543,9 @@ fn apply(
                     let bytes = match fmt {
                         // Drawings stay vector.
                         Format::Svg => Some(svg::to_pdf(path)?),
-                        f if f.is_document_text() || matches!(f, Format::Csv | Format::Tsv) => {
+                        f if f.is_document_text()
+                            || matches!(f, Format::Csv | Format::Tsv | Format::Xlsx) =>
+                        {
                             let d = doc::read(path, *f)?;
                             Some(docpdf::render(&d, title, caps, cancel)?)
                         }
@@ -586,7 +598,7 @@ fn apply(
                         retitle_html(dst, title)?;
                     }
                 }
-                (Format::Csv | Format::Tsv | Format::Json, _) => {
+                (Format::Csv | Format::Tsv | Format::Json | Format::Xlsx, _) => {
                     data::convert(&path, fmt, to, dst)?
                 }
                 (f, t) if f.is_document_text() && doc::writable(t) => {
@@ -863,6 +875,55 @@ fn apply(
             Ok(State::File {
                 path: dst.to_path_buf(),
                 fmt: *to,
+            })
+        }
+        Step::BlurFaces { style } => {
+            reject_animation(&state)?;
+            let px = pixels(state, caps)?;
+            // Vision only finds them; they're covered here, at full size.
+            let upright = scratch.join("faces-input.png");
+            img::save_png_fast(&px.pic.img, &upright)?;
+            let found = vision::faces(caps, &upright, scratch, cancel)?;
+            // A little bigger than Vision's box, which hugs the features.
+            let rects: Vec<crate::ops::Rect> = found
+                .iter()
+                .filter(|r| r.w > 0.0 && r.h > 0.0)
+                .map(|r| {
+                    let (gx, gy) = (r.w * 0.2, r.h * 0.25);
+                    let x = (r.x - gx).clamp(0.0, 1.0);
+                    let y = (r.y - gy).clamp(0.0, 1.0);
+                    crate::ops::Rect {
+                        x,
+                        y,
+                        w: (r.w + 2.0 * gx).min(1.0 - x),
+                        h: (r.h + 2.0 * gy).min(1.0 - y),
+                    }
+                })
+                .filter(|r| r.is_valid())
+                .collect();
+            if rects.is_empty() {
+                return Err(Error::NothingToDo("no faces found".into()));
+            }
+            let hidden = img::redact(px.pic.img.clone(), &rects, *style)?;
+            Ok(px.with_img(hidden).into_state())
+        }
+        Step::Translate { to, from } => {
+            let (path, fmt) = materialize(state, scratch, caps)?;
+            crate::engines::translate::translate_file(
+                &path,
+                fmt,
+                to,
+                from.as_deref(),
+                title,
+                caps,
+                scratch,
+                cancel,
+                progress,
+                dst,
+            )?;
+            Ok(State::File {
+                path: dst.to_path_buf(),
+                fmt,
             })
         }
         Step::CleanText => {
@@ -1341,6 +1402,321 @@ pub fn combine_text(inputs: &[PathBuf], ctx: &mut Context<'_>) -> Result<Produce
     naming::inherit_permissions(first, tmp.path());
     let desired = naming::desired_path(first, &dir, to.extension(), Some("combined"));
     let out = naming::publish(tmp.into_temp_path(), &desired)?;
+    (ctx.progress)(1.0);
+    Ok(Produced::one(out))
+}
+
+/// Each sheet of a workbook as its own CSV, TSV or JSON file: beside the
+/// workbook for up to four sheets, otherwise in a folder.
+fn sheets_to_files(input: &Path, to: Format, ctx: &mut Context<'_>) -> Result<Produced> {
+    let sheets = sheet::read(input)?;
+    if sheets.is_empty() {
+        return Err(Error::NothingToDo("the workbook is empty".into()));
+    }
+    let render = |rows: &[Vec<String>]| -> Result<String> {
+        match to {
+            Format::Json => Ok(data::rows_to_json(rows)),
+            Format::Tsv => data::write_rows(rows, b'\t'),
+            _ => data::write_rows(rows, b','),
+        }
+    };
+    let dir = ctx.output.dir_for(input);
+    let stem = doc::title_of(input);
+    if let [(_, rows)] = sheets.as_slice() {
+        let tmp = naming::temp_in(&dir, ctx.temp_tag, to.extension())?;
+        std::fs::write(tmp.path(), render(rows)?)?;
+        naming::inherit_permissions(input, tmp.path());
+        let desired = naming::desired_path(input, &dir, to.extension(), None);
+        let out = naming::publish(tmp.into_temp_path(), &desired)?;
+        (ctx.progress)(1.0);
+        return Ok(Produced::one(out));
+    }
+    let tmp = naming::temp_dir_in(&dir, ctx.temp_tag)?;
+    let mut files = Vec::new();
+    for (i, (name, rows)) in sheets.iter().enumerate() {
+        ctx.check_cancel()?;
+        let raw = tmp.path().join(format!("sheet{i}.{}", to.extension()));
+        std::fs::write(&raw, render(rows)?)?;
+        naming::inherit_permissions(input, &raw);
+        let safe = file_part(name, 80, &format!("Sheet {}", i + 1));
+        files.push((raw, format!("{stem} - {safe}.{}", to.extension())));
+    }
+    let outputs = naming::publish_group(tmp, files, &dir, &format!("{stem} (sheets)"))?;
+    (ctx.progress)(1.0);
+    Ok(Produced::many(outputs))
+}
+
+/// Text made safe to go into a file name: no path separators or control
+/// characters, no leading dot, at most `max` characters; `fallback` if
+/// nothing is left.
+fn file_part(text: &str, max: usize, fallback: &str) -> String {
+    let clean: String = text
+        .chars()
+        .map(|c| {
+            if matches!(c, '/' | ':' | '\\') || c.is_control() {
+                '-'
+            } else {
+                c
+            }
+        })
+        .take(max)
+        .collect();
+    let clean = clean.trim().trim_start_matches('.').to_string();
+    if clean.is_empty() {
+        fallback.into()
+    } else {
+        clean
+    }
+}
+
+/// Puts tables, in order, into one workbook: a sheet per CSV, TSV or JSON
+/// file, and every sheet of a workbook.
+pub fn combine_workbook(inputs: &[PathBuf], ctx: &mut Context<'_>) -> Result<Produced> {
+    let first = inputs
+        .first()
+        .ok_or_else(|| Error::Invalid("no files to combine".into()))?;
+    let mut sheets = Vec::new();
+    for (i, p) in inputs.iter().enumerate() {
+        ctx.check_cancel()?;
+        let fmt = format::detect(p)?;
+        sheets.extend(sheet::as_sheets(p, fmt)?);
+        (ctx.progress)((i + 1) as f32 / (inputs.len() + 1) as f32);
+    }
+    let dir = ctx.output.dir_for(first);
+    let tmp = naming::temp_in(&dir, ctx.temp_tag, "xlsx")?;
+    std::fs::write(tmp.path(), sheet::write(&sheets)?)?;
+    naming::inherit_permissions(first, tmp.path());
+    let desired = naming::desired_path(first, &dir, "xlsx", Some("combined"));
+    let out = naming::publish(tmp.into_temp_path(), &desired)?;
+    (ctx.progress)(1.0);
+    Ok(Produced::one(out))
+}
+
+/// Runs `steps` on every file of category `only` inside a folder and its
+/// subfolders, into a new folder "<folder> (<label>)" with the same
+/// structure. Files the steps can't take (or that are already in the
+/// target format) are left out; a file that fails is listed in "Not
+/// converted.txt" there rather than stopping the rest.
+pub fn convert_inside(
+    input: &Path,
+    steps: &[Step],
+    only: Category,
+    label: Option<&str>,
+    ctx: &mut Context<'_>,
+) -> Result<Produced> {
+    use std::collections::VecDeque;
+    use std::sync::{mpsc, Mutex};
+
+    require_folder(input)?;
+    if steps.is_empty() {
+        return Err(Error::Invalid("no steps to run".into()));
+    }
+    let caps = ctx.caps;
+    let cancel = ctx.cancel;
+    // Each file, and the folder inside the copy it goes into.
+    let mut jobs: Vec<(PathBuf, PathBuf, String)> = Vec::new();
+    // Files named like the kind being converted whose contents aren't:
+    // reported rather than skipped silently.
+    let mut failures: Vec<(String, String)> = Vec::new();
+    for e in folder::walk(input, cancel)? {
+        // Chosen by name first (cheap), then checked by contents.
+        if e.dir || !Format::from_path(&e.path).is_some_and(|f| catalog::inside_kind(only, f, caps))
+        {
+            continue;
+        }
+        let fmt = match format::detect(&e.path) {
+            Ok(f) if catalog::inside_kind(only, f, caps) => f,
+            Ok(f) => {
+                failures.push((
+                    folder::slash_path(&e.rel),
+                    format!("it's really a {f} file"),
+                ));
+                continue;
+            }
+            Err(err) => {
+                failures.push((folder::slash_path(&e.rel), err.info().message));
+                continue;
+            }
+        };
+        if !catalog::chain_accepts(steps, fmt, caps) {
+            continue;
+        }
+        if let [Step::Convert { to, .. }] = steps {
+            if *to == fmt {
+                continue;
+            }
+        }
+        let parent = e.rel.parent().map(Path::to_path_buf).unwrap_or_default();
+        jobs.push((e.path, parent, folder::slash_path(&e.rel)));
+    }
+    let label = label
+        .map(str::to_string)
+        .unwrap_or_else(|| match steps.last() {
+            Some(Step::Convert { to, .. }) => to.label().to_string(),
+            _ => "converted".into(),
+        });
+    if jobs.is_empty() {
+        return Err(match failures.first() {
+            None => Error::NothingToDo(format!("there's nothing in it to make into {label}")),
+            Some((name, why)) => Error::Invalid(format!(
+                "none of its files could be converted ({name}: {why})"
+            )),
+        });
+    }
+    let dir = ctx.output.dir_for(input);
+    let tmp = naming::temp_dir_in(&dir, ctx.temp_tag)?;
+    let threads = if matches!(only, Category::Audio | Category::Video) {
+        1
+    } else {
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(2)
+            .clamp(1, 4)
+    };
+    let queue = Mutex::new(jobs.iter().enumerate().collect::<VecDeque<_>>());
+    let total = jobs.len();
+    let tag = ctx.temp_tag.to_string();
+    let mut converted = 0usize;
+    let progress = &mut *ctx.progress;
+    std::thread::scope(|scope| {
+        let (tx, rx) = mpsc::channel::<(usize, Result<Produced>)>();
+        for _ in 0..threads {
+            let tx = tx.clone();
+            let (queue, tag, root) = (&queue, &tag, tmp.path());
+            scope.spawn(move || loop {
+                let next = queue.lock().map(|mut q| q.pop_front()).unwrap_or(None);
+                let Some((i, (path, parent, _))) = next else {
+                    break;
+                };
+                if cancel.load(Ordering::Relaxed) {
+                    let _ = tx.send((i, Err(Error::Cancelled)));
+                    continue;
+                }
+                let out_dir = root.join(parent);
+                let result = std::fs::create_dir_all(&out_dir)
+                    .map_err(Error::from)
+                    .and_then(|_| {
+                        let output = OutputLocation::Directory(out_dir.clone());
+                        let unit_tag = format!("{tag}i{i}");
+                        let mut quiet = |_: f32| {};
+                        let mut sub = Context {
+                            caps,
+                            cancel,
+                            progress: &mut quiet,
+                            output: &output,
+                            temp_tag: &unit_tag,
+                        };
+                        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            run_steps(path, steps, None, &mut sub)
+                        }))
+                        .unwrap_or_else(|_| Err(Error::Internal("unexpected failure".into())))
+                    });
+                let _ = tx.send((i, result));
+            });
+        }
+        drop(tx);
+        for (n, (i, result)) in rx.iter().enumerate() {
+            match result {
+                Ok(_) => converted += 1,
+                Err(Error::NothingToDo(_)) | Err(Error::Cancelled) => {}
+                Err(e) => failures.push((jobs[i].2.clone(), e.info().message)),
+            }
+            progress((n + 1) as f32 / total as f32);
+        }
+    });
+    ctx.check_cancel()?;
+    if converted == 0 {
+        return Err(match failures.first() {
+            None => Error::NothingToDo("nothing in it needed converting".into()),
+            Some((name, why)) => Error::Invalid(format!(
+                "none of its files could be converted ({name}: {why})"
+            )),
+        });
+    }
+    if !failures.is_empty() {
+        failures.sort();
+        let report: String = failures
+            .iter()
+            .map(|(name, why)| format!("{name}: {why}\n"))
+            .collect();
+        std::fs::write(tmp.path().join("Not converted.txt"), report)?;
+    }
+    let name = format!(
+        "{} ({})",
+        display_name(input),
+        file_part(&label, 40, "converted")
+    );
+    let out = naming::publish_dir(tmp, &dir.join(name))?;
+    (ctx.progress)(1.0);
+    Ok(Produced::one(out))
+}
+
+/// The contents of every QR code in a picture, for the clipboard.
+pub fn read_codes(input: &Path, ctx: &mut Context<'_>) -> Result<Produced> {
+    let fmt = format::detect(input)?;
+    if !ctx.caps.can_decode_raster(fmt) {
+        return Err(Error::UnsupportedInput(format!(
+            "QR codes are read from pictures, not {fmt} files"
+        )));
+    }
+    let pic = img::decode(input, fmt, ctx.caps)?;
+    let found = crate::engines::codes::read(&pic.img);
+    (ctx.progress)(1.0);
+    if found.is_empty() {
+        return Err(Error::NothingToDo("no QR code found".into()));
+    }
+    Ok(value(found.join("\n")))
+}
+
+/// A QR code (PNG) of a text file's contents, beside it.
+pub fn make_qr(input: &Path, ctx: &mut Context<'_>) -> Result<Produced> {
+    let fmt = format::detect(input)?;
+    if fmt != Format::Txt {
+        return Err(Error::UnsupportedInput(format!(
+            "QR codes are made from text files, not {fmt} files"
+        )));
+    }
+    let code = crate::engines::codes::make(&text::read_text(input)?)?;
+    let dir = ctx.output.dir_for(input);
+    let tmp = naming::temp_in(&dir, ctx.temp_tag, "png")?;
+    code.save_with_format(tmp.path(), image::ImageFormat::Png)?;
+    naming::inherit_permissions(input, tmp.path());
+    let desired = naming::desired_path(input, &dir, "png", Some("QR code"));
+    let out = naming::publish(tmp.into_temp_path(), &desired)?;
+    (ctx.progress)(1.0);
+    Ok(Produced::one(out))
+}
+
+/// Icons from a picture: a favicon set, or an Xcode app icon set, in a
+/// folder beside it.
+pub fn icon_set(
+    input: &Path,
+    set: crate::ops::IconKind,
+    ctx: &mut Context<'_>,
+) -> Result<Produced> {
+    use crate::engines::icons;
+    let fmt = format::detect(input)?;
+    if !ctx.caps.can_decode_raster(fmt) {
+        return Err(Error::UnsupportedInput(format!(
+            "icons are made from pictures, not {fmt} files"
+        )));
+    }
+    let pic = img::decode(input, fmt, ctx.caps)?;
+    let dir = ctx.output.dir_for(input);
+    let tmp = naming::temp_dir_in(&dir, ctx.temp_tag)?;
+    let suffix = match set {
+        crate::ops::IconKind::Favicon => {
+            let svg = (fmt == Format::Svg).then_some(input);
+            icons::favicons(&pic.img, svg, tmp.path())?;
+            "favicons"
+        }
+        crate::ops::IconKind::Ios => {
+            icons::ios(&pic.img, tmp.path())?;
+            "iOS icon"
+        }
+    };
+    let name = format!("{} ({suffix})", doc::title_of(input));
+    let out = naming::publish_dir(tmp, &dir.join(name))?;
     (ctx.progress)(1.0);
     Ok(Produced::one(out))
 }
