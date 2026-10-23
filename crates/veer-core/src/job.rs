@@ -97,11 +97,7 @@ impl Outcome {
 }
 
 fn input_bytes(unit: &Unit) -> u64 {
-    unit.inputs
-        .iter()
-        .filter_map(|p| std::fs::metadata(p).ok())
-        .map(|m| m.len())
-        .sum()
+    unit.inputs.iter().map(|p| naming::size_of(p)).sum()
 }
 
 /// A short, unique-per-process tag for temporary file names.
@@ -131,7 +127,7 @@ pub fn plan(
         temp_tag: format!("{job_tag}u{index}"),
     };
     match action {
-        Action::CombinePdf => vec![unit(0, inputs.to_vec())],
+        a if a.is_whole_selection() => vec![unit(0, inputs.to_vec())],
         _ => inputs
             .iter()
             .enumerate()
@@ -179,6 +175,16 @@ fn execute_inner(
     };
     let result = match (&unit.action, unit.inputs.as_slice()) {
         (Action::CombinePdf, inputs) => pipeline::combine_pdf(inputs, &mut ctx),
+        (Action::CombineText, inputs) => pipeline::combine_text(inputs, &mut ctx),
+        (Action::ZipAll, inputs) => pipeline::zip_all(inputs, &mut ctx),
+        (Action::MergeFolders, inputs) => pipeline::merge_folders(inputs, &mut ctx),
+        (Action::FindDuplicates, inputs) => pipeline::find_duplicates(inputs, &mut ctx),
+        (Action::WordCount, [input]) => pipeline::word_count(input, &mut ctx),
+        (Action::Flatten, [input]) => pipeline::flatten(input, &mut ctx),
+        (Action::SortByKind, [input]) => pipeline::sort_by_kind(input, &mut ctx),
+        (Action::ListContents { format }, [input]) => {
+            pipeline::list_contents(input, *format, &mut ctx)
+        }
         (Action::Steps { steps, label }, [input]) => {
             pipeline::run_steps(input, steps, label.as_deref(), &mut ctx)
         }
@@ -245,7 +251,7 @@ pub struct Summary {
 /// Text recognition can take a while on long scanned PDFs.
 fn involves_vision(unit: &Unit) -> bool {
     match &unit.action {
-        Action::CopyText => true,
+        Action::CopyText | Action::WordCount => true,
         Action::Steps { steps, .. } => steps.iter().any(|s| {
             matches!(
                 s,
@@ -253,9 +259,31 @@ fn involves_vision(unit: &Unit) -> bool {
                     | Step::Transcribe { .. }
                     | Step::RemoveBackground { .. }
                     | Step::Convert {
-                        to: crate::format::Format::Txt,
+                        to: crate::format::Format::Txt | crate::format::Format::Md,
                         ..
                     }
+            )
+        }),
+        _ => false,
+    }
+}
+
+/// Folders and archives can be any size.
+fn involves_folders(unit: &Unit) -> bool {
+    match &unit.action {
+        Action::ZipAll
+        | Action::MergeFolders
+        | Action::Flatten
+        | Action::SortByKind
+        | Action::ListContents { .. }
+        | Action::FindDuplicates => true,
+        Action::Steps { steps, .. } => steps.iter().any(|s| {
+            matches!(
+                s,
+                Step::Convert {
+                    to: crate::format::Format::Zip | crate::format::Format::Folder,
+                    ..
+                }
             )
         }),
         _ => false,
@@ -320,7 +348,7 @@ pub fn run_batch(
                     let mut progress =
                         |fraction: f32| on_event(Event::ItemProgress { index, fraction });
                     let timeout = Duration::from_secs(options.timeout_secs.unwrap_or(
-                        if involves_media(&unit) {
+                        if involves_media(&unit) || involves_folders(&unit) {
                             4 * 3600
                         } else if involves_vision(&unit) {
                             3600

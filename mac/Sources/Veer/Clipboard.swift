@@ -21,12 +21,9 @@ enum ClipboardInput {
         let pb = NSPasteboard.general
         if let urls = pb.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
            !urls.isEmpty {
-            let files = urls.filter { url in
-                var isDir: ObjCBool = false
-                return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) && !isDir.boolValue
-            }
-            // Finder also puts a copied folder's icon on the clipboard;
-            // don't convert that.
+            // Folders count too (zip, merge, list…). Finder also puts a
+            // copied folder's icon on the clipboard; the folder wins.
+            let files = urls.filter { FileManager.default.fileExists(atPath: $0.path) }
             return files.isEmpty ? nil : files
         }
         return saveImage(from: pb).map { [$0] }

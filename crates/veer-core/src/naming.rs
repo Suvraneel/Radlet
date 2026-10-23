@@ -197,15 +197,22 @@ pub fn numbered_dir(path: &Path, n: u32) -> PathBuf {
 /// like `desired` (or `desired 2`, ...), never merging into an existing one.
 /// Returns the folder's path.
 pub fn publish_dir(tmp: tempfile::TempDir, desired: &Path) -> Result<PathBuf> {
+    let out = publish_dir_contents(tmp.path(), desired)?;
+    drop(tmp);
+    Ok(out)
+}
+
+/// Moves everything inside `src` into a new folder named like `desired`
+/// (or `desired 2`, ...), never merging into an existing one.
+pub fn publish_dir_contents(src: &Path, desired: &Path) -> Result<PathBuf> {
     for n in 1..=9_999 {
         let candidate = numbered_dir(desired, n);
         match fs::create_dir(&candidate) {
             Ok(()) => {
-                for entry in fs::read_dir(tmp.path())? {
+                for entry in fs::read_dir(src)? {
                     let entry = entry?;
                     fs::rename(entry.path(), candidate.join(entry.file_name()))?;
                 }
-                drop(tmp);
                 return Ok(candidate);
             }
             Err(e) if e.kind() == ErrorKind::AlreadyExists => continue,

@@ -253,15 +253,19 @@ public enum ToolAction {
     }
 
     /// Resulting pixel size for a picture of `size`, or nil if unchanged.
-    public static func resizedSize(_ size: CGSize, _ mode: ResizeMode, _ value: Int) -> CGSize? {
+    /// A `vector` drawing (SVG) is drawn afresh, so it can grow: the
+    /// longest side becomes `max`, and percentages may pass 100.
+    public static func resizedSize(_ size: CGSize, _ mode: ResizeMode, _ value: Int,
+                                   vector: Bool = false) -> CGSize? {
         let w = Double(size.width), h = Double(size.height)
         guard w > 0, h > 0, value > 0 else { return nil }
         let v = Double(value)
         let out: (Double, Double)
         switch mode {
+        case .percent where vector: out = ((w * v / 100).rounded(), (h * v / 100).rounded())
         case .percent: out = value >= 100 ? (w, h) : ((w * v / 100).rounded(.down), (h * v / 100).rounded(.down))
         case .max:
-            let s = min(1, v / max(w, h))
+            let s = vector ? v / max(w, h) : min(1, v / max(w, h))
             out = ((w * s).rounded(), (h * s).rounded())
         case .width: out = (v, (h * v / w).rounded())
         case .height: out = ((w * v / h).rounded(), v)

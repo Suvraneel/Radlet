@@ -14,6 +14,9 @@
 //!                                              invisible text layer
 //! veer-vision transcribe <language|auto> <output.json> <chunk.wav>...
 //!                                              speech to timed words
+//! veer-vision document-pdf <input.html> <output.pdf>
+//!                                              a document (as HTML Veer
+//!                                              wrote) laid out on A4 pages
 //! ```
 //!
 //! `transcribe` writes `{"locale": "en-US", "chunks": [[{"t": "Hello,",
@@ -76,6 +79,17 @@ pub fn searchable(
     progress: &mut dyn FnMut(f32),
 ) -> Result<()> {
     run(caps, "searchable", input, out, cancel, progress)
+}
+
+/// Lays out a document, written by Veer as plain HTML, on A4 pages with
+/// the Mac's text engine, which has fonts for every script.
+pub fn document_pdf(
+    caps: &Capabilities,
+    html: &Path,
+    out: &Path,
+    cancel: &AtomicBool,
+) -> Result<()> {
+    run(caps, "document-pdf", html, out, cancel, &mut |_| {})
 }
 
 /// Runs the helper's speech recognition on WAV chunks and writes its

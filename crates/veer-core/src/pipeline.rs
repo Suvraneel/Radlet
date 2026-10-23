@@ -10,7 +10,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use crate::catalog::{self, Capabilities};
 use crate::engines::image::{self as img, EncodeOptions, Picture, ResizeSpec};
 use crate::engines::media::{self, MediaJob};
-use crate::engines::{meta, pdf, pdfedit, pdfium, speech, text, vision};
+use crate::engines::{
+    archive, data, doc, docpdf, folder, meta, pdf, pdfedit, pdfium, speech, svg, text, vision,
+};
 use crate::error::{Error, Result};
 use crate::format::{self, display_name, Category, Format};
 use crate::naming::{self, OutputLocation};
@@ -203,6 +205,14 @@ pub fn run_steps(
         if *to == from {
             return Err(Error::NothingToDo(format!("{name} is already {to}")));
         }
+        // Folders and archives aren't files to pass along a chain.
+        match (from, *to) {
+            (Format::Folder, Format::Zip) => {
+                return zip_all(std::slice::from_ref(&input.to_path_buf()), ctx)
+            }
+            (Format::Zip, Format::Folder) => return unzip(input, ctx),
+            _ => {}
+        }
     }
     // Validate the whole chain before touching anything.
     let final_fmt = validate_chain(steps, from, caps)?;
@@ -221,6 +231,7 @@ pub fn run_steps(
         path: input.to_path_buf(),
         fmt: from,
     };
+    let title = doc::title_of(input);
     let total = steps.len() as f32;
 
     for (i, step) in steps.iter().enumerate() {
@@ -240,6 +251,7 @@ pub fn run_steps(
             scratch.path(),
             caps,
             ctx.cancel,
+            &title,
             &mut sub,
         )?;
         (ctx.progress)((i + 1) as f32 / total);
@@ -361,7 +373,16 @@ fn pdf_to_images(
         };
         for (i, step) in rest.iter().enumerate() {
             let dst = scratch.path().join(format!("p{number}s{i}"));
-            state = apply(step, state, &dst, scratch.path(), caps, cancel, &mut |_| {})?;
+            state = apply(
+                step,
+                state,
+                &dst,
+                scratch.path(),
+                caps,
+                cancel,
+                &stem,
+                &mut |_| {},
+            )?;
         }
         let raw = tmp
             .path()
@@ -448,6 +469,8 @@ fn step_name(step: &Step) -> &'static str {
         Step::RemoveBackground { .. } => "Remove background",
         Step::MakeSearchable => "Make searchable",
         Step::Transcribe { .. } => "Make subtitles",
+        Step::CleanText => "Clean up text",
+        Step::FormatJson { .. } => "Format JSON",
     }
 }
 
@@ -468,6 +491,7 @@ pub fn slug(s: &str) -> String {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply(
     step: &Step,
     state: State,
@@ -475,6 +499,7 @@ fn apply(
     scratch: &Path,
     caps: &Capabilities,
     cancel: &AtomicBool,
+    title: &str,
     progress: &mut dyn FnMut(f32),
 ) -> Result<State> {
     let cur = state.format();
@@ -504,6 +529,24 @@ fn apply(
                 .into_state());
             }
             if to == Format::Pdf {
+                if let State::File { path, fmt } = &state {
+                    let bytes = match fmt {
+                        // Drawings stay vector.
+                        Format::Svg => Some(svg::to_pdf(path)?),
+                        f if f.is_document_text() || matches!(f, Format::Csv | Format::Tsv) => {
+                            let d = doc::read(path, *f)?;
+                            Some(docpdf::render(&d, title, caps, cancel)?)
+                        }
+                        _ => None,
+                    };
+                    if let Some(bytes) = bytes {
+                        std::fs::write(dst, bytes)?;
+                        return Ok(State::File {
+                            path: dst.to_path_buf(),
+                            fmt: Format::Pdf,
+                        });
+                    }
+                }
                 let mut b = pdf::PdfBuilder::new();
                 match state {
                     State::Pixels { pic, .. } => b.add_picture(&pic)?,
@@ -525,11 +568,31 @@ fn apply(
                 });
             }
             let (path, fmt) = materialize(state, scratch, caps)?;
-            match (fmt.category(), to) {
-                (Category::Document, Format::Txt) => {
+            match (fmt, to) {
+                (Format::Pdf, Format::Txt) => {
                     std::fs::write(dst, pdf_text(&path, scratch, caps, cancel, progress)?)?
                 }
-                (Category::Text | Category::Subtitle, _) => text::convert(&path, fmt, to, dst)?,
+                (Format::Pdf, Format::Md) => {
+                    let text = pdf_text(&path, scratch, caps, cancel, progress)?;
+                    std::fs::write(dst, doc::to_markdown(&doc::from_text(&text)))?
+                }
+                // Markdown keeps its own renderer, with footnotes and the
+                // rest of CommonMark.
+                (Format::Md, Format::Html | Format::Txt)
+                | (Format::Srt | Format::Vtt, _)
+                | (Format::Txt, Format::Srt | Format::Vtt) => {
+                    text::convert(&path, fmt, to, dst)?;
+                    if fmt == Format::Md && to == Format::Html {
+                        retitle_html(dst, title)?;
+                    }
+                }
+                (Format::Csv | Format::Tsv | Format::Json, _) => {
+                    data::convert(&path, fmt, to, dst)?
+                }
+                (f, t) if f.is_document_text() && doc::writable(t) => {
+                    let d = doc::read(&path, f)?;
+                    doc::write(&d, t, title, dst)?
+                }
                 _ => {
                     media::run(
                         caps,
@@ -553,14 +616,28 @@ fn apply(
             width,
             height,
         } => {
-            reject_animation(&state)?;
-            let px = pixels(state, caps)?;
             let spec = ResizeSpec {
                 max: *max,
                 percent: *percent,
                 width: *width,
                 height: *height,
             };
+            // A drawing is drawn afresh at the new size.
+            if let State::File {
+                path,
+                fmt: Format::Svg,
+            } = &state
+            {
+                return Ok(State::Pixels {
+                    pic: svg::decode_sized(path, spec)?,
+                    fmt: Format::Png,
+                    quality: None,
+                    smallest: false,
+                    goal: None,
+                });
+            }
+            reject_animation(&state)?;
+            let px = pixels(state, caps)?;
             let resized = img::resize(px.pic.img.clone(), spec)?;
             Ok(px.with_img(resized).into_state())
         }
@@ -788,14 +865,62 @@ fn apply(
                 fmt: *to,
             })
         }
+        Step::CleanText => {
+            let (path, fmt) = materialize(state, scratch, caps)?;
+            let raw = std::fs::read(&path)?;
+            let cleaned = text::clean(&raw, fmt == Format::Md)?;
+            if cleaned.as_bytes() == raw.as_slice() {
+                return Err(Error::NothingToDo("it's already clean".into()));
+            }
+            std::fs::write(dst, cleaned)?;
+            Ok(State::File {
+                path: dst.to_path_buf(),
+                fmt,
+            })
+        }
+        Step::FormatJson { minify } => {
+            let (path, fmt) = materialize(state, scratch, caps)?;
+            let src = text::read_text(&path)?;
+            let out = data::format_json(&src, *minify)?;
+            if out == src {
+                return Err(Error::NothingToDo(if *minify {
+                    "it's already minified".into()
+                } else {
+                    "it's already formatted".into()
+                }));
+            }
+            std::fs::write(dst, out)?;
+            Ok(State::File {
+                path: dst.to_path_buf(),
+                fmt,
+            })
+        }
     }
+}
+
+/// Markdown pages are titled after the file, not the scratch name a
+/// chain step had.
+fn retitle_html(path: &Path, title: &str) -> Result<()> {
+    let html = std::fs::read_to_string(path)?;
+    if let (Some(a), Some(b)) = (html.find("<title>"), html.find("</title>")) {
+        if a < b {
+            let fixed = format!(
+                "{}<title>{}{}",
+                &html[..a],
+                doc::escape_html(title),
+                &html[b..]
+            );
+            std::fs::write(path, fixed)?;
+        }
+    }
+    Ok(())
 }
 
 /// A file the Vision helper (ImageIO and PDFKit) can read: the original
 /// when it can, otherwise the pixels as PNG.
 fn vision_input(state: State, scratch: &Path, caps: &Capabilities) -> Result<PathBuf> {
     match state {
-        State::File { path, fmt } if fmt != Format::Qoi => Ok(path),
+        State::File { path, fmt } if !matches!(fmt, Format::Qoi | Format::Svg) => Ok(path),
         state => {
             let px = pixels(state, caps)?;
             let p = scratch.join("vision-input.png");
@@ -1071,12 +1196,45 @@ pub fn pdf_password(
     Ok(Produced::one(out))
 }
 
-/// Recognised text of an image or PDF, for the clipboard.
+fn value(v: String) -> Produced {
+    Produced {
+        output: None,
+        outputs: vec![],
+        value: Some(v),
+    }
+}
+
+/// The text of a document, or the text recognised in an image or PDF,
+/// for the clipboard. Markdown, plain text and data files are copied as
+/// they are; Word, RTF and HTML as plain text.
 pub fn copy_text(input: &Path, ctx: &mut Context<'_>) -> Result<Produced> {
     let fmt = format::detect(input)?;
-    if !(fmt == Format::Pdf || ctx.caps.can_decode_raster(fmt)) {
+    let raw = matches!(
+        fmt,
+        Format::Txt
+            | Format::Md
+            | Format::Csv
+            | Format::Tsv
+            | Format::Json
+            | Format::Srt
+            | Format::Vtt
+    );
+    if raw || matches!(fmt, Format::Html | Format::Docx | Format::Rtf) {
+        let text = if raw {
+            text::read_text(input)?
+        } else {
+            doc::to_text(&doc::read(input, fmt)?, false)
+        };
+        let text = text.trim_end().to_string();
+        if text.trim().is_empty() {
+            return Err(Error::NothingToDo("there's no text in it".into()));
+        }
+        (ctx.progress)(1.0);
+        return Ok(value(text));
+    }
+    if !(fmt == Format::Pdf || (ctx.caps.can_decode_raster(fmt) && fmt != Format::Svg)) {
         return Err(Error::UnsupportedInput(format!(
-            "text can only be copied from images and PDFs, not {fmt} files"
+            "text can't be copied from {fmt} files"
         )));
     }
     let scratch = tempfile::tempdir()?;
@@ -1103,14 +1261,15 @@ pub fn copy_text(input: &Path, ctx: &mut Context<'_>) -> Result<Produced> {
         )?
     };
     (ctx.progress)(1.0);
-    Ok(Produced {
-        output: None,
-        outputs: vec![],
-        value: Some(text.trim_end().to_string()),
-    })
+    Ok(value(text.trim_end().to_string()))
 }
 
 pub fn checksum(input: &Path, ctx: &mut Context<'_>) -> Result<Produced> {
+    if input.is_dir() {
+        return Err(Error::UnsupportedInput(
+            "a folder has no checksum; zip it first".into(),
+        ));
+    }
     let value = crate::engines::sha256(input, ctx.cancel)?;
     (ctx.progress)(1.0);
     Ok(Produced {
@@ -1118,6 +1277,225 @@ pub fn checksum(input: &Path, ctx: &mut Context<'_>) -> Result<Produced> {
         outputs: vec![],
         value: Some(value),
     })
+}
+
+/// Words and reading time of a document: "1,234 words · 6 min read".
+pub fn word_count(input: &Path, ctx: &mut Context<'_>) -> Result<Produced> {
+    let fmt = format::detect(input)?;
+    let text = match fmt {
+        Format::Pdf => {
+            let scratch = tempfile::tempdir()?;
+            pdf_text(
+                input,
+                scratch.path(),
+                ctx.caps,
+                ctx.cancel,
+                &mut *ctx.progress,
+            )?
+        }
+        f if f.is_document_text() => doc::read(input, f)?.words_text(),
+        other => {
+            return Err(Error::UnsupportedInput(format!(
+                "words can only be counted in documents, not {other} files"
+            )))
+        }
+    };
+    (ctx.progress)(1.0);
+    Ok(value(doc::word_count_label(&text)))
+}
+
+/// Joins documents, in order, into one in the first one's format. Each
+/// part that doesn't start with a heading gets its file's name as one.
+pub fn combine_text(inputs: &[PathBuf], ctx: &mut Context<'_>) -> Result<Produced> {
+    let first = inputs
+        .first()
+        .ok_or_else(|| Error::Invalid("no files to combine".into()))?;
+    if inputs.len() < 2 {
+        return Err(Error::NothingToDo(
+            "choose two or more documents to combine".into(),
+        ));
+    }
+    let first_fmt = format::detect(first)?;
+    let to = if doc::writable(first_fmt) {
+        first_fmt
+    } else {
+        Format::Md
+    };
+    let mut combined = doc::Doc::default();
+    for (i, p) in inputs.iter().enumerate() {
+        ctx.check_cancel()?;
+        let fmt = format::detect(p)?;
+        let part = doc::read(p, fmt)?;
+        if !matches!(part.blocks.first(), Some(doc::Block::Heading { .. })) {
+            combined.blocks.push(doc::Block::Heading {
+                level: 1,
+                text: doc::text(&doc::title_of(p)),
+            });
+        }
+        combined.blocks.extend(part.blocks);
+        (ctx.progress)((i + 1) as f32 / (inputs.len() + 1) as f32);
+    }
+    let dir = ctx.output.dir_for(first);
+    let tmp = naming::temp_in(&dir, ctx.temp_tag, to.extension())?;
+    doc::write(&combined, to, &doc::title_of(first), tmp.path())?;
+    naming::inherit_permissions(first, tmp.path());
+    let desired = naming::desired_path(first, &dir, to.extension(), Some("combined"));
+    let out = naming::publish(tmp.into_temp_path(), &desired)?;
+    (ctx.progress)(1.0);
+    Ok(Produced::one(out))
+}
+
+fn require_folder(input: &Path) -> Result<()> {
+    if std::fs::symlink_metadata(input)?.is_dir() {
+        Ok(())
+    } else {
+        Err(Error::UnsupportedInput(format!(
+            "{} isn't a folder",
+            display_name(input)
+        )))
+    }
+}
+
+/// Zips everything selected into one archive: "Name.zip" for one item,
+/// "Archive.zip" for several, beside the first.
+pub fn zip_all(inputs: &[PathBuf], ctx: &mut Context<'_>) -> Result<Produced> {
+    let first = inputs
+        .first()
+        .ok_or_else(|| Error::Invalid("nothing to zip".into()))?;
+    let dir = ctx.output.dir_for(first);
+    let tmp = naming::temp_in(&dir, ctx.temp_tag, "zip")?;
+    archive::zip(inputs, tmp.path(), ctx.cancel, &mut *ctx.progress)?;
+    if inputs.len() == 1 && !first.is_dir() {
+        naming::inherit_permissions(first, tmp.path());
+    }
+    let name = if inputs.len() == 1 {
+        format!("{}.zip", display_name(first))
+    } else {
+        "Archive.zip".to_string()
+    };
+    let out = naming::publish(tmp.into_temp_path(), &dir.join(name))?;
+    (ctx.progress)(1.0);
+    Ok(Produced::one(out))
+}
+
+/// Extracts an archive beside it: its single top-level folder or file
+/// as it is, or everything in a folder named after the archive.
+pub fn unzip(input: &Path, ctx: &mut Context<'_>) -> Result<Produced> {
+    let dir = ctx.output.dir_for(input);
+    let tmp = naming::temp_dir_in(&dir, ctx.temp_tag)?;
+    archive::extract(input, tmp.path(), ctx.cancel, &mut *ctx.progress)?;
+    let top: Vec<std::fs::DirEntry> = std::fs::read_dir(tmp.path())?.flatten().collect();
+    let out = match top.as_slice() {
+        [] => return Err(Error::NothingToDo("the archive is empty".into())),
+        [only] if only.path().is_dir() => {
+            let out = naming::publish_dir_contents(&only.path(), &dir.join(only.file_name()))?;
+            drop(tmp);
+            out
+        }
+        [only] => {
+            let path = only.path();
+            let name = only.file_name();
+            naming::publish(tempfile::TempPath::try_from_path(path)?, &dir.join(name))?
+        }
+        _ => {
+            let stem = input
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "Archive".into());
+            naming::publish_dir(tmp, &dir.join(stem))?
+        }
+    };
+    (ctx.progress)(1.0);
+    Ok(Produced::one(out))
+}
+
+/// Makes a new folder beside `input`, fills it with `fill`, and names it
+/// "<folder> (<suffix>)".
+fn new_folder(
+    input: &Path,
+    suffix: &str,
+    ctx: &mut Context<'_>,
+    fill: impl FnOnce(&Path, &AtomicBool, &mut dyn FnMut(f32)) -> Result<()>,
+) -> Result<Produced> {
+    let dir = ctx.output.dir_for(input);
+    let tmp = naming::temp_dir_in(&dir, ctx.temp_tag)?;
+    fill(tmp.path(), ctx.cancel, &mut *ctx.progress)?;
+    if std::fs::read_dir(tmp.path())?.next().is_none() {
+        return Err(Error::NothingToDo("there was nothing to copy".into()));
+    }
+    let name = format!("{} ({suffix})", display_name(input));
+    let out = naming::publish_dir(tmp, &dir.join(name))?;
+    (ctx.progress)(1.0);
+    Ok(Produced::one(out))
+}
+
+/// Copies two or more folders into one new folder.
+pub fn merge_folders(inputs: &[PathBuf], ctx: &mut Context<'_>) -> Result<Produced> {
+    if inputs.len() < 2 {
+        return Err(Error::NothingToDo(
+            "choose two or more folders to merge".into(),
+        ));
+    }
+    for i in inputs {
+        require_folder(i)?;
+    }
+    new_folder(&inputs[0], "merged", ctx, |out, cancel, progress| {
+        folder::merge(inputs, out, cancel, progress)
+    })
+}
+
+/// A copy of a folder with every file at the top level.
+pub fn flatten(input: &Path, ctx: &mut Context<'_>) -> Result<Produced> {
+    require_folder(input)?;
+    new_folder(input, "flattened", ctx, |out, cancel, progress| {
+        folder::flatten(input, out, cancel, progress)
+    })
+}
+
+/// A copy of a folder with its files grouped by kind.
+pub fn sort_by_kind(input: &Path, ctx: &mut Context<'_>) -> Result<Produced> {
+    require_folder(input)?;
+    new_folder(input, "sorted", ctx, |out, cancel, progress| {
+        folder::sort_by_kind(input, out, cancel, progress)
+    })
+}
+
+/// A list of a folder's contents, saved beside it.
+pub fn list_contents(input: &Path, fmt: Option<Format>, ctx: &mut Context<'_>) -> Result<Produced> {
+    require_folder(input)?;
+    let fmt = fmt.unwrap_or(Format::Txt);
+    if !matches!(fmt, Format::Txt | Format::Csv) {
+        return Err(Error::Invalid("lists are saved as TXT or CSV".into()));
+    }
+    let text = folder::list(input, fmt, ctx.cancel)?;
+    let dir = ctx.output.dir_for(input);
+    let tmp = naming::temp_in(&dir, ctx.temp_tag, fmt.extension())?;
+    std::fs::write(tmp.path(), text)?;
+    naming::inherit_permissions(input, tmp.path());
+    let name = format!("{} (contents).{}", display_name(input), fmt.extension());
+    let out = naming::publish(tmp.into_temp_path(), &dir.join(name))?;
+    (ctx.progress)(1.0);
+    Ok(Produced::one(out))
+}
+
+/// A report of identical files among the selection, saved beside it.
+pub fn find_duplicates(inputs: &[PathBuf], ctx: &mut Context<'_>) -> Result<Produced> {
+    let first = inputs
+        .first()
+        .ok_or_else(|| Error::Invalid("nothing to search".into()))?;
+    let report = folder::duplicates(inputs, ctx.cancel, &mut *ctx.progress)?;
+    let dir = ctx.output.dir_for(first);
+    let tmp = naming::temp_in(&dir, ctx.temp_tag, "txt")?;
+    std::fs::write(tmp.path(), report)?;
+    naming::inherit_permissions(first, tmp.path());
+    let name = if inputs.len() == 1 {
+        format!("{} (duplicates).txt", display_name(first))
+    } else {
+        "Duplicates.txt".to_string()
+    };
+    let out = naming::publish(tmp.into_temp_path(), &dir.join(name))?;
+    (ctx.progress)(1.0);
+    Ok(Produced::one(out))
 }
 
 #[cfg(test)]

@@ -20,12 +20,16 @@ final class ResizeModel: ObservableObject {
     @Published private(set) var picture: Picture?
     @Published private(set) var loading = true
     let files: [URL]
+    /// Every file is an SVG: drawn afresh at any size, so it can grow.
+    let vector: Bool
     private let finish: (JSONValue?) -> Void
     private let scratch = ScratchFolder()
 
     init(files: [URL], finish: @escaping (JSONValue?) -> Void) {
         self.files = files
         self.finish = finish
+        vector = files.allSatisfy { ["svg", "svgz"].contains($0.pathExtension.lowercased()) }
+        if vector { text = "200" }
         Task { [weak self] in await self?.load() }
     }
 
@@ -43,7 +47,8 @@ final class ResizeModel: ObservableObject {
 
     private func defaultValue(for mode: ToolAction.ResizeMode) -> Int {
         switch mode {
-        case .percent: return 50
+        case .percent: return vector ? 200 : 50
+        case .max where vector: return 1024
         case .max:
             guard let s = known else { return 1920 }
             let longest = Int(max(s.width, s.height))
@@ -54,12 +59,13 @@ final class ResizeModel: ObservableObject {
     }
 
     var value: Int? { Int(text.trimmingCharacters(in: .whitespaces)) }
-    var range: ClosedRange<Int> { mode == .percent ? 1...100 : 1...16_384 }
+    var range: ClosedRange<Int> { mode == .percent ? (vector ? 1...1000 : 1...100) : 1...16_384 }
     var unit: String { mode == .percent ? "%" : "px" }
 
     var presets: [Int] {
         switch mode {
-        case .percent: return [25, 50, 75]
+        case .percent: return vector ? [100, 200, 400] : [25, 50, 75]
+        case .max where vector: return [512, 1024, 2048, 4096]
         case .max: return [1080, 1920, 2560, 3840]
         case .width: return [640, 1280, 1920]
         case .height: return [480, 720, 1080]
@@ -79,18 +85,22 @@ final class ResizeModel: ObservableObject {
 
     var outputSize: CGSize? {
         guard let s = known, let v = value, range.contains(v) else { return nil }
-        return ToolAction.resizedSize(s, mode, v)
+        return ToolAction.resizedSize(s, mode, v, vector: vector)
     }
 
     var problem: String? {
         guard let v = value else { return "Enter a whole number." }
-        guard range.contains(v) else { return mode == .percent ? "Use 1 to 100%." : "Use 1 to 16,384 pixels." }
+        guard range.contains(v) else {
+            return mode == .percent ? "Use 1 to \(range.upperBound)%." : "Use 1 to 16,384 pixels."
+        }
         if let out = outputSize, max(out.width, out.height) > 16_384 { return "That would be larger than 16,384 pixels." }
         return nil
     }
 
     var canApply: Bool {
         guard problem == nil else { return false }
+        // A drawing at 100% still becomes a PNG at its own size.
+        if vector { return true }
         if mode == .percent && value == 100 { return false }
         if files.count == 1, let s = known, let out = outputSize { return out != s }
         return true
@@ -107,7 +117,8 @@ final class ResizeModel: ObservableObject {
     }
 
     var note: String {
-        files.count > 1 ? "Resizes all \(files.count) files. Each keeps its proportions." : "The original stays as it is."
+        if vector { return "Drawn sharp at the new size, as PNG. The SVG stays as it is." }
+        return files.count > 1 ? "Resizes all \(files.count) files. Each keeps its proportions." : "The original stays as it is."
     }
 
     func cancel() { finish(nil) }

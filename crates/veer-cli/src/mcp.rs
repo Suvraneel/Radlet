@@ -267,11 +267,12 @@ fn tools(caps: &Capabilities) -> Vec<Value> {
         tool(
             "convert",
             "Convert",
-            "Convert files to another format, such as HEIC to JPEG, MKV to MP4, WAV to MP3, \
-             Markdown to HTML, images to PDF or a PDF to one image per page.",
+            "Convert files to another format, such as HEIC to JPEG, SVG to PNG, MKV to MP4, \
+             WAV to MP3, Markdown to Word or PDF, Word to Markdown, CSV to JSON, images to PDF, \
+             a PDF to one image per page, a folder to a ZIP, or a ZIP to a folder.",
             json!({
                 "paths": paths_schema(),
-                "to": { "type": "string", "description": "Target format, such as jpeg, png, webp, pdf, mp4, mp3, txt." },
+                "to": { "type": "string", "description": "Target format, such as jpeg, png, webp, pdf, mp4, mp3, txt, md, html, docx, rtf, csv, json, zip or folder." },
                 "quality": { "type": "integer", "minimum": 1, "maximum": 100, "description": "For lossy formats." },
                 "output_dir": output_dir_schema(),
             }),
@@ -307,7 +308,7 @@ fn tools(caps: &Capabilities) -> Vec<Value> {
         tool(
             "combine_into_pdf",
             "Combine into PDF",
-            "Put images and PDFs, in the order given, into one PDF.",
+            "Put images, PDFs, SVGs and documents, in the order given, into one PDF.",
             json!({ "paths": paths_schema(), "output_dir": output_dir_schema() }),
             &["paths"],
             false,
@@ -328,10 +329,27 @@ fn tools(caps: &Capabilities) -> Vec<Value> {
         tool(
             "extract_text",
             "Extract text",
-            "The text of PDFs, and (on a Mac) the text recognised in photos and scans. Writes nothing.",
+            "The text of documents (TXT, Markdown, HTML, Word, RTF, CSV, JSON) and PDFs, and (on a Mac) \
+             the text recognised in photos and scans. Writes nothing.",
             json!({ "paths": paths_schema() }),
             &["paths"],
             true,
+        ),
+        tool(
+            "count_words",
+            "Count words",
+            "Words and reading time of each document or PDF. Writes nothing.",
+            json!({ "paths": paths_schema() }),
+            &["paths"],
+            true,
+        ),
+        tool(
+            "zip",
+            "Zip",
+            "Put files and folders, together, into one ZIP archive.",
+            json!({ "paths": paths_schema(), "output_dir": output_dir_schema() }),
+            &["paths"],
+            false,
         ),
         tool(
             "privacy_check",
@@ -544,6 +562,8 @@ fn call(
             run(args, Action::SplitPdf { mode }, ctx, cancel, progress)
         }
         "extract_text" => run(args, Action::CopyText, ctx, cancel, progress),
+        "count_words" => run(args, Action::WordCount, ctx, cancel, progress),
+        "zip" => run(args, Action::ZipAll, ctx, cancel, progress),
         "checksum" => run(args, Action::Checksum, ctx, cancel, progress),
         "run_recipe" => {
             let wanted = args

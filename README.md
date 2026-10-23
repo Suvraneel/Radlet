@@ -70,7 +70,11 @@ It builds Veer, installs it in Applications and starts it. An app built on your 
 
 ## What it does
 
-- **Convert** images, PDFs, audio, video, text and subtitles (Shift wheel). A PDF converted to JPEG, PNG, WebP or TIFF gives one image per page.
+- **Convert** images, PDFs, audio, video, documents, data files and subtitles (Shift wheel). A PDF converted to JPEG, PNG, WebP or TIFF gives one image per page.
+  - **Documents**: TXT, Markdown, HTML, Word (.docx) and RTF all convert to each other and to PDF, keeping headings, lists, quotes, code, tables, bold, italic and links. A PDF converts to text or Markdown. On a Mac, PDFs are laid out by the system's text engine, with fonts for every script; elsewhere a built-in writer covers Western languages.
+  - **SVG** is an image: PNG, JPEG, WebP, ICO and the rest, drawn sharp at **1×**, **2×** or **4×** (or at least 1024 px on its longest side by default), and **Resize…** redraws it at any size. SVG to PDF stays vector.
+  - **Data**: CSV, TSV and JSON convert to each other (numbers stay numbers, IDs with leading zeros stay text), and a CSV becomes a Markdown or HTML table.
+  - **Folders and ZIPs**: a folder becomes a ZIP and a ZIP becomes a folder (**Unzip**). Extraction never writes outside its folder, skips links and Finder's `__MACOSX` clutter, and refuses archives that would expand absurdly (zip bombs).
 - **Tools** (Command wheel). Tools ending in "…" open a window first:
   - **Resize…** by percentage, longest side, exact width or height.
   - **Crop…** with a live preview, aspect presets and pixel size.
@@ -89,6 +93,9 @@ It builds Veer, installs it in Applications and starts it. An app built on your 
   - **Remove background**: keeps the main subject on a transparent background (PNG, or WebP/TIFF if that's what you started with).
   - **Copy text**: recognises the text in pictures and scanned PDFs and puts it on the clipboard. Convert a picture to **Text** to save it as a file instead.
   - **Make searchable PDF**: turns photos of documents and scanned PDFs into PDFs you can search, select and copy from. Pages that already have text are left as they are.
+  - **Documents**: **Word count** ("1,234 words · 6 min read", also on the clipboard), **Copy text** (the whole text, ready to paste), **Clean up text** (UTF-8, one kind of line ending, no trailing spaces), **Combine into one** (several notes into one file) and **Combine into PDF**, which takes any mix of documents, pictures, SVGs and PDFs. JSON gets **Format JSON** and **Minify JSON**, keeping key order and numbers exactly.
+  - **Folders** (all on copies; the originals are only read): **Zip together** (anything selected, into one archive), **Merge folders** (identical files kept once, clashing names numbered), **Flatten** (every file at the top), **Sort by kind** (Images, Documents, Audio, Videos…), **List contents** (a tree with sizes, or a CSV with dates) and **Find duplicates** (a report of identical files and the space they take).
+  - **Copy path**, **Copy name** and **Open in Terminal** (the folder itself, or a file's folder) for anything, in the app.
   - One-step tools: rotate, remove metadata, combine into a PDF, copy SHA-256.
   - The wheel holds eight (Settings → Wheel can make it 6, 10 or 12); anything more is under **More…**. The slots you use most are the ones that stay, but nothing moves around: the most useful go up, right, down and left, and stay there.
 - **Wheel styles** (Settings → Wheel): **Dial**, one ring, is the default. Turn on **Advanced styles** for **Orbit**, which adds an outer ring of presets behind each slot (JPEG → Smart or Best, Compress → Email or Discord), and **Bloom**, where resting on a slot or flicking past it fans out its presets. Slots stay in the same places in every style. The highlight glides between slots, borders are slightly sticky so it doesn't flicker, and a Force Touch trackpad taps as you cross into a slot. See [docs/skins.md](docs/skins.md).
@@ -219,7 +226,18 @@ veer compress photo.jpg --level smart      # smallest file that still looks the 
 veer privacy IMG_0042.jpg report.pdf      # what they reveal; veer strip removes it
 veer subtitles talk.mp4 --language en-US  # talk.srt (--to vtt or txt); macOS app
 veer mcp                                  # serve Veer's tools to an AI agent
-veer combine scan1.png scan2.png notes.pdf
+veer combine scan1.png scan2.png notes.pdf  # documents and SVGs go in too
+veer convert notes.md --to docx            # or pdf, html, rtf, txt; and back again
+veer convert logo.svg --to png             # at least 1024 px; veer resize logo.svg --max 4096
+veer convert orders.csv --to json          # csv, tsv, json, md and html tables
+veer words essay.docx                     # 1,234 words · 6 min read
+veer join week1.md week2.md               # "week1 (combined).md"
+veer json data.json --minify              # or without --minify to re-indent
+veer clean notes.txt                      # UTF-8, \n line endings, no trailing spaces
+veer zip Photos notes.txt                 # Archive.zip; veer convert Photos --to zip for one each
+veer unzip Archive.zip
+veer merge "Photos 2023" "Photos 2024"    # "Photos 2023 (merged)"
+veer flatten Downloads                    # or: veer sort, veer list --csv, veer duplicates
 veer checksum installer.dmg
 veer recipe "Web-ready image" *.png
 veer --json convert a.png --to webp       # JSON lines for scripts
@@ -275,7 +293,7 @@ When stdin closes (the app quit or crashed), the helper cancels its jobs and exi
 - **Tidy multi-file results.** Up to four pages or parts are saved next to the original; more go into one folder, such as `report (pages)`.
 - **One bad file fails only itself.** Each file runs in its own worker process with a time limit. Crashes and hangs are reported per file, and partial outputs are deleted.
 - **Upright and colour-correct.** EXIF orientation is applied to pixels, and ICC profiles are carried into PNG, JPEG, WebP, TIFF and PDF outputs.
-- **Bounded inputs.** Images up to 40,000 px a side and 1 GiB decoded; PDFs decompress to at most 512 MB; text files up to 64 MB.
+- **Bounded inputs.** Images up to 40,000 px a side and 1 GiB decoded; PDFs decompress to at most 512 MB; text files up to 64 MB; SVGs drawn at most 16,384 px a side; ZIPs extract at most 1,000 times their size (and 64 GB); folders up to 500,000 items.
 - **Local only.** No network access, accounts or telemetry.
 
 ## Clean-room policy
@@ -285,7 +303,9 @@ No code, assets or text were taken from other apps, and no other app's source co
 ## Known limits
 
 - Resize and rotate refuse animated GIFs rather than flatten them. Converting an animated GIF to a still format keeps the first frame. Removing metadata from a GIF is lossless and keeps every frame.
-- Office formats (DOCX, PPTX, XLSX) aren't implemented yet. See the roadmap.
+- Word files are read for their text and structure: headings, lists, quotes, code, tables, bold, italic and links. Pictures, comments, footnotes, headers and footers aren't carried over, and Word output uses Calibri and simple styles. PowerPoint and Excel files aren't handled yet.
+- Without the Mac app, documents become PDF through a built-in writer with the standard PDF fonts (Helvetica, Courier), which cover Western European languages; other letters print as "?".
+- Password-protected ZIP files can't be opened yet, nor archives compressed with methods other than Deflate and Deflate64.
 - Text recognition, Remove background and searchable PDFs need the Mac app (macOS 14 or later); the engine on Linux doesn't offer them. A searchable PDF made from a PDF is redrawn page by page, so links, form fields and bookmarks aren't carried over.
 - PDF to image needs the bundled PDFium. Password-protected PDFs are refused by the other PDF tools; remove the password first with **Password…**.
 - A PDF with only an owner password (editing restrictions, no password to open it) opens without one, so Veer's PDF tools treat it as unlocked and their results drop those restrictions.
@@ -300,5 +320,5 @@ No code, assets or text were taken from other apps, and no other app's source co
 
 ## Status
 
-Version 1.0 in progress. Newest: wheel styles (Dial, plus Orbit and Bloom as advanced options) with presets from the engine, and skins written as CSS custom properties, with six built in. The wheel's tracking (dead zone, sticky borders, Orbit's ring line, Bloom's rest-or-flick) and the skin parser are unit-tested on Linux; the drawing itself still needs a look on a Mac. Before that: Privacy check, Make subtitles (on-device speech recognition), Smart compression and an MCP server for AI agents. Before that, the extras: PDF page numbers, watermarks, passwords, shrinking and single-page rotation; trim, GIF, stills and loudness for media; batch rename; History with multi-step undo; drag-out; Convert Clipboard; and a recipe editor. The engine is built and tested on Linux, including the end-to-end, protocol and PDFium tests, and its licences are checked with `cargo deny`. The Mac app builds with the Command Line Tools. Text recognition, Remove background and searchable PDFs are new: the engine side is tested against a stand-in helper, and `veer-vision selftest` (run by CI and by `run.sh --check`) checks the real one on a Mac.
+Version 1.0 in progress. Newest: documents (TXT, Markdown, HTML, Word, RTF and PDF, converting every way, with word counts, cleanup and combining), SVG as an image drawn at any size, CSV/TSV/JSON, and folders and ZIPs (zip, unzip, merge, flatten, sort, list, find duplicates), plus Copy path, Copy name and Open in Terminal. All of it is tested on Linux end to end; the Mac's text-engine PDF layout (`veer-vision document-pdf`) and the app's quick actions still need a run on a Mac. Before that: wheel styles (Dial, plus Orbit and Bloom as advanced options) with presets from the engine, and skins written as CSS custom properties, with six built in. The wheel's tracking (dead zone, sticky borders, Orbit's ring line, Bloom's rest-or-flick) and the skin parser are unit-tested on Linux; the drawing itself still needs a look on a Mac. Before that: Privacy check, Make subtitles (on-device speech recognition), Smart compression and an MCP server for AI agents. Before that, the extras: PDF page numbers, watermarks, passwords, shrinking and single-page rotation; trim, GIF, stills and loudness for media; batch rename; History with multi-step undo; drag-out; Convert Clipboard; and a recipe editor. The engine is built and tested on Linux, including the end-to-end, protocol and PDFium tests, and its licences are checked with `cargo deny`. The Mac app builds with the Command Line Tools. Text recognition, Remove background and searchable PDFs are new: the engine side is tested against a stand-in helper, and `veer-vision selftest` (run by CI and by `run.sh --check`) checks the real one on a Mac.
 # Veer

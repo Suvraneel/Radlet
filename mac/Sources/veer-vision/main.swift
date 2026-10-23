@@ -8,6 +8,9 @@
 //                                                invisible text layer
 //   veer-vision transcribe <language|auto> <output.json> <chunk.wav>...
 //                                                speech to timed words
+//   veer-vision document-pdf <input.html> <output.pdf>
+//                                                a document laid out on
+//                                                A4 pages (DocumentPDF.swift)
 //   veer-vision selftest                         checks this Mac can do them
 //   veer-vision --version
 //
@@ -615,12 +618,14 @@ do {
         try searchable(URL(fileURLWithPath: args[1]), URL(fileURLWithPath: args[2]))
     case "transcribe" where args.count >= 4:
         try transcribe(Array(args.dropFirst()))
+    case "document-pdf" where args.count == 3:
+        try documentPDF(URL(fileURLWithPath: args[1]), URL(fileURLWithPath: args[2]))
     case "selftest":
         try selftest()
     case "--version":
         print("veer-vision 1")
     default:
-        FileHandle.standardError.write(Data("usage: veer-vision text|mask|searchable <input> <output>, transcribe <language> <output.json> <chunk>..., or selftest\n".utf8))
+        FileHandle.standardError.write(Data("usage: veer-vision text|mask|searchable|document-pdf <input> <output>, transcribe <language> <output.json> <chunk>..., or selftest\n".utf8))
         exit(2)
     }
 } catch Failure.nothingFound(let message) {

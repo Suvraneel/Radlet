@@ -169,7 +169,7 @@ pub(crate) fn page_view(doc: &Document, page: ObjectId) -> Result<PageView> {
 
 /// Helvetica advance widths (per 1000 units of text size) for character
 /// codes 32 to 126.
-const HELVETICA: [u16; 95] = [
+pub(crate) const HELVETICA: [u16; 95] = [
     278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, // 32-47
     556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, // 48-63
     1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, // 64-79

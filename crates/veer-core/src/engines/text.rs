@@ -9,17 +9,97 @@ use crate::format::Format;
 const MAX_TEXT_BYTES: u64 = 64 << 20;
 
 /// Reads text, dropping a UTF-8 byte-order mark. Files that aren't valid
-/// UTF-8 (old Windows subtitles) are read as Windows-1252.
+/// UTF-8 (old Windows subtitles) are read as Windows-1252; files with a
+/// UTF-16 byte-order mark as UTF-16.
 pub fn read_text(path: &Path) -> Result<String> {
     let len = std::fs::metadata(path)?.len();
     if len > MAX_TEXT_BYTES {
         return Err(Error::TooLarge("text files can be at most 64 MB".into()));
     }
-    let bytes = std::fs::read(path)?;
-    let bytes = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(&bytes);
-    Ok(match std::str::from_utf8(bytes) {
+    Ok(decode(&std::fs::read(path)?))
+}
+
+/// Text from bytes in UTF-8, UTF-16 (with a byte-order mark) or, failing
+/// those, Windows-1252.
+pub fn decode(bytes: &[u8]) -> String {
+    let utf16 = |be: bool| -> String {
+        let units: Vec<u16> = bytes[2..]
+            .chunks_exact(2)
+            .map(|c| {
+                if be {
+                    u16::from_be_bytes([c[0], c[1]])
+                } else {
+                    u16::from_le_bytes([c[0], c[1]])
+                }
+            })
+            .collect();
+        String::from_utf16_lossy(&units)
+    };
+    if bytes.starts_with(&[0xFF, 0xFE]) {
+        return utf16(false);
+    }
+    if bytes.starts_with(&[0xFE, 0xFF]) {
+        return utf16(true);
+    }
+    let bytes = bytes.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(bytes);
+    match std::str::from_utf8(bytes) {
         Ok(s) => s.to_string(),
         Err(_) => bytes.iter().map(|&b| cp1252(b)).collect(),
+    }
+}
+
+/// Tidies a text file: UTF-8 without a byte-order mark, `\n` line
+/// endings, no spaces or tabs at line ends, no stray control characters,
+/// and exactly one newline at the end. In Markdown, a line break written
+/// as two trailing spaces becomes a backslash, which means the same.
+pub fn clean(raw: &[u8], markdown: bool) -> Result<String> {
+    if raw.len() as u64 > MAX_TEXT_BYTES {
+        return Err(Error::TooLarge("text files can be at most 64 MB".into()));
+    }
+    let text = decode(raw).replace("\r\n", "\n").replace('\r', "\n");
+    let lines: Vec<&str> = text.split('\n').collect();
+    let mut out = String::with_capacity(text.len());
+    let mut fence: Option<char> = None;
+    for (i, line) in lines.iter().enumerate() {
+        let body: String = line
+            .trim_end()
+            .chars()
+            .filter(|c| !c.is_control() || *c == '\t')
+            .collect();
+        let opener = body.trim_start();
+        if markdown && line.len() - line.trim_start().len() < 4 {
+            for f in ['`', '~'] {
+                if opener.starts_with(&f.to_string().repeat(3)) {
+                    fence = match fence {
+                        None => Some(f),
+                        Some(open) if open == f => None,
+                        other => other,
+                    };
+                }
+            }
+        }
+        let next_has_text = lines.get(i + 1).is_some_and(|n| !n.trim().is_empty());
+        let hard_break = markdown
+            && fence.is_none()
+            && line.ends_with("  ")
+            && !body.trim().is_empty()
+            && next_has_text;
+        // An indented line may be code, where a backslash would show; it
+        // keeps its two spaces instead.
+        let indented = line.starts_with("    ") || line.starts_with('\t');
+        out.push_str(&body);
+        if hard_break && indented {
+            out.push_str("  ");
+        } else if hard_break {
+            out.push('\\');
+        }
+        out.push('\n');
+    }
+    let trimmed = out.trim_end_matches('\n');
+    Ok(if trimmed.is_empty() {
+        String::new()
+    } else {
+        format!("{trimmed}\n")
     })
 }
 
@@ -211,27 +291,31 @@ fn md_options() -> pulldown_cmark::Options {
 }
 
 /// Renders Markdown as a standalone HTML page. Raw HTML in the source is
-/// escaped rather than passed through, so the output can't run scripts.
+/// escaped rather than passed through, and links or pictures that could
+/// run something (`javascript:`, `data:`) are dropped, keeping their
+/// text, so the output can't run scripts.
 pub fn markdown_to_html(src: &str, title: &str) -> String {
-    use pulldown_cmark::{html, Event, Parser};
-    let parser = Parser::new_ext(src, md_options()).map(|ev| match ev {
-        Event::Html(h) | Event::InlineHtml(h) => Event::Text(h),
-        other => other,
+    use crate::engines::doc::safe_link;
+    use pulldown_cmark::{html, Event, Parser, Tag, TagEnd};
+    // For each open link or picture: whether it was dropped.
+    let mut dropped: Vec<bool> = Vec::new();
+    let parser = Parser::new_ext(src, md_options()).filter_map(move |ev| match ev {
+        Event::Html(h) | Event::InlineHtml(h) => Some(Event::Text(h)),
+        Event::Start(Tag::Link { ref dest_url, .. })
+        | Event::Start(Tag::Image { ref dest_url, .. }) => {
+            let drop = safe_link(dest_url).is_none();
+            dropped.push(drop);
+            (!drop).then_some(ev)
+        }
+        Event::End(TagEnd::Link) | Event::End(TagEnd::Image) => {
+            let drop = dropped.pop().unwrap_or(false);
+            (!drop).then_some(ev)
+        }
+        other => Some(other),
     });
     let mut body = String::new();
     html::push_html(&mut body, parser);
-    format!(
-        "<!doctype html>\n<html lang=\"en\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>{}</title>\n<style>\nbody{{font:16px/1.6 -apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;max-width:46rem;margin:2rem auto;padding:0 1rem;color:#1d1d1f}}\npre,code{{font-family:ui-monospace,Menlo,monospace;font-size:.9em}}\npre{{background:#f5f5f7;padding:1rem;overflow:auto;border-radius:8px}}\ntable{{border-collapse:collapse}}td,th{{border:1px solid #d2d2d7;padding:.3rem .6rem}}\nimg{{max-width:100%}}\n@media (prefers-color-scheme:dark){{body{{background:#1d1d1f;color:#f5f5f7}}pre{{background:#2c2c2e}}td,th{{border-color:#48484a}}a{{color:#64a8ff}}}}\n</style>\n</head>\n<body>\n{}</body>\n</html>\n",
-        escape_html(title),
-        body
-    )
-}
-
-fn escape_html(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
+    crate::engines::doc::html_page(title, &body, false)
 }
 
 /// Plain text from Markdown: formatting removed, structure kept as lines.
@@ -385,6 +469,43 @@ mod tests {
     fn markdown_text() {
         let t = markdown_to_text("# Head\n\nSome *bold* text\nwrapped.\n\n- one\n- two\n");
         assert_eq!(t, "Head\n\nSome bold text wrapped.\n\n- one\n- two\n");
+    }
+
+    #[test]
+    fn markdown_html_drops_script_links() {
+        let html = markdown_to_html(
+            "[a](javascript:alert(1)) [b](https://x.y) ![c](data:image/png;base64,AA) ![d](pic.png)",
+            "t",
+        );
+        assert!(
+            !html.contains("javascript:") && !html.contains("data:"),
+            "{html}"
+        );
+        assert!(
+            html.contains(">a<") || html.contains(" a ") || html.contains("<p>a "),
+            "{html}"
+        );
+        assert!(html.contains("<a href=\"https://x.y\">b</a>"));
+        assert!(html.contains("c") && html.contains("src=\"pic.png\""));
+    }
+
+    #[test]
+    fn cleaning_text() {
+        let raw = b"\xEF\xBB\xBFline one  \r\nline two\t\r\n\x07bell\n\n\n";
+        assert_eq!(clean(raw, false).unwrap(), "line one\nline two\nbell\n");
+        // Markdown hard breaks survive, but not inside code or at a
+        // paragraph's end.
+        let md = "a  \nb  \n\n```\ncode  \nmore\n```\n\n    indented  \n    code\n";
+        assert_eq!(
+            clean(md.as_bytes(), true).unwrap(),
+            "a\\\nb\n\n```\ncode\nmore\n```\n\n    indented  \n    code\n"
+        );
+        let utf16: Vec<u8> = [0xFF, 0xFE]
+            .into_iter()
+            .chain("hé \r\n".encode_utf16().flat_map(|u| u.to_le_bytes()))
+            .collect();
+        assert_eq!(clean(&utf16, false).unwrap(), "hé\n");
+        assert_eq!(clean(b"\n\n", false).unwrap(), "");
     }
 
     #[test]

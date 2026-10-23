@@ -45,13 +45,17 @@ public enum WheelLayout {
                                         group: "tool", action: .object(["kind": .string("app_rename")]),
                                         window: "rename")
 
-    /// Adds app-side tools to the engine's list: Rename goes just before
-    /// "Copy SHA-256", which stays last.
+    /// The app's own tools: Rename, then the quick actions.
+    public static var appTools: [Slot] { [renameSlot] + QuickAction.allCases.map(\.slot) }
+
+    /// Adds app-side tools to the engine's list, just before "Copy
+    /// SHA-256", which stays last (folders have no checksum: then at the
+    /// end).
     public static func withAppTools(_ tools: [Slot]) -> [Slot] {
         guard !tools.contains(where: { $0.id == renameSlot.id }) else { return tools }
         var out = tools
         let at = out.firstIndex { $0.id == "checksum" } ?? out.endIndex
-        out.insert(renameSlot, at: at)
+        out.insert(contentsOf: appTools, at: at)
         return out
     }
 }

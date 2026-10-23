@@ -8,6 +8,8 @@ public enum StepText {
         "tiff": "TIFF", "bmp": "BMP", "pdf": "PDF", "txt": "Text", "md": "Markdown", "html": "HTML",
         "mp4": "MP4", "mov": "MOV", "webm": "WebM", "mkv": "MKV", "mp3": "MP3", "m4a": "M4A",
         "wav": "WAV", "flac": "FLAC", "ogg": "OGG", "opus": "Opus", "srt": "SRT", "vtt": "WebVTT",
+        "svg": "SVG", "docx": "Word", "rtf": "RTF", "csv": "CSV", "tsv": "TSV", "json": "JSON",
+        "zip": "ZIP", "folder": "Folder",
     ]
 
     public static func formatName(_ id: String) -> String {
@@ -16,6 +18,7 @@ public enum StepText {
 
     /// Formats offered when adding a Convert step.
     public static let convertTargets = ["jpeg", "png", "webp", "heic", "pdf", "gif", "tiff", "txt",
+                                        "md", "html", "docx", "csv", "json",
                                         "mp4", "mov", "webm", "mp3", "m4a", "wav"]
 
     public static func describe(_ step: JSONValue) -> String {
@@ -76,6 +79,10 @@ public enum StepText {
             }
             if let language = step["language"]?.string, !language.isEmpty { return "\(kind), \(language)" }
             return kind
+        case "clean_text":
+            return "Clean up text"
+        case "format_json":
+            return step["minify"]?.bool == true ? "Minify JSON" : "Format JSON"
 
         default:
             return op.replacingOccurrences(of: "_", with: " ").capitalized
@@ -95,5 +102,7 @@ public enum StepText {
         ("Watermark", .object(["op": .string("watermark"), "text": .string("DRAFT")])),
         ("Even out volume", .object(["op": .string("normalize_audio")])),
         ("Make subtitles", .object(["op": .string("transcribe"), "to": .string("srt")])),
+        ("Clean up text", .object(["op": .string("clean_text")])),
+        ("Format JSON", .object(["op": .string("format_json")])),
     ]
 }
