@@ -183,7 +183,9 @@ enum Command {
         quality: Option<u8>,
     },
     /// Resize images. --max and --percent never enlarge; --width and
-    /// --height are exact and keep the aspect ratio.
+    /// --height are exact and keep the aspect ratio. SVGs are drawn at
+    /// the size asked (--max sets the longest side; --percent may pass
+    /// 100), as PNG.
     Resize {
         #[command(flatten)]
         run: RunArgs,
@@ -191,7 +193,7 @@ enum Command {
         #[arg(long, group = "size")]
         max: Option<u32>,
         /// Scale to this percentage.
-        #[arg(long, group = "size", value_parser = clap::value_parser!(u32).range(1..=100))]
+        #[arg(long, group = "size", value_parser = clap::value_parser!(u32).range(1..=1000))]
         percent: Option<u32>,
         /// Exact width in pixels.
         #[arg(long, group = "size")]
@@ -374,8 +376,69 @@ enum Command {
         #[arg(long, value_parser = parse_size_arg)]
         target: Option<u64>,
     },
-    /// Combine images and PDFs, in order, into one PDF.
+    /// Combine images, PDFs, SVGs and documents, in order, into one PDF.
     Combine {
+        #[command(flatten)]
+        run: RunArgs,
+    },
+    /// Join documents (TXT, Markdown, HTML, Word, RTF), in order, into one
+    /// file in the first one's format.
+    Join {
+        #[command(flatten)]
+        run: RunArgs,
+    },
+    /// Count the words in documents and PDFs.
+    Words {
+        #[command(flatten)]
+        run: RunArgs,
+    },
+    /// Tidy text files: UTF-8, one kind of line ending, no spaces at line
+    /// ends, one newline at the end.
+    Clean {
+        #[command(flatten)]
+        run: RunArgs,
+    },
+    /// Re-indent JSON files, or with --minify remove the spaces.
+    Json {
+        #[command(flatten)]
+        run: RunArgs,
+        #[arg(long)]
+        minify: bool,
+    },
+    /// Put files and folders, together, into one ZIP archive.
+    Zip {
+        #[command(flatten)]
+        run: RunArgs,
+    },
+    /// Extract ZIP archives beside them.
+    Unzip {
+        #[command(flatten)]
+        run: RunArgs,
+    },
+    /// Copy two or more folders into one new folder.
+    Merge {
+        #[command(flatten)]
+        run: RunArgs,
+    },
+    /// Copy folders with every file from their subfolders at the top.
+    Flatten {
+        #[command(flatten)]
+        run: RunArgs,
+    },
+    /// Copy folders with their files grouped into Images, Documents, ...
+    Sort {
+        #[command(flatten)]
+        run: RunArgs,
+    },
+    /// Save a list of what's in folders: a tree, or with --csv a table.
+    List {
+        #[command(flatten)]
+        run: RunArgs,
+        #[arg(long)]
+        csv: bool,
+    },
+    /// Report files with identical contents in folders.
+    Duplicates {
         #[command(flatten)]
         run: RunArgs,
     },
@@ -548,6 +611,7 @@ fn run(args: &RunArgs, action: Action, json_out: bool) -> Result<ExitCode> {
     };
     let is_checksum = matches!(action, Action::Checksum);
     let is_text = matches!(action, Action::CopyText);
+    let is_count = matches!(action, Action::WordCount);
     let many = args.files.len() > 1;
     let units = job::plan(&args.files, &action, &options.output, &job::new_job_tag());
     install_signal_handlers();
@@ -585,6 +649,14 @@ fn run(args: &RunArgs, action: Action, json_out: bool) -> Result<ExitCode> {
             Status::Done if is_checksum => {
                 format!("{}  {}", o.value.unwrap_or_default(), o.inputs[0].display())
             }
+            Status::Done if is_count => {
+                let v = o.value.unwrap_or_default();
+                if many {
+                    format!("{name}: {v}")
+                } else {
+                    v
+                }
+            }
             Status::Done if is_text => {
                 texts
                     .lock()
@@ -613,7 +685,7 @@ fn run(args: &RunArgs, action: Action, json_out: bool) -> Result<ExitCode> {
             Status::Cancelled => format!("✗ {name}: cancelled"),
         };
         // Keep problems out of output meant for pipes (`veer text a.png > a.txt`).
-        if (is_text || is_checksum) && o.status != Status::Done {
+        if (is_text || is_checksum || is_count) && o.status != Status::Done {
             eprintln!("{line}");
         } else {
             let _ = writeln!(out, "{line}");
@@ -636,7 +708,7 @@ fn run(args: &RunArgs, action: Action, json_out: bool) -> Result<ExitCode> {
             println!("{text}");
         }
     }
-    if !json_out && !is_checksum && !is_text {
+    if !json_out && !is_checksum && !is_text && !is_count {
         eprintln!(
             "{} done, {} skipped, {} failed",
             summary.done, summary.skipped, summary.failed
@@ -957,6 +1029,25 @@ fn dispatch(cli: Cli) -> Result<ExitCode> {
             )
         }
         Command::Combine { run: r } => run(&r, Action::CombinePdf, json_out),
+        Command::Join { run: r } => run(&r, Action::CombineText, json_out),
+        Command::Words { run: r } => run(&r, Action::WordCount, json_out),
+        Command::Clean { run: r } => run(&r, Action::single(Step::CleanText), json_out),
+        Command::Json { run: r, minify } => {
+            run(&r, Action::single(Step::FormatJson { minify }), json_out)
+        }
+        Command::Zip { run: r } => run(&r, Action::ZipAll, json_out),
+        Command::Unzip { run: r } => run(&r, Action::convert(Format::Folder), json_out),
+        Command::Merge { run: r } => run(&r, Action::MergeFolders, json_out),
+        Command::Flatten { run: r } => run(&r, Action::Flatten, json_out),
+        Command::Sort { run: r } => run(&r, Action::SortByKind, json_out),
+        Command::List { run: r, csv } => run(
+            &r,
+            Action::ListContents {
+                format: csv.then_some(Format::Csv),
+            },
+            json_out,
+        ),
+        Command::Duplicates { run: r } => run(&r, Action::FindDuplicates, json_out),
         Command::Checksum { run: r } => run(&r, Action::Checksum, json_out),
         Command::Recipe {
             recipe,

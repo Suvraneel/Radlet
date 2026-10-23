@@ -178,7 +178,7 @@ final class AppState: ObservableObject {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.canChooseFiles = true
-        panel.canChooseDirectories = false
+        panel.canChooseDirectories = true
         panel.prompt = "Choose"
         guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
         showWheel(for: panel.urls, mode: mode)
@@ -215,6 +215,12 @@ final class AppState: ObservableObject {
     }
 
     func run(_ slot: Slot, files: [URL]) {
+        // Copy path, Copy name and Open in Terminal happen here and now.
+        if let quick = QuickAction(slot: slot) {
+            Usage.shared.record(slot)
+            runQuick(quick, files: files)
+            return
+        }
         // Tools with options (Crop, Compress, Split…) open their window
         // first; it calls back here with the finished action.
         if slot.window != nil {
@@ -227,8 +233,8 @@ final class AppState: ObservableObject {
         let context = JobContext(generation: UUID(), toClipboard: fromClipboard,
                                  temporary: ClipboardInput.isTemporary(files))
         let title = self.title(for: slot, files: files)
-        let total = slot.isCombine ? 1 : files.count
-        let kind: JobProgress.ValueKind = slot.isCopyText ? .text : .checksum
+        let total = slot.isWholeSelection ? 1 : files.count
+        let kind: JobProgress.ValueKind = slot.isCopyText ? .text : (slot.isWordCount ? .count : .checksum)
         Log.app("running \(slot.id) on \(describeFiles(files))\(fromClipboard ? " from the clipboard" : "")")
         // The HUD shows the newest job. Each job also keeps its own record,
         // so one the HUD has moved on from still reaches History.
@@ -258,6 +264,31 @@ final class AppState: ObservableObject {
                 hud.progress.failures = [error.localizedDescription]
                 hud.progress.phase = .failed
                 hud.reposition()
+            }
+        }
+    }
+
+    private func runQuick(_ action: QuickAction, files: [URL]) {
+        Log.app("quick action \(action.rawValue) on \(describeFiles(files))")
+        switch action {
+        case .copyPath, .copyName:
+            guard let text = action.clipboardText(for: files) else { return }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+            notify(action.doneTitle(count: files.count), detail: files.count == 1 ? text : "On the clipboard, one per line")
+        case .openTerminal:
+            let folders = QuickAction.terminalFolders(for: files) { url in
+                (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
+            }
+            guard !folders.isEmpty,
+                  let terminal = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") else {
+                notify("Open in Terminal", detail: "Terminal isn't on this Mac")
+                return
+            }
+            let config = NSWorkspace.OpenConfiguration()
+            config.activates = true
+            NSWorkspace.shared.open(folders, withApplicationAt: terminal, configuration: config) { _, error in
+                if let error { Log.app("open in Terminal failed: \(Log.code(error))") }
             }
         }
     }

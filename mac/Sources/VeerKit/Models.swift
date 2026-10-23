@@ -151,7 +151,14 @@ public struct Slot: Codable, Identifiable, Equatable, Sendable {
 
     public var isChecksum: Bool { action["kind"]?.string == "checksum" }
     public var isCopyText: Bool { action["kind"]?.string == "copy_text" }
+    public var isWordCount: Bool { action["kind"]?.string == "word_count" }
     public var isCombine: Bool { action["kind"]?.string == "combine_pdf" }
+    /// Runs once over the whole selection (one item in the HUD), rather
+    /// than once per file.
+    public var isWholeSelection: Bool {
+        ["combine_pdf", "combine_text", "zip_all", "merge_folders", "find_duplicates"]
+            .contains(action["kind"]?.string ?? "")
+    }
 }
 
 /// A preset of a slot: "Q 95" for JPEG, "50 %" for Resize.

@@ -47,9 +47,22 @@ impl PdfBuilder {
 
     /// Adds any supported input: a PDF's pages, or an image as one page.
     pub fn add_file(&mut self, path: &Path, format: Format, caps: &Capabilities) -> Result<()> {
+        use crate::engines::{doc, docpdf, svg};
+        let load_mem = |bytes: Vec<u8>| {
+            Document::load_mem(&bytes)
+                .map_err(|e| Error::Pdf(format!("couldn't read the PDF ({e})")))
+        };
         match format {
             Format::Pdf => self.add_pdf(path),
             Format::Jpeg => self.add_jpeg(path, caps),
+            // Drawings stay vector.
+            Format::Svg => self.import_pages(load_mem(svg::to_pdf(path)?)?, None),
+            f if f.is_document_text() || matches!(f, Format::Csv | Format::Tsv) => {
+                let d = doc::read(path, f)?;
+                let cancel = std::sync::atomic::AtomicBool::new(false);
+                let bytes = docpdf::render(&d, &doc::title_of(path), caps, &cancel)?;
+                self.import_pages(load_mem(bytes)?, None)
+            }
             f if caps.can_decode_raster(f) => {
                 let pic = img_engine::decode(path, f, caps)?;
                 self.add_picture(&pic)

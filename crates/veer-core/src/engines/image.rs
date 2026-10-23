@@ -63,6 +63,9 @@ pub fn decode(path: &Path, format: Format, caps: &Capabilities) -> Result<Pictur
         img.apply_orientation(orientation);
         return Ok(Picture { img, icc });
     }
+    if format == Format::Svg {
+        return crate::engines::svg::decode(path);
+    }
     if matches!(format, Format::Heic | Format::Avif) {
         let scratch = tempfile::tempdir()?;
         let png = scratch.path().join("decoded.png");
@@ -293,7 +296,12 @@ pub fn resize(img: DynamicImage, spec: ResizeSpec) -> Result<DynamicImage> {
         ResizeSpec {
             percent: Some(p), ..
         } => {
-            if p >= 100 {
+            if p > 100 {
+                return Err(Error::NothingToDo(
+                    "pictures aren't enlarged (only SVGs are drawn larger)".into(),
+                ));
+            }
+            if p == 100 {
                 return Ok(img);
             }
             exact(w * p as u64 / 100, h * p as u64 / 100)

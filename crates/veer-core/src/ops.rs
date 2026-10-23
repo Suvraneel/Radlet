@@ -78,7 +78,9 @@ pub enum Step {
     },
     /// Resize by exactly one of: longest side at most `max` pixels, a
     /// `percent` scale (both never enlarge), or an exact `width` or
-    /// `height` keeping the aspect ratio.
+    /// `height` keeping the aspect ratio. An SVG has no pixels to lose, so
+    /// it is drawn afresh at the size asked: `max` sets its longest side
+    /// and `percent` may go above 100.
     Resize {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         max: Option<u32>,
@@ -177,6 +179,15 @@ pub enum Step {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         language: Option<String>,
     },
+    /// Tidy a text file: UTF-8 without a byte-order mark, one kind of line
+    /// ending (`\n`), no spaces at line ends, one newline at the end.
+    CleanText,
+    /// Re-indent a JSON file (two spaces), or with `minify` remove every
+    /// space it doesn't need. Keys keep their order.
+    FormatJson {
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        minify: bool,
+    },
 }
 
 fn subtitle_format() -> Format {
@@ -258,6 +269,9 @@ impl Step {
             Step::RemoveBackground { .. } => Some("cutout"),
             Step::MakeSearchable => Some("searchable"),
             Step::Transcribe { .. } => Some("transcript"),
+            Step::CleanText => Some("cleaned"),
+            Step::FormatJson { minify: false } => Some("formatted"),
+            Step::FormatJson { minify: true } => Some("minified"),
         }
     }
 }
@@ -348,15 +362,43 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         label: Option<String>,
     },
-    /// Put every selected image and PDF, in order, into one PDF.
+    /// Put every selected image, PDF, SVG and document, in order, into
+    /// one PDF.
     CombinePdf,
+    /// Join the selected documents, in order, into one file in the first
+    /// one's format (Markdown when that can't be written).
+    CombineText,
     /// Split each selected PDF into several.
     SplitPdf { mode: SplitMode },
     /// Compute a SHA-256 checksum for every selected file. Writes nothing.
     Checksum,
-    /// Recognise the text in every selected image or PDF, for the
-    /// clipboard. Writes nothing.
+    /// The text of every selected document, or the text recognised in an
+    /// image or PDF, for the clipboard. Writes nothing.
     CopyText,
+    /// Count the words in every selected document: "1,234 words · 6 min
+    /// read". Writes nothing.
+    WordCount,
+    /// Put everything selected (files and folders) into one ZIP archive.
+    ZipAll,
+    /// Copy two or more folders into one new folder. Files with the same
+    /// name and different contents are both kept (the second renamed);
+    /// identical ones are kept once.
+    MergeFolders,
+    /// A copy of each folder with every file from its subfolders at the
+    /// top level.
+    Flatten,
+    /// A copy of each folder with its files grouped into Images,
+    /// Documents, Audio and so on. Subfolders go into Folders, unchanged.
+    SortByKind,
+    /// A list of everything in each folder: an indented tree (`txt`,
+    /// default) or a spreadsheet with sizes and dates (`csv`).
+    ListContents {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        format: Option<Format>,
+    },
+    /// Report files with identical contents in the selected folders (and
+    /// files), compared byte for byte by SHA-256. Changes nothing.
+    FindDuplicates,
     /// Save `count` evenly spaced stills from each video.
     ExtractFrames {
         #[serde(default = "frame_count")]
@@ -419,6 +461,19 @@ impl Action {
             steps: vec![step],
             label: None,
         }
+    }
+
+    /// True for actions that run once over the whole selection rather
+    /// than once per file.
+    pub fn is_whole_selection(&self) -> bool {
+        matches!(
+            self,
+            Action::CombinePdf
+                | Action::CombineText
+                | Action::ZipAll
+                | Action::MergeFolders
+                | Action::FindDuplicates
+        )
     }
 }
 
@@ -613,6 +668,23 @@ mod tests {
             r#"{"kind":"steps","steps":[{"op":"transcribe","to":"srt"}]}"#,
             r#"{"kind":"steps","steps":[{"language":"en-GB","op":"transcribe","to":"vtt"}]}"#,
             r#"{"kind":"steps","steps":[{"level":"smart","op":"compress"}]}"#,
+            // Documents, folders and data files.
+            r#"{"kind":"steps","steps":[{"op":"clean_text"}]}"#,
+            r#"{"kind":"steps","steps":[{"op":"format_json"}]}"#,
+            r#"{"kind":"steps","steps":[{"minify":true,"op":"format_json"}]}"#,
+            r#"{"kind":"steps","steps":[{"op":"convert","to":"docx"}]}"#,
+            r#"{"kind":"steps","steps":[{"op":"convert","to":"zip"}]}"#,
+            r#"{"kind":"steps","steps":[{"op":"convert","to":"folder"}]}"#,
+            r#"{"kind":"steps","steps":[{"op":"resize","percent":400},{"op":"convert","to":"png"}]}"#,
+            r#"{"kind":"combine_text"}"#,
+            r#"{"kind":"word_count"}"#,
+            r#"{"kind":"zip_all"}"#,
+            r#"{"kind":"merge_folders"}"#,
+            r#"{"kind":"flatten"}"#,
+            r#"{"kind":"sort_by_kind"}"#,
+            r#"{"kind":"list_contents"}"#,
+            r#"{"format":"csv","kind":"list_contents"}"#,
+            r#"{"kind":"find_duplicates"}"#,
         ];
         for json in sent {
             let a: Action = serde_json::from_str(json).unwrap_or_else(|e| panic!("{json}: {e}"));

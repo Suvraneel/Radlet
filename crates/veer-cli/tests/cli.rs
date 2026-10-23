@@ -283,7 +283,7 @@ fn checksum_prints_sha256sum_format() {
 fn usage_errors_exit_2() {
     let dir = tempfile::tempdir().unwrap();
     png(dir.path(), "a.png", 2, 2);
-    assert_eq!(veer(&["convert", "a.png", "--to", "docx"], dir.path()).0, 2);
+    assert_eq!(veer(&["convert", "a.png", "--to", "pptx"], dir.path()).0, 2);
     assert_eq!(
         veer(&["convert", "missing.png", "--to", "jpg"], dir.path()).0,
         2
@@ -852,4 +852,28 @@ fn privacy_from_the_command_line() {
     assert_eq!(lines.len(), 2);
     assert!(lines[0]["findings"].is_array());
     assert!(lines[1]["error"]["message"].is_string());
+}
+
+#[test]
+fn documents_and_folders_from_the_command_line() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("notes.md"), "# Hi\n\nThree more words.\n").unwrap();
+    let (code, out, _) = veer(&["words", "notes.md"], dir.path());
+    assert_eq!(code, 0);
+    assert_eq!(out.trim(), "4 words · 1 min read");
+    assert_eq!(
+        veer(&["convert", "notes.md", "--to", "docx"], dir.path()).0,
+        0
+    );
+    assert!(dir.path().join("notes.docx").is_file());
+
+    std::fs::create_dir(dir.path().join("Box")).unwrap();
+    std::fs::write(dir.path().join("Box/a.txt"), "a").unwrap();
+    assert_eq!(veer(&["zip", "Box", "notes.md"], dir.path()).0, 0);
+    assert!(dir.path().join("Archive.zip").is_file());
+    assert_eq!(veer(&["unzip", "Archive.zip"], dir.path()).0, 0);
+    assert!(dir.path().join("Archive/Box/a.txt").is_file());
+    let (code, _, _) = veer(&["list", "Box", "--csv"], dir.path());
+    assert_eq!(code, 0);
+    assert!(dir.path().join("Box (contents).csv").is_file());
 }

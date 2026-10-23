@@ -1,14 +1,23 @@
 //! Format-specific engines. Each one is a set of plain functions over paths
 //! and decoded data; orchestration lives in [`crate::pipeline`].
 
+pub mod archive;
+pub mod data;
+pub mod doc;
+pub mod docpdf;
+pub mod docx;
+pub mod folder;
+pub mod htmlread;
 pub mod image;
 pub mod media;
 pub mod meta;
 pub mod pdf;
 pub mod pdfedit;
 pub mod pdfium;
+pub mod rtf;
 pub mod sips;
 pub mod speech;
+pub mod svg;
 pub mod text;
 pub mod vision;
 

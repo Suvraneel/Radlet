@@ -7,7 +7,7 @@ public final class JobProgress: ObservableObject {
     public enum Phase: Sendable { case running, finished, failed }
     /// What a job that writes no files computes, which decides how the
     /// results go on the clipboard.
-    public enum ValueKind: Sendable { case checksum, text }
+    public enum ValueKind: Sendable { case checksum, text, count }
 
     /// A value computed for one file.
     public struct NamedValue: Equatable, Sendable {
@@ -104,7 +104,16 @@ public final class JobProgress: ObservableObject {
         case .finished, .failed:
             if let message { return message }
             if !values.isEmpty {
-                let what = valueKind == .text ? "Text" : "SHA-256"
+                // One word count is worth showing, not just copying.
+                if valueKind == .count, values.count == 1, skipped.isEmpty, failures.isEmpty {
+                    return "\(values[0].value) · copied"
+                }
+                let what: String
+                switch valueKind {
+                case .text: what = "Text"
+                case .checksum: what = "SHA-256"
+                case .count: what = "Word counts"
+                }
                 let problems = skipped.count + failures.filter { $0 != "Cancelled" }.count
                 return problems > 0 ? "\(what) copied to the clipboard · \(problems) without" : "\(what) copied to the clipboard"
             }
@@ -122,6 +131,7 @@ public final class JobProgress: ObservableObject {
     /// Text for the clipboard. Checksums: the bare hash for one file,
     /// "hash  name" lines (as `shasum` prints them) for several. Text: the
     /// text itself for one file; for several, each under its file name.
+    /// Word counts: the count, or "name: count" lines.
     public var clipboardText: String? {
         guard !values.isEmpty else { return nil }
         // Files finish in any order; the clipboard follows the selection.
@@ -133,6 +143,9 @@ public final class JobProgress: ObservableObject {
         case .text:
             if values.count == 1 { return values[0].value }
             return values.map { "\($0.name)\n\n\($0.value)" }.joined(separator: "\n\n")
+        case .count:
+            if values.count == 1 { return values[0].value }
+            return values.map { "\($0.name): \($0.value)" }.joined(separator: "\n")
         }
     }
 }

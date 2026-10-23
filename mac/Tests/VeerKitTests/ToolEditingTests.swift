@@ -173,6 +173,10 @@ final class ToolActionTests: XCTestCase {
         XCTAssertEqual(ToolAction.resizedSize(s, .width, 8000), CGSize(width: 8000, height: 6000))
         XCTAssertEqual(ToolAction.resizedSize(s, .height, 300), CGSize(width: 400, height: 300))
         XCTAssertNil(ToolAction.resizedSize(s, .width, 0))
+        // Drawings grow.
+        let icon = CGSize(width: 24, height: 12)
+        XCTAssertEqual(ToolAction.resizedSize(icon, .percent, 400, vector: true), CGSize(width: 96, height: 48))
+        XCTAssertEqual(ToolAction.resizedSize(icon, .max, 1024, vector: true), CGSize(width: 1024, height: 512))
     }
 
     func testSlotWithActionDropsTheWindow() {
@@ -266,5 +270,23 @@ final class JobValueTests: XCTestCase {
         p.valueKind = .text
         p.reset(title: "again", total: 1)
         XCTAssertEqual(p.valueKind, .checksum)  // reset forgets the kind
+    }
+
+    func testWordCountsShowAndCopy() {
+        let p = JobProgress()
+        p.reset(title: "Word count", total: 1)
+        p.valueKind = .count
+        finish(p, 0, "/s/essay.docx", value: "1,234 words · 6 min read")
+        p.handle(.jobFinished(Summary(done: 1, skipped: 0, failed: 0, cancelled: 0), cancelled: false))
+        XCTAssertEqual(p.clipboardText, "1,234 words · 6 min read")
+        XCTAssertEqual(p.detail, "1,234 words · 6 min read · copied")
+
+        p.reset(title: "Word count", total: 2)
+        p.valueKind = .count
+        finish(p, 1, "/s/b.md", value: "2 words · 1 min read")
+        finish(p, 0, "/s/a.md", value: "1 word · 1 min read")
+        p.handle(.jobFinished(Summary(done: 2, skipped: 0, failed: 0, cancelled: 0), cancelled: false))
+        XCTAssertEqual(p.clipboardText, "a.md: 1 word · 1 min read\nb.md: 2 words · 1 min read")
+        XCTAssertEqual(p.detail, "Word counts copied to the clipboard")
     }
 }

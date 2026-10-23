@@ -68,13 +68,36 @@ final class WheelLayoutTests: XCTestCase {
         XCTAssertEqual(over.overflow.map(\.id), ["s11", "s12", "s13", "s14"])
     }
 
-    func testRenameSitsBeforeChecksum() {
+    func testAppToolsSitBeforeChecksum() {
         let tools = slots(2) + [Slot(id: "checksum", label: "Copy SHA-256", symbol: "number", group: "tool",
                                      action: .object(["kind": .string("checksum")]))]
         let with = WheelLayout.withAppTools(tools)
-        XCTAssertEqual(with.map(\.id), ["s0", "s1", "rename", "checksum"])
-        XCTAssertEqual(WheelLayout.withAppTools(with).count, 4)  // added once
-        XCTAssertEqual(WheelLayout.withAppTools([]).map(\.id), ["rename"])
+        XCTAssertEqual(with.map(\.id), ["s0", "s1", "rename", "copy_path", "copy_name", "open_terminal", "checksum"])
+        XCTAssertEqual(WheelLayout.withAppTools(with).count, 7)  // added once
+        // Folders have no checksum: the app's tools go last.
+        XCTAssertEqual(WheelLayout.withAppTools([]).map(\.id), ["rename", "copy_path", "copy_name", "open_terminal"])
+    }
+
+    func testQuickActions() {
+        let files = [URL(fileURLWithPath: "/Users/me/My Files/report.pdf"), URL(fileURLWithPath: "/Users/me/Photos")]
+        XCTAssertEqual(QuickAction.copyPath.clipboardText(for: files), "/Users/me/My Files/report.pdf\n/Users/me/Photos")
+        XCTAssertEqual(QuickAction.copyName.clipboardText(for: files), "report.pdf\nPhotos")
+        XCTAssertNil(QuickAction.openTerminal.clipboardText(for: files))
+        XCTAssertNil(QuickAction.copyPath.clipboardText(for: []))
+        XCTAssertEqual(QuickAction.copyPath.doneTitle(count: 1), "Path copied")
+        XCTAssertEqual(QuickAction.copyName.doneTitle(count: 3), "3 names copied")
+        let more = files + [URL(fileURLWithPath: "/Users/me/My Files/notes.md")]
+        let dirs = QuickAction.terminalFolders(for: more) { $0.lastPathComponent == "Photos" }
+        XCTAssertEqual(dirs.map(\.path), ["/Users/me/My Files", "/Users/me/Photos"])
+        for q in QuickAction.allCases {
+            XCTAssertEqual(QuickAction(slot: q.slot), q)
+            XCTAssertNil(q.slot.window)
+        }
+        let engine = Slot(id: "zip_all", label: "Zip together", symbol: "doc.zipper", group: "tool",
+                          action: .object(["kind": .string("zip_all")]))
+        XCTAssertNil(QuickAction(slot: engine))
+        XCTAssertTrue(engine.isWholeSelection)
+        XCTAssertFalse(QuickAction.copyPath.slot.isWholeSelection)
     }
 }
 

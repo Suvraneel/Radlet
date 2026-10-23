@@ -27,8 +27,12 @@ pub enum Format {
     Qoi,
     Heic,
     Avif,
+    /// Scalable vector graphics, rendered to pixels when converted.
+    Svg,
     // Documents
     Pdf,
+    Docx,
+    Rtf,
     // Audio
     Mp3,
     M4a,
@@ -51,6 +55,14 @@ pub enum Format {
     Html,
     Srt,
     Vtt,
+    // Data
+    Csv,
+    Tsv,
+    Json,
+    // Archives
+    Zip,
+    /// A folder on disk. Not a file format, but it gets its own actions.
+    Folder,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -62,6 +74,9 @@ pub enum Category {
     Video,
     Text,
     Subtitle,
+    Data,
+    Archive,
+    Folder,
 }
 
 impl Category {
@@ -74,6 +89,9 @@ impl Category {
             Category::Video => "film",
             Category::Text => "doc.plaintext",
             Category::Subtitle => "captions.bubble",
+            Category::Data => "tablecells",
+            Category::Archive => "doc.zipper",
+            Category::Folder => "folder",
         }
     }
 }
@@ -82,8 +100,9 @@ use Format::*;
 
 impl Format {
     pub const ALL: &'static [Format] = &[
-        Png, Jpeg, Webp, Gif, Bmp, Tiff, Ico, Tga, Qoi, Heic, Avif, Pdf, Mp3, M4a, Wav, Flac, Ogg,
-        Opus, Aiff, Wma, Mp4, Mov, Mkv, Webm, Avi, Wmv, Txt, Md, Html, Srt, Vtt,
+        Png, Jpeg, Webp, Gif, Bmp, Tiff, Ico, Tga, Qoi, Heic, Avif, Svg, Pdf, Docx, Rtf, Mp3, M4a,
+        Wav, Flac, Ogg, Opus, Aiff, Wma, Mp4, Mov, Mkv, Webm, Avi, Wmv, Txt, Md, Html, Srt, Vtt,
+        Csv, Tsv, Json, Zip, Folder,
     ];
 
     /// Stable identifier used on the wire and in recipes.
@@ -100,7 +119,10 @@ impl Format {
             Qoi => "qoi",
             Heic => "heic",
             Avif => "avif",
+            Svg => "svg",
             Pdf => "pdf",
+            Docx => "docx",
+            Rtf => "rtf",
             Mp3 => "mp3",
             M4a => "m4a",
             Wav => "wav",
@@ -120,6 +142,11 @@ impl Format {
             Html => "html",
             Srt => "srt",
             Vtt => "vtt",
+            Csv => "csv",
+            Tsv => "tsv",
+            Json => "json",
+            Zip => "zip",
+            Folder => "folder",
         }
     }
 
@@ -137,7 +164,10 @@ impl Format {
             Qoi => "QOI",
             Heic => "HEIC",
             Avif => "AVIF",
+            Svg => "SVG",
             Pdf => "PDF",
+            Docx => "Word",
+            Rtf => "RTF",
             Mp3 => "MP3",
             M4a => "M4A",
             Wav => "WAV",
@@ -157,6 +187,11 @@ impl Format {
             Html => "HTML",
             Srt => "SRT",
             Vtt => "VTT",
+            Csv => "CSV",
+            Tsv => "TSV",
+            Json => "JSON",
+            Zip => "ZIP",
+            Folder => "Folder",
         }
     }
 
@@ -166,18 +201,24 @@ impl Format {
             Jpeg => "jpg",
             Tiff => "tiff",
             Aiff => "aiff",
+            Folder => "",
             other => other.id(),
         }
     }
 
     pub fn category(self) -> Category {
         match self {
-            Png | Jpeg | Webp | Gif | Bmp | Tiff | Ico | Tga | Qoi | Heic | Avif => Category::Image,
-            Pdf => Category::Document,
+            Png | Jpeg | Webp | Gif | Bmp | Tiff | Ico | Tga | Qoi | Heic | Avif | Svg => {
+                Category::Image
+            }
+            Pdf | Docx | Rtf => Category::Document,
             Mp3 | M4a | Wav | Flac | Ogg | Opus | Aiff | Wma => Category::Audio,
             Mp4 | Mov | Mkv | Webm | Avi | Wmv => Category::Video,
             Txt | Md | Html => Category::Text,
             Srt | Vtt => Category::Subtitle,
+            Csv | Tsv | Json => Category::Data,
+            Zip => Category::Archive,
+            Folder => Category::Folder,
         }
     }
 
@@ -195,6 +236,10 @@ impl Format {
             "oga" => Ogg,
             "m4v" => Mp4,
             "qt" => Mov,
+            "svgz" => Svg,
+            "word" => Docx,
+            "tab" => Tsv,
+            "geojson" => Json,
             _ => return Format::ALL.iter().copied().find(|f| f.id() == n),
         };
         Some(f)
@@ -204,11 +249,26 @@ impl Format {
         path.extension()
             .and_then(|e| e.to_str())
             .and_then(Format::parse)
+            .filter(|f| *f != Folder)
     }
 
     /// True for formats Veer can decode into pixels with its built-in codecs.
     pub fn is_builtin_raster(self) -> bool {
         matches!(self, Png | Jpeg | Webp | Gif | Bmp | Tiff | Ico | Tga | Qoi)
+    }
+
+    /// Documents and text Veer can read as structured text (headings,
+    /// paragraphs, lists) and write back out in another of these formats.
+    pub fn is_document_text(self) -> bool {
+        matches!(self, Txt | Md | Html | Docx | Rtf)
+    }
+
+    /// Plain-text formats whose bytes are the text itself.
+    pub fn is_plain_text(self) -> bool {
+        matches!(
+            self,
+            Txt | Md | Html | Srt | Vtt | Csv | Tsv | Json | Svg | Rtf
+        )
     }
 }
 
@@ -225,26 +285,59 @@ const SNIFF_LEN: usize = 4096;
 pub fn detect(path: &Path) -> Result<Format> {
     let meta = std::fs::metadata(path)?;
     if meta.is_dir() {
-        return Err(Error::UnsupportedInput(format!(
-            "{} is a folder",
-            display_name(path)
-        )));
+        return Ok(Folder);
     }
     let mut header = Vec::with_capacity(SNIFF_LEN);
     File::open(path)?
         .take(SNIFF_LEN as u64)
         .read_to_end(&mut header)?;
     let by_ext = Format::from_path(path);
+    let unsupported = || {
+        Error::UnsupportedInput(format!(
+            "{} isn't a file type Veer can work with",
+            display_name(path)
+        ))
+    };
+    if header.starts_with(b"PK\x03\x04") || header.starts_with(b"PK\x05\x06") {
+        return classify_zip(path, by_ext).ok_or_else(unsupported);
+    }
     if let Some(f) = sniff(&header, by_ext) {
         return Ok(f);
     }
     match by_ext {
         // Formats with no reliable signature are trusted by extension.
-        Some(f @ (Tga | Txt | Md | Html | Srt | Vtt)) => Ok(f),
-        _ => Err(Error::UnsupportedInput(format!(
-            "{} isn't a file type Veer can work with",
-            display_name(path)
-        ))),
+        Some(f @ (Tga | Txt | Md | Html | Srt | Vtt | Csv | Tsv | Json | Svg)) => Ok(f),
+        _ => Err(unsupported()),
+    }
+}
+
+/// A ZIP container: a Word document, a plain archive, or something built
+/// on ZIP that Veer doesn't handle (spreadsheets, slides, e-books, apps).
+fn classify_zip(path: &Path, by_ext: Option<Format>) -> Option<Format> {
+    let file = File::open(path).ok()?;
+    let names: Vec<String> = match zip::ZipArchive::new(file) {
+        Ok(z) => z
+            .file_names()
+            .take(10_000)
+            .filter_map(|n| n.ok().map(|n| n.into_owned()))
+            .collect(),
+        // Damaged or not really a ZIP: trust only a .zip name.
+        Err(_) => return (by_ext == Some(Zip)).then_some(Zip),
+    };
+    let has = |n: &str| names.iter().any(|x| x == n);
+    if has("word/document.xml") {
+        return Some(Docx);
+    }
+    let container = has("[Content_Types].xml")
+        || has("mimetype")
+        || has("META-INF/MANIFEST.MF")
+        || has("AndroidManifest.xml");
+    match by_ext {
+        Some(Zip) => Some(Zip),
+        // Something else built on ZIP, named as such: leave it alone.
+        _ if container => None,
+        None => Some(Zip),
+        Some(_) => None,
     }
 }
 
@@ -277,7 +370,20 @@ pub fn sniff(h: &[u8], hint: Option<Format>) -> Option<Format> {
     // Weak signatures (two-byte magic, a marker that may sit after junk,
     // MPEG frame sync) are ignored for files named as text, so a note that
     // starts with "BM" or quotes "%PDF-" stays text.
-    let weak_ok = !matches!(hint, Some(Txt | Md | Html | Srt | Vtt));
+    let weak_ok = !matches!(
+        hint,
+        Some(Txt | Md | Html | Srt | Vtt | Csv | Tsv | Json | Svg | Rtf)
+    );
+    if starts(b"{\\rtf") {
+        return Some(Rtf);
+    }
+    if is_svg(h) {
+        return Some(Svg);
+    }
+    // Compressed SVG.
+    if starts(&[0x1F, 0x8B]) && hint == Some(Svg) {
+        return Some(Svg);
+    }
     if weak_ok && starts(b"BM") && h.len() >= 18 {
         let dib = u32::from_le_bytes([h[14], h[15], h[16], h[17]]);
         if matches!(dib, 12 | 16 | 40 | 52 | 56 | 64 | 108 | 124) {
@@ -330,6 +436,49 @@ pub fn sniff(h: &[u8], hint: Option<Format>) -> Option<Format> {
     None
 }
 
+/// True when the first element of an XML-ish document is `<svg`, after
+/// any byte-order mark, XML declaration, comments and doctype.
+fn is_svg(h: &[u8]) -> bool {
+    let mut rest = h.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(h);
+    for _ in 0..64 {
+        let skip = rest.iter().take_while(|b| b.is_ascii_whitespace()).count();
+        rest = &rest[skip..];
+        if rest.starts_with(b"<?") {
+            match find(rest, b"?>") {
+                Some(i) => rest = &rest[i + 2..],
+                None => return false,
+            }
+        } else if rest.starts_with(b"<!--") {
+            match find(rest, b"-->") {
+                Some(i) => rest = &rest[i + 3..],
+                None => return false,
+            }
+        } else if rest.starts_with(b"<!") {
+            // A doctype may carry an internal subset: <!DOCTYPE svg [ ... ]>
+            let close = find(rest, b">");
+            let subset = find(rest, b"[").filter(|&b| close.is_none_or(|c| b < c));
+            let end = match subset {
+                Some(_) => find(rest, b"]>").map(|i| i + 2),
+                None => close.map(|i| i + 1),
+            };
+            match end {
+                Some(i) => rest = &rest[i..],
+                None => return false,
+            }
+        } else {
+            return rest.starts_with(b"<svg")
+                && rest
+                    .get(4)
+                    .is_some_and(|b| b.is_ascii_whitespace() || matches!(b, b'>' | b'/'));
+        }
+    }
+    false
+}
+
+fn find(h: &[u8], needle: &[u8]) -> Option<usize> {
+    h.windows(needle.len()).position(|w| w == needle)
+}
+
 fn classify_ftyp(h: &[u8], hint: Option<Format>) -> Format {
     let fallback = || match hint {
         Some(M4a) => M4a,
@@ -373,6 +522,50 @@ pub(crate) fn display_name(path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn documents_vectors_and_folders() {
+        assert_eq!(sniff(b"{\\rtf1\\ansi hello}", None), Some(Rtf));
+        let svgs: [&[u8]; 4] = [
+            b"<svg xmlns=\"http://www.w3.org/2000/svg\"/>",
+            b"\xEF\xBB\xBF<?xml version=\"1.0\"?>\n<!-- made by hand -->\n<svg>",
+            b"<?xml version=\"1.0\"?><!DOCTYPE svg PUBLIC \"-//W3C//DTD SVG 1.1//EN\" \"x.dtd\" [ <!ENTITY a \"b\"> ]><svg width=\"1\">",
+            b"<!DOCTYPE svg><svg\n>",
+        ];
+        for s in svgs {
+            assert_eq!(sniff(s, None), Some(Svg), "{}", String::from_utf8_lossy(s));
+        }
+        assert_eq!(sniff(b"<svgfoo>", None), None);
+        assert_eq!(sniff(b"<!DOCTYPE html><html>", Some(Html)), None);
+
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(detect(dir.path()).unwrap(), Folder);
+        let csv = dir.path().join("t.csv");
+        std::fs::write(&csv, "a,b\n1,2\n").unwrap();
+        assert_eq!(detect(&csv).unwrap(), Csv);
+        let json = dir.path().join("t.json");
+        std::fs::write(&json, "{\"a\": 1}").unwrap();
+        assert_eq!(detect(&json).unwrap(), Json);
+        // ZIPs that are really something else aren't offered as archives.
+        let fake = dir.path().join("sheet.xlsx");
+        {
+            let mut z = zip::ZipWriter::new(std::fs::File::create(&fake).unwrap());
+            z.start_file(
+                "[Content_Types].xml",
+                zip::write::SimpleFileOptions::default(),
+            )
+            .unwrap();
+            z.finish().unwrap();
+        }
+        assert!(detect(&fake).is_err());
+        let plain = dir.path().join("archive.zip");
+        std::fs::copy(&fake, &plain).unwrap();
+        assert_eq!(detect(&plain).unwrap(), Zip);
+        assert_eq!(Folder.extension(), "");
+        assert_eq!(Format::parse("docx"), Some(Docx));
+        assert_eq!(Docx.category(), Category::Document);
+        assert_eq!(Csv.category().symbol(), "tablecells");
+    }
 
     #[test]
     fn sniff_trusts_bytes_over_extension() {
@@ -462,7 +655,9 @@ mod tests {
     fn ids_round_trip() {
         for f in Format::ALL {
             assert_eq!(Format::parse(f.id()), Some(*f));
-            assert_eq!(Format::parse(f.extension()), Some(*f));
+            if *f != Folder {
+                assert_eq!(Format::parse(f.extension()), Some(*f));
+            }
         }
     }
 }

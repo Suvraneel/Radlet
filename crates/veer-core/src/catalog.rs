@@ -74,9 +74,11 @@ impl Capabilities {
         self.ffmpeg.is_some()
     }
 
-    /// Formats that can be decoded into pixels.
+    /// Formats that can be decoded into pixels (an SVG is drawn).
     pub fn can_decode_raster(&self, f: Format) -> bool {
-        f.is_builtin_raster() || (self.sips.is_some() && matches!(f, Format::Heic | Format::Avif))
+        f.is_builtin_raster()
+            || f == Format::Svg
+            || (self.sips.is_some() && matches!(f, Format::Heic | Format::Avif))
     }
 
     /// Formats that pixels can be encoded into.
@@ -146,6 +148,8 @@ fn is_executable(p: &Path) -> bool {
 use Format::*;
 
 const IMAGE_TARGETS: &[Format] = &[Jpeg, Png, Webp, Heic, Pdf, Tiff, Gif, Bmp, Ico, Tga, Qoi];
+/// A drawing keeps its transparency best as PNG; its PDF stays vector.
+const SVG_TARGETS: &[Format] = &[Png, Jpeg, Webp, Pdf, Ico, Tiff, Gif, Bmp, Tga, Qoi, Heic];
 const AUDIO_TARGETS: &[Format] = &[Mp3, M4a, Wav, Flac, Aiff, Ogg, Opus, Wma];
 const VIDEO_TARGETS: &[Format] = &[Mp4, Mov, Webm, Mkv, Gif, Mp3, M4a, Avi, Wmv];
 
@@ -153,15 +157,19 @@ const VIDEO_TARGETS: &[Format] = &[Mp4, Mov, Webm, Mkv, Gif, Mp3, M4a, Avi, Wmv]
 pub fn targets(from: Format, caps: &Capabilities) -> Vec<Format> {
     let mut out: Vec<Format> = Vec::new();
     if caps.can_decode_raster(from) {
-        out.extend(
+        let list = if from == Svg {
+            SVG_TARGETS
+        } else {
             IMAGE_TARGETS
-                .iter()
+        };
+        out.extend(
+            list.iter()
                 .copied()
                 .filter(|&t| t == Pdf || caps.can_encode_raster(t)),
         );
     }
     // Text recognition reads images too.
-    if caps.vision.is_some() && caps.can_decode_raster(from) {
+    if caps.vision.is_some() && caps.can_decode_raster(from) && from != Svg {
         out.push(Txt);
     }
     match from.category() {
@@ -177,12 +185,20 @@ pub fn targets(from: Format, caps: &Capabilities) -> Vec<Format> {
             if caps.pdfium.is_some() {
                 out.extend_from_slice(&[Jpeg, Png, Webp, Tiff]);
             }
-            out.push(Txt);
+            out.extend_from_slice(&[Txt, Md]);
         }
         Srt => out.extend_from_slice(&[Vtt, Txt]),
         Vtt => out.extend_from_slice(&[Srt, Txt]),
-        Txt => out.extend_from_slice(&[Srt, Vtt]),
-        Md => out.extend_from_slice(&[Html, Txt]),
+        Txt => out.extend_from_slice(&[Pdf, Docx, Md, Html, Rtf, Srt, Vtt]),
+        Md => out.extend_from_slice(&[Pdf, Html, Docx, Txt, Rtf]),
+        Html => out.extend_from_slice(&[Pdf, Md, Docx, Txt, Rtf]),
+        Docx => out.extend_from_slice(&[Pdf, Md, Txt, Html, Rtf]),
+        Rtf => out.extend_from_slice(&[Pdf, Docx, Md, Txt, Html]),
+        Csv => out.extend_from_slice(&[Json, Tsv, Md, Html]),
+        Tsv => out.extend_from_slice(&[Csv, Json, Md, Html]),
+        Json => out.extend_from_slice(&[Csv, Tsv]),
+        Folder => out.push(Zip),
+        Zip => out.push(Folder),
         _ => {}
     }
     let mut seen = Vec::with_capacity(out.len());
@@ -222,7 +238,7 @@ pub fn selection_targets(formats: &[Option<Format>], caps: &Capabilities) -> Vec
 pub fn step_accepts(step: &Step, f: Format, caps: &Capabilities) -> bool {
     match step {
         Step::Convert { to, .. } => f == *to || can_convert(f, *to, caps),
-        Step::Resize { .. } => caps.can_decode_raster(f) && caps.can_encode_raster(f),
+        Step::Resize { .. } => caps.can_decode_raster(f) && (caps.can_encode_raster(f) || f == Svg),
         Step::Rotate { .. } => (caps.can_decode_raster(f) && caps.can_encode_raster(f)) || f == Pdf,
         Step::PageNumbers { .. } | Step::Watermark { .. } => f == Pdf,
         Step::Trim { .. } | Step::NormalizeAudio => {
@@ -247,8 +263,12 @@ pub fn step_accepts(step: &Step, f: Format, caps: &Capabilities) -> bool {
                     && f.category() == Category::Video
                     && (target_bytes.is_none() || caps.ffprobe.is_some()))
         }
-        Step::RemoveBackground { .. } => caps.vision.is_some() && caps.can_decode_raster(f),
-        Step::MakeSearchable => caps.vision.is_some() && (f == Pdf || caps.can_decode_raster(f)),
+        Step::RemoveBackground { .. } => {
+            caps.vision.is_some() && caps.can_decode_raster(f) && f != Svg
+        }
+        Step::MakeSearchable => {
+            caps.vision.is_some() && (f == Pdf || (caps.can_decode_raster(f) && f != Svg))
+        }
         Step::Transcribe { to, .. } => {
             caps.vision.is_some()
                 && caps.media()
@@ -256,6 +276,10 @@ pub fn step_accepts(step: &Step, f: Format, caps: &Capabilities) -> bool {
                 && matches!(to, Srt | Vtt | Txt)
                 && matches!(f.category(), Category::Audio | Category::Video)
         }
+        // Not CSV or TSV: trailing tabs are empty cells, and quoted cells
+        // can hold line breaks of their own.
+        Step::CleanText => matches!(f, Txt | Md | Html | Json | Srt | Vtt),
+        Step::FormatJson { .. } => f == Json,
     }
 }
 
@@ -268,6 +292,8 @@ pub fn step_output(step: &Step, f: Format) -> Format {
         Step::RemoveBackground { .. } => Png,
         Step::MakeSearchable => Pdf,
         Step::Transcribe { to, .. } => *to,
+        // A drawing resized becomes pixels.
+        Step::Resize { .. } if f == Svg => Png,
         Step::Compress { .. } if f.category() == Category::Video => Mp4,
         Step::Compress { .. } if matches!(f, Tiff | Bmp) => Jpeg,
         // Video crops and redactions are re-encoded as H.264.
@@ -368,8 +394,15 @@ fn fit_under(megabytes: u64) -> Action {
 }
 
 /// Presets for converting to `to`. Quality presets need every file to be
-/// an image (PDF pages and video frames take other routes).
-fn convert_variants(to: Format, id: &str, images: bool, combinable: bool) -> Vec<Variant> {
+/// an image (PDF pages and video frames take other routes); drawings
+/// (`svgs`) get sizes instead.
+fn convert_variants(
+    to: Format,
+    id: &str,
+    images: bool,
+    svgs: bool,
+    combinable: bool,
+) -> Vec<Variant> {
     let quality = |key: &str, label: &str, q: u8| {
         variant(
             id,
@@ -382,7 +415,24 @@ fn convert_variants(to: Format, id: &str, images: bool, combinable: bool) -> Vec
             }]),
         )
     };
+    let scale = |key: &str, label: &str, percent: u32, hint: &str| {
+        variant(
+            id,
+            key,
+            label,
+            format!("{} {hint}", to.label()),
+            steps(vec![
+                Step::resize_percent(percent),
+                Step::Convert { to, quality: None },
+            ]),
+        )
+    };
     match to {
+        Png | Jpeg | Webp | Tiff if svgs => vec![
+            scale("1x", "1×", 100, "at the size the SVG gives"),
+            scale("2x", "2×", 200, "at twice the size the SVG gives"),
+            scale("4x", "4×", 400, "at four times the size the SVG gives"),
+        ],
         Jpeg | Webp if images => vec![
             variant(
                 id,
@@ -427,16 +477,23 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
     let every =
         |test: &dyn Fn(Format) -> bool| known.as_ref().is_some_and(|k| k.iter().all(|&f| test(f)));
     let images = every(&|f| caps.can_decode_raster(f));
+    let svgs = every(&|f| f == Svg);
+    let pdfable = |f: Format| {
+        f == Pdf || caps.can_decode_raster(f) || f.is_document_text() || matches!(f, Csv | Tsv)
+    };
     let combinable = known
         .as_ref()
-        .is_some_and(|k| k.len() >= 2 && k.iter().all(|&f| f == Pdf || caps.can_decode_raster(f)));
+        .is_some_and(|k| k.len() >= 2 && k.iter().all(|&f| pdfable(f)));
+    let folders = every(&|f| f == Folder);
+    let any_folder = formats.contains(&Some(Folder));
 
     for t in selection_targets(formats, caps) {
         let id = format!("to_{}", t.id());
-        let variants = convert_variants(t, &id, images, combinable);
+        let variants = convert_variants(t, &id, images, svgs, combinable);
+        let label = if t == Folder { "Unzip" } else { t.label() };
         w.convert.push(Slot {
             id,
-            label: t.label().to_string(),
+            label: label.to_string(),
             symbol: t.category().symbol().to_string(),
             group: SlotGroup::Convert,
             action: Action::convert(t),
@@ -460,7 +517,38 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
     let single = formats.len() == 1;
 
     let half = Step::resize_percent(50);
-    if all(&half) {
+    if svgs {
+        let px = |key: &str, label: &str, max: u32| {
+            variant(
+                "resize",
+                key,
+                label,
+                format!("Drawn with its longest side {max} pixels"),
+                Action::single(Step::resize_max(max)),
+            )
+        };
+        w.tools.push(
+            tool(
+                "resize",
+                "Resize…",
+                "arrow.up.left.and.arrow.down.right",
+                Action::single(Step::resize_max(1024)),
+                Some("resize"),
+            )
+            .with_variants(vec![
+                px("1024", "1024 px", 1024),
+                px("2048", "2048 px", 2048),
+                px("512", "512 px", 512),
+                variant(
+                    "resize",
+                    "4x",
+                    "4×",
+                    "Four times the size the SVG gives",
+                    Action::single(Step::resize_percent(400)),
+                ),
+            ]),
+        );
+    } else if all(&half) {
         w.tools.push(
             tool(
                 "resize",
@@ -809,6 +897,63 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
             Some("pdf_password"),
         ));
     }
+    // Documents.
+    let readable = |f: Format| f.is_document_text() || f == Pdf;
+    if every(&readable) {
+        w.tools.push(tool(
+            "word_count",
+            "Word count",
+            "text.word.spacing",
+            Action::WordCount,
+            None,
+        ));
+    }
+    let vision_copy = all(&Step::MakeSearchable);
+    let textual = |f: Format| readable(f) || matches!(f, Srt | Vtt | Csv | Tsv | Json);
+    if !vision_copy && every(&textual) {
+        w.tools.push(tool(
+            "copy_text",
+            "Copy text",
+            "doc.on.clipboard",
+            Action::CopyText,
+            None,
+        ));
+    }
+    if all(&Step::CleanText) {
+        w.tools.push(tool(
+            "clean_text",
+            "Clean up text",
+            "text.badge.checkmark",
+            Action::single(Step::CleanText),
+            None,
+        ));
+    }
+    if all(&Step::FormatJson { minify: false }) {
+        w.tools.push(tool(
+            "format_json",
+            "Format JSON",
+            "curlybraces",
+            Action::single(Step::FormatJson { minify: false }),
+            None,
+        ));
+        w.tools.push(tool(
+            "minify_json",
+            "Minify JSON",
+            "arrow.down.right.and.arrow.up.left",
+            Action::single(Step::FormatJson { minify: true }),
+            None,
+        ));
+    }
+    if formats.len() >= 2 && every(&|f| f.is_document_text()) {
+        w.tools.push(tool(
+            "combine_text",
+            "Combine into one",
+            "doc.on.doc.fill",
+            Action::CombineText,
+            None,
+        ));
+    }
+
     let cutout = Step::RemoveBackground { crop: false };
     if all(&cutout) {
         w.tools.push(
@@ -828,7 +973,7 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
             )]),
         );
     }
-    if all(&Step::MakeSearchable) {
+    if vision_copy {
         w.tools.push(tool(
             "copy_text",
             "Copy text",
@@ -880,13 +1025,74 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
             None,
         ));
     }
-    w.tools.push(tool(
-        "checksum",
-        "Copy SHA-256",
-        "number",
-        Action::Checksum,
-        None,
-    ));
+
+    // Folders, and archives of anything.
+    if formats.len() >= 2 {
+        w.tools.push(tool(
+            "zip_all",
+            "Zip together",
+            "doc.zipper",
+            Action::ZipAll,
+            None,
+        ));
+    }
+    if folders {
+        if formats.len() >= 2 {
+            w.tools.push(tool(
+                "merge_folders",
+                "Merge folders",
+                "folder.badge.plus",
+                Action::MergeFolders,
+                None,
+            ));
+        }
+        w.tools.push(tool(
+            "find_duplicates",
+            "Find duplicates",
+            "square.on.square",
+            Action::FindDuplicates,
+            None,
+        ));
+        w.tools.push(
+            tool(
+                "list_contents",
+                "List contents",
+                "list.bullet.indent",
+                Action::ListContents { format: None },
+                None,
+            )
+            .with_variants(vec![variant(
+                "list_contents",
+                "csv",
+                "CSV",
+                "A spreadsheet of every item, with sizes and dates",
+                Action::ListContents { format: Some(Csv) },
+            )]),
+        );
+        w.tools.push(tool(
+            "flatten",
+            "Flatten",
+            "square.stack.3d.down.right",
+            Action::Flatten,
+            None,
+        ));
+        w.tools.push(tool(
+            "sort_by_kind",
+            "Sort by kind",
+            "tray.2",
+            Action::SortByKind,
+            None,
+        ));
+    }
+    if !any_folder {
+        w.tools.push(tool(
+            "checksum",
+            "Copy SHA-256",
+            "number",
+            Action::Checksum,
+            None,
+        ));
+    }
 
     // Offer only presets every file can take (a size target on video
     // needs FFprobe, for one).
@@ -1024,6 +1230,7 @@ mod tests {
                 "privacy_check",
                 "strip_metadata",
                 "combine_pdf",
+                "zip_all",
                 "checksum"
             ]
         );
@@ -1047,6 +1254,8 @@ mod tests {
                 "page_numbers",
                 "watermark",
                 "pdf_password",
+                "word_count",
+                "copy_text",
                 "privacy_check",
                 "strip_metadata",
                 "checksum"
@@ -1065,12 +1274,15 @@ mod tests {
                 "privacy"
             ]
         );
-        assert_eq!(targets(Pdf, &Capabilities::none()), vec![Txt]);
+        assert_eq!(targets(Pdf, &Capabilities::none()), vec![Txt, Md]);
         let with_pdfium = Capabilities {
             pdfium: Some("/x/libpdfium.so".into()),
             ..Default::default()
         };
-        assert_eq!(targets(Pdf, &with_pdfium), vec![Jpeg, Png, Webp, Tiff, Txt]);
+        assert_eq!(
+            targets(Pdf, &with_pdfium),
+            vec![Jpeg, Png, Webp, Tiff, Txt, Md]
+        );
         // Several PDFs: split each, combine, but no single-file page editor.
         let w = wheel(&[Some(Pdf), Some(Pdf)], &Capabilities::none(), &[]);
         let ids: Vec<&str> = w.tools.iter().map(|s| s.id.as_str()).collect();
@@ -1228,6 +1440,157 @@ mod tests {
             .unwrap();
         assert_eq!(resize["variants"][1]["action"]["steps"][0]["max"], 1920);
         assert_eq!(resize["variants"][1]["id"], "resize.1920");
+    }
+
+    fn ids(w: &[Slot]) -> Vec<&str> {
+        w.iter().map(|s| s.id.as_str()).collect()
+    }
+
+    #[test]
+    fn documents_convert_to_each_other() {
+        let caps = Capabilities::none();
+        for f in [Txt, Md, Html, Docx, Rtf] {
+            let t = targets(f, &caps);
+            assert_eq!(t[0], Pdf, "{f:?} to PDF first");
+            for other in [Txt, Md, Html, Docx, Rtf] {
+                assert_eq!(t.contains(&other), other != f, "{f:?} to {other:?}");
+            }
+        }
+        let w = wheel(&[Some(Md)], &caps, &[]);
+        assert_eq!(
+            ids(&w.convert),
+            ["to_pdf", "to_html", "to_docx", "to_txt", "to_rtf"]
+        );
+        assert_eq!(
+            ids(&w.tools),
+            ["word_count", "copy_text", "clean_text", "checksum"]
+        );
+        assert_eq!(w.convert[2].label, "Word");
+
+        // Several documents: combine into one, or into a PDF.
+        let w = wheel(&[Some(Docx), Some(Md)], &caps, &[]);
+        check_variants(&w, &[Docx, Md], &caps);
+        assert_eq!(
+            ids(&w.tools),
+            [
+                "word_count",
+                "copy_text",
+                "combine_text",
+                "combine_pdf",
+                "zip_all",
+                "checksum"
+            ]
+        );
+        assert_eq!(labels(&w.convert, "to_pdf"), ["One PDF"]);
+
+        // Documents and pictures can share a PDF.
+        let w = wheel(&[Some(Docx), Some(Png)], &caps, &[]);
+        assert_eq!(ids(&w.convert), ["to_pdf"]);
+        assert!(ids(&w.tools).contains(&"combine_pdf"));
+        assert!(!ids(&w.tools).contains(&"combine_text"));
+    }
+
+    #[test]
+    fn svg_is_an_image() {
+        let caps = Capabilities::none();
+        let t = targets(Svg, &caps);
+        assert_eq!(&t[..4], [Png, Jpeg, Webp, Pdf]);
+        assert!(t.contains(&Ico) && !t.contains(&Heic) && !t.contains(&Txt));
+        let w = wheel(&[Some(Svg)], &caps, &[]);
+        check_variants(&w, &[Svg], &caps);
+        assert_eq!(labels(&w.convert, "to_png"), ["1×", "2×", "4×"]);
+        assert!(
+            labels(&w.convert, "to_pdf").is_empty(),
+            "the PDF stays vector"
+        );
+        assert_eq!(
+            labels(&w.tools, "resize"),
+            ["1024 px", "2048 px", "512 px", "4×"]
+        );
+        assert_eq!(ids(&w.tools), ["resize", "checksum"]);
+        let resize = Step::resize_max(512);
+        assert_eq!(step_output(&resize, Svg), Png);
+        assert!(chain_accepts(
+            &[
+                resize,
+                Step::Convert {
+                    to: Webp,
+                    quality: None
+                }
+            ],
+            Svg,
+            &caps
+        ));
+        // With the Vision helper, still no OCR or cut-outs of drawings.
+        let w = wheel(&[Some(Svg)], &vision(), &[]);
+        assert!(!ids(&w.tools)
+            .iter()
+            .any(|t| *t == "remove_background" || *t == "copy_text"));
+    }
+
+    #[test]
+    fn data_files() {
+        let caps = Capabilities::none();
+        assert_eq!(targets(Csv, &caps), [Json, Tsv, Md, Html]);
+        assert_eq!(targets(Json, &caps), [Csv, Tsv]);
+        let w = wheel(&[Some(Json)], &caps, &[]);
+        assert_eq!(
+            ids(&w.tools),
+            [
+                "copy_text",
+                "clean_text",
+                "format_json",
+                "minify_json",
+                "checksum"
+            ]
+        );
+        let w = wheel(&[Some(Csv), Some(Tsv)], &caps, &[]);
+        assert_eq!(
+            ids(&w.convert),
+            ["to_json", "to_tsv", "to_md", "to_html", "to_csv"]
+        );
+        assert!(
+            !ids(&w.tools).contains(&"clean_text"),
+            "tables aren't trimmed"
+        );
+    }
+
+    #[test]
+    fn folders_and_archives() {
+        let caps = Capabilities::none();
+        let one = wheel(&[Some(Folder)], &caps, &[]);
+        assert_eq!(ids(&one.convert), ["to_zip"]);
+        assert_eq!(
+            ids(&one.tools),
+            [
+                "find_duplicates",
+                "list_contents",
+                "flatten",
+                "sort_by_kind"
+            ]
+        );
+        assert_eq!(labels(&one.tools, "list_contents"), ["CSV"]);
+        check_variants(&one, &[Folder], &caps);
+        let two = wheel(&[Some(Folder), Some(Folder)], &caps, &[]);
+        assert_eq!(
+            ids(&two.tools),
+            [
+                "zip_all",
+                "merge_folders",
+                "find_duplicates",
+                "list_contents",
+                "flatten",
+                "sort_by_kind"
+            ]
+        );
+        // A folder with files: zip them together, nothing else.
+        let mixed = wheel(&[Some(Folder), Some(Png)], &caps, &[]);
+        assert!(mixed.convert.is_empty());
+        assert_eq!(ids(&mixed.tools), ["zip_all"]);
+        let zip = wheel(&[Some(Zip)], &caps, &[]);
+        assert_eq!(ids(&zip.convert), ["to_folder"]);
+        assert_eq!(zip.convert[0].label, "Unzip");
+        assert_eq!(ids(&zip.tools), ["checksum"]);
     }
 
     #[test]
