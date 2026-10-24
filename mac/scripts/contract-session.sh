@@ -48,5 +48,9 @@ mkdir -p "$WORK/Album" && cp "$WORK/dot.png" "$WORK/Album/dot.png"
   printf '{"id":6,"method":"shutdown"}\n'
 } | "$RADLET" serve > "$OUT/session.jsonl"
 [ "$(grep -c '"event":"job_finished"' "$OUT/session.jsonl")" -eq 3 ]
-! grep -q '"cancelled":true' "$OUT/session.jsonl"
+# (`! grep` would never fail the script: set -e ignores negated commands.)
+if grep -q '"cancelled":true' "$OUT/session.jsonl"; then
+  echo "A job was cancelled before it finished" >&2
+  exit 1
+fi
 echo "Recorded $(wc -l < "$OUT/session.jsonl") lines to $OUT/session.jsonl"
