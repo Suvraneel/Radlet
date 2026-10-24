@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/veer-core", "crates/veer-cli"]
+members = ["crates/radlet-core", "crates/radlet-cli"]
 
 [workspace.package]
 version = "0.1.0"

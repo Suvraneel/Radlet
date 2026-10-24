@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Records a real `veer serve` session for the Swift contract tests:
-#   mac/scripts/contract-session.sh target/release/veer OUT_DIR
+# Records a real `radlet serve` session for the Swift contract tests:
+#   mac/scripts/contract-session.sh target/release/radlet OUT_DIR
 # writes OUT_DIR/session.jsonl. CI runs this with the freshly built helper,
-# then `VEER_CONTRACT_DIR=OUT_DIR swift test`, so the app's decoders are
+# then `RADLET_CONTRACT_DIR=OUT_DIR swift test`, so the app's decoders are
 # checked against what the engine actually sends.
 set -euo pipefail
-VEER="$1"
+RADLET="$1"
 OUT="$2"
 mkdir -p "$OUT"
 WORK="$(mktemp -d)"
@@ -16,7 +16,7 @@ printf 'not really a png' > "$WORK/broken.png"
 # A 1x1 PNG, and a three-page PDF made from it.
 printf 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4z8AAAAMBAQDJ/pLvAAAAAElFTkSuQmCC' \
   | base64 --decode > "$WORK/dot.png"
-"$VEER" combine "$WORK/dot.png" "$WORK/dot.png" "$WORK/dot.png" --out "$WORK/pdf" > /dev/null
+"$RADLET" combine "$WORK/dot.png" "$WORK/dot.png" "$WORK/dot.png" --out "$WORK/pdf" > /dev/null
 PDF="$(ls "$WORK"/pdf/*.pdf | head -n 1)"
 mkdir -p "$WORK/Album" && cp "$WORK/dot.png" "$WORK/Album/dot.png"
 {
@@ -46,7 +46,7 @@ mkdir -p "$WORK/Album" && cp "$WORK/dot.png" "$WORK/Album/dot.png"
     sleep 0.1
   done
   printf '{"id":6,"method":"shutdown"}\n'
-} | "$VEER" serve > "$OUT/session.jsonl"
+} | "$RADLET" serve > "$OUT/session.jsonl"
 [ "$(grep -c '"event":"job_finished"' "$OUT/session.jsonl")" -eq 3 ]
 ! grep -q '"cancelled":true' "$OUT/session.jsonl"
 echo "Recorded $(wc -l < "$OUT/session.jsonl") lines to $OUT/session.jsonl"

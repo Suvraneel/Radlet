@@ -5,3 +5,7 @@
 .DS_Store
 Claude outputs
 brag-output
+
+# Copied into the landing page by its Vercel build (see site/vercel.json)
+site/media/demo.mp4
+site/media/skins.png
