@@ -58,7 +58,7 @@ enum Replacer {
                     result.restores.append(HistoryEntry.Restore(trashed: inTrash.path, original: c.input.path))
                     guard let target = ReplacePlan.renameTarget(c) else { continue }
                     do {
-                        try fm.moveItem(at: c.output, to: target)
+                        try FileManager.default.moveItem(at: c.output, to: target)
                         result.renamed[c.output] = target
                     } catch {
                         Log.app("replace: couldn't rename a result: \(Log.code(error))")

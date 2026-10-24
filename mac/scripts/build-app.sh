@@ -45,7 +45,11 @@ else
   if [[ "$(uname -m)" == "arm64" ]]; then PDFIUM_ARCHES=(arm64); else PDFIUM_ARCHES=(x64); fi
 fi
 
-swift build --package-path mac "${SWIFT_FLAGS[@]}"
+# SwiftPM points the linker at XCTest folders that only Xcode has, so with
+# just the Command Line Tools every product warns that they're missing.
+# It's harmless: drop exactly that warning and keep everything else.
+without_clt_noise() { sed -E "/ld: warning: search path '[^']*CommandLineTools\/Developer\/[^']*' not found/d"; }
+swift build --package-path mac "${SWIFT_FLAGS[@]}" 2>&1 | without_clt_noise
 BIN_DIR="$(swift build --package-path mac "${SWIFT_FLAGS[@]}" --show-bin-path)"
 
 APP="$ROOT/dist/Radlet.app"
@@ -92,7 +96,10 @@ else
   # notarisation requires. Everything is signed by the same team.
   SIGN_FLAGS=(--options runtime --timestamp)
 fi
-codesign --force "${SIGN_FLAGS[@]}" --sign "$IDENTITY" "$APP/Contents/Helpers/"*
-codesign --force "${SIGN_FLAGS[@]}" --entitlements mac/Resources/Radlet.entitlements --sign "$IDENTITY" "$APP"
+# The compilers already gave each binary a basic signature: replacing it is expected.
+codesign --force "${SIGN_FLAGS[@]}" --sign "$IDENTITY" "$APP/Contents/Helpers/"* 2>&1 \
+  | sed '/: replacing existing signature$/d'
+codesign --force "${SIGN_FLAGS[@]}" --entitlements mac/Resources/Radlet.entitlements --sign "$IDENTITY" "$APP" 2>&1 \
+  | sed '/: replacing existing signature$/d'
 codesign --verify --strict "$APP"
 echo "Built $APP"
