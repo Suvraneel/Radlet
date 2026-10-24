@@ -19,7 +19,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/pdfium"
           curl -fsSL "https://github.com/bblanchon/pdfium-binaries/releases/download/chromium%2F8111/pdfium-linux-x64.tgz" | tar xz -C "$RUNNER_TEMP/pdfium"
-          echo "VEER_PDFIUM=$RUNNER_TEMP/pdfium/lib/libpdfium.so" >> "$GITHUB_ENV"
+          echo "RADLET_PDFIUM=$RUNNER_TEMP/pdfium/lib/libpdfium.so" >> "$GITHUB_ENV"
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test --all
@@ -35,21 +35,21 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: brew install ffmpeg
       - run: cargo test --all
-      - run: cargo build --release -p veer-cli
+      - run: cargo build --release -p radlet-cli
       - name: Record a live helper session
         timeout-minutes: 5
-        run: mac/scripts/contract-session.sh target/release/veer "$RUNNER_TEMP/contract"
-      - name: Swift tests (VeerKit, plus the live protocol contract)
+        run: mac/scripts/contract-session.sh target/release/radlet "$RUNNER_TEMP/contract"
+      - name: Swift tests (RadletKit, plus the live protocol contract)
         timeout-minutes: 15
-        run: VEER_CONTRACT_DIR="$RUNNER_TEMP/contract" swift test --package-path mac
-      - name: Build Veer.app
+        run: RADLET_CONTRACT_DIR="$RUNNER_TEMP/contract" swift test --package-path mac
+      - name: Build Radlet.app
         run: mac/scripts/build-app.sh
       - name: Smoke-test the bundled helpers
         run: |
-          echo '{"id":1,"method":"hello"}' | dist/Veer.app/Contents/Helpers/veer serve | grep '"vision":true'
-          dist/Veer.app/Contents/Helpers/veer-vision selftest
-      - run: ditto -c -k --keepParent dist/Veer.app dist/Veer.zip
+          echo '{"id":1,"method":"hello"}' | dist/Radlet.app/Contents/Helpers/radlet serve | grep '"vision":true'
+          dist/Radlet.app/Contents/Helpers/radlet-vision selftest
+      - run: ditto -c -k --keepParent dist/Radlet.app dist/Radlet.zip
       - uses: actions/upload-artifact@v4
         with:
-          name: Veer-mac
-          path: dist/Veer.zip
+          name: Radlet-mac
+          path: dist/Radlet.zip

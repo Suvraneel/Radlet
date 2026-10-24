@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds Veer, replaces the copy in /Applications and starts it.
+# Builds Radlet, replaces the copy in /Applications and starts it.
 #
 #   mac/scripts/run.sh            build, install, launch
 #   mac/scripts/run.sh --check    also run the Vision helper's self-test
@@ -14,29 +14,37 @@ cd "$ROOT"
 bash mac/scripts/build-app.sh
 
 if [[ "${1:-}" == "--check" ]]; then
-  dist/Veer.app/Contents/Helpers/veer-vision selftest
+  dist/Radlet.app/Contents/Helpers/radlet-vision selftest
 fi
 
 # Copy first, so a failed copy never leaves you without the app.
-rm -rf /Applications/Veer.app.new
-cp -R dist/Veer.app /Applications/Veer.app.new
+rm -rf /Applications/Radlet.app.new
+cp -R dist/Radlet.app /Applications/Radlet.app.new
 
-# Quit the running copy: politely, then firmly.
+# Quit a running copy: politely, then firmly.
 wait_until_quit() {
   for _ in $(seq 50); do
-    pgrep -x Veer > /dev/null || return 0
+    pgrep -x "$1" > /dev/null || return 0
     sleep 0.1
   done
   return 1
 }
-if pgrep -x Veer > /dev/null; then
-  osascript -e 'with timeout of 5 seconds' -e 'tell application id "com.usemonoma.veer" to quit' \
+quit_app() {
+  local name="$1" id="$2"
+  pgrep -x "$name" > /dev/null || return 0
+  osascript -e 'with timeout of 5 seconds' -e "tell application id \"$id\" to quit" \
     -e 'end timeout' > /dev/null 2>&1 || true
-  wait_until_quit || { pkill -x Veer 2> /dev/null || true; wait_until_quit; } \
-    || { pkill -9 -x Veer 2> /dev/null || true; wait_until_quit || true; }
-fi
+  wait_until_quit "$name" || { pkill -x "$name" 2> /dev/null || true; wait_until_quit "$name"; } \
+    || { pkill -9 -x "$name" 2> /dev/null || true; wait_until_quit "$name" || true; }
+}
+quit_app Radlet com.usemonoma.radlet
+# Radlet was called Veer: two copies would both open a wheel on every drag.
+quit_app Veer com.usemonoma.veer
 
-rm -rf /Applications/Veer.app
-mv /Applications/Veer.app.new /Applications/Veer.app
-open /Applications/Veer.app
-echo "Veer is running from /Applications/Veer.app"
+rm -rf /Applications/Radlet.app
+mv /Applications/Radlet.app.new /Applications/Radlet.app
+open /Applications/Radlet.app
+echo "Radlet is running from /Applications/Radlet.app"
+if [[ -d /Applications/Veer.app ]]; then
+  echo "An older build, Veer.app, is still in Applications. Radlet has moved its settings over; delete Veer.app when you're ready."
+fi

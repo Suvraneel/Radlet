@@ -1,0 +1,377 @@
+//! Excel workbooks (.xlsx): read sheet by sheet, and written from tables
+//! with typed columns (numbers stay numbers, IDs with leading zeros stay
+//! text), a bold header row that stays in view, and fitted widths.
+
+use std::path::Path;
+
+use calamine::{Data, Reader};
+use rust_xlsxwriter::{Format as CellFormat, Workbook};
+
+use crate::engines::data::{self, column_kinds, Kind};
+use crate::engines::doc::{self, Block, Doc};
+use crate::error::{Error, Result};
+use crate::format::Format;
+
+/// A sheet's name and its rows of cells, as text.
+pub type Sheet = (String, Vec<Vec<String>>);
+
+/// Most a workbook may unpack to (it is a ZIP of XML).
+const MAX_UNPACKED: u64 = 512 << 20;
+/// Excel's own limits.
+const MAX_ROWS: usize = 1_048_576;
+const MAX_COLS: usize = 16_384;
+const MAX_CELL_CHARS: usize = 32_767;
+
+fn bad(path: &Path, why: impl std::fmt::Display) -> Error {
+    Error::UnsupportedInput(format!(
+        "{} isn't a workbook Radlet can read ({why})",
+        crate::format::display_name(path)
+    ))
+}
+
+/// Refuses workbooks that would unpack into more than [`MAX_UNPACKED`].
+fn check_size(path: &Path) -> Result<()> {
+    let file = std::fs::File::open(path)?;
+    let mut zip = zip::ZipArchive::new(file).map_err(|e| bad(path, e))?;
+    let mut total = 0u64;
+    for i in 0..zip.len() {
+        let f = zip.by_index_raw(i).map_err(|e| bad(path, e))?;
+        total = total.saturating_add(f.size());
+    }
+    if total > MAX_UNPACKED {
+        return Err(Error::TooLarge(
+            "this workbook unpacks to more than 512 MB".into(),
+        ));
+    }
+    Ok(())
+}
+
+/// A cell as text, as Excel would show it in a CSV export.
+fn cell(d: &Data) -> String {
+    match d {
+        Data::Empty => String::new(),
+        Data::Int(i) => i.to_string(),
+        Data::Float(f) => {
+            if f.fract() == 0.0 && f.abs() < 1e15 {
+                format!("{}", *f as i64)
+            } else {
+                format!("{f}")
+            }
+        }
+        Data::String(s) | Data::DateTimeIso(s) | Data::DurationIso(s) => s.clone(),
+        Data::Bool(b) => if *b { "TRUE" } else { "FALSE" }.into(),
+        Data::DateTime(dt) => {
+            if dt.is_duration() {
+                let secs = (dt.as_f64() * 86_400.0).round() as i64;
+                format!("{}:{:02}:{:02}", secs / 3600, secs % 3600 / 60, secs % 60)
+            } else {
+                let (y, mo, d, h, mi, s, _) = dt.to_ymd_hms_milli();
+                if (h, mi, s) == (0, 0, 0) {
+                    format!("{y:04}-{mo:02}-{d:02}")
+                } else {
+                    format!("{y:04}-{mo:02}-{d:02} {h:02}:{mi:02}:{s:02}")
+                }
+            }
+        }
+        Data::Error(e) => e.to_string(),
+    }
+}
+
+/// Most non-empty cells, and most cells laid out in rows, read from one
+/// workbook. Cells are streamed, so a sheet with one value in A1 and one
+/// in XFD1048576 is refused instead of filling memory with empty cells.
+const MAX_CELLS: usize = 10_000_000;
+/// Most cells in a sheet's used area (rows × columns): tables are padded
+/// to their widest row on the way out.
+const MAX_AREA: usize = 25_000_000;
+
+fn too_big(what: &str) -> Error {
+    Error::TooLarge(format!("this workbook {what}, more than Radlet reads"))
+}
+
+/// One sheet's rows, from its first used row and column, each row ending
+/// at its last non-empty cell.
+fn read_sheet<R: std::io::Read + std::io::Seek>(
+    book: &mut calamine::Xlsx<R>,
+    name: &str,
+    path: &Path,
+    budget: &mut usize,
+) -> Result<Vec<Vec<String>>> {
+    let mut reader = book
+        .worksheet_cells_reader(name)
+        .map_err(|e| bad(path, e))?;
+    let mut cells: Vec<(u32, u32, String)> = Vec::new();
+    while let Some(c) = reader.next_cell().map_err(|e| bad(path, e))? {
+        let text = cell(&Data::from(c.get_value().clone()));
+        if text.is_empty() {
+            continue;
+        }
+        let (r, col) = c.get_position();
+        if r as usize >= MAX_ROWS || col as usize >= MAX_COLS {
+            return Err(bad(path, "a cell lies outside Excel's grid"));
+        }
+        if *budget == 0 {
+            return Err(too_big("has over 10 million filled cells"));
+        }
+        *budget -= 1;
+        cells.push((r, col, text));
+    }
+    if cells.is_empty() {
+        return Ok(Vec::new());
+    }
+    cells.sort_unstable_by_key(|c| (c.0, c.1));
+    let top = cells[0].0;
+    let left = cells.iter().map(|c| c.1).min().unwrap_or(0);
+    let bottom = cells[cells.len() - 1].0;
+    let right = cells.iter().map(|c| c.1).max().unwrap_or(0);
+    let area = ((bottom - top) as usize + 1).saturating_mul((right - left) as usize + 1);
+    if area > MAX_AREA {
+        return Err(too_big("spreads over more than 25 million cells"));
+    }
+    let mut rows: Vec<Vec<String>> = vec![Vec::new(); (bottom - top) as usize + 1];
+    for (r, col, text) in cells {
+        let row = &mut rows[(r - top) as usize];
+        let at = (col - left) as usize;
+        if row.len() <= at {
+            row.resize(at + 1, String::new());
+        }
+        row[at] = text;
+    }
+    Ok(rows)
+}
+
+/// Every sheet with something in it, in workbook order.
+pub fn read(path: &Path) -> Result<Vec<Sheet>> {
+    check_size(path)?;
+    let mut book: calamine::Xlsx<_> = calamine::open_workbook(path).map_err(|e| bad(path, e))?;
+    let mut budget = MAX_CELLS;
+    let mut out = Vec::new();
+    for name in book.sheet_names() {
+        let rows = read_sheet(&mut book, &name, path, &mut budget)?;
+        if !rows.is_empty() {
+            out.push((name, rows));
+        }
+    }
+    Ok(out)
+}
+
+/// A file Radlet can make a sheet from: its rows, named after the file.
+pub fn as_sheets(path: &Path, fmt: Format) -> Result<Vec<Sheet>> {
+    let name = doc::title_of(path);
+    let rows = match fmt {
+        Format::Xlsx => return read(path),
+        Format::Csv | Format::Tsv => data::read_rows(path, fmt)?,
+        Format::Json => data::json_to_rows(&crate::engines::text::read_text(path)?)?,
+        other => {
+            return Err(Error::UnsupportedInput(format!(
+                "{other} files aren't tables"
+            )))
+        }
+    };
+    if rows.is_empty() {
+        return Err(Error::NothingToDo("the table is empty".into()));
+    }
+    Ok(vec![(name, rows)])
+}
+
+/// A sheet name Excel accepts: at most 31 characters, none of `[]:*?/\`,
+/// not starting or ending with an apostrophe, and unique.
+fn sheet_name(wanted: &str, used: &mut Vec<String>) -> String {
+    let clean: String = wanted
+        .chars()
+        .map(|c| if "[]:*?/\\".contains(c) { '-' } else { c })
+        .collect();
+    let clean = clean.trim().trim_matches('\'').to_string();
+    let base: String = if clean.is_empty() {
+        "Sheet".into()
+    } else {
+        clean
+    };
+    let fit = |s: &str, room: usize| s.chars().take(room).collect::<String>();
+    let mut name = fit(&base, 31);
+    let mut n = 2;
+    while used.iter().any(|u| u.eq_ignore_ascii_case(&name)) {
+        let tail = format!(" {n}");
+        name = format!("{}{tail}", fit(&base, 31 - tail.len()));
+        n += 1;
+    }
+    used.push(name.clone());
+    name
+}
+
+fn xlsx_err(e: rust_xlsxwriter::XlsxError) -> Error {
+    Error::Internal(format!("couldn't write the workbook ({e})"))
+}
+
+/// Writes sheets into a new workbook. The first row of each is the
+/// header.
+pub fn write(sheets: &[Sheet]) -> Result<Vec<u8>> {
+    let mut book = Workbook::new();
+    let bold = CellFormat::new().set_bold();
+    let mut used = Vec::new();
+    for (name, rows) in sheets {
+        if rows.len() > MAX_ROWS {
+            return Err(Error::TooLarge(format!(
+                "Excel sheets hold at most {} rows",
+                doc::thousands(MAX_ROWS as u64)
+            )));
+        }
+        let cols = rows.iter().map(Vec::len).max().unwrap_or(0);
+        if cols > MAX_COLS {
+            return Err(Error::TooLarge(format!(
+                "Excel sheets hold at most {} columns",
+                doc::thousands(MAX_COLS as u64)
+            )));
+        }
+        let kinds = column_kinds(rows.get(1..).unwrap_or(&[]), cols);
+        let ws = book.add_worksheet();
+        ws.set_name(sheet_name(name, &mut used)).map_err(xlsx_err)?;
+        for (r, row) in rows.iter().enumerate() {
+            for (c, value) in row.iter().enumerate() {
+                if value.is_empty() {
+                    continue;
+                }
+                let (r32, c16) = (r as u32, c as u16);
+                let text: String = value.chars().take(MAX_CELL_CHARS).collect();
+                if r == 0 {
+                    ws.write_string_with_format(r32, c16, text, &bold)
+                        .map_err(xlsx_err)?;
+                    continue;
+                }
+                match kinds[c] {
+                    Kind::Number => match value.parse::<f64>() {
+                        Ok(n) => ws.write_number(r32, c16, n),
+                        Err(_) => ws.write_string(r32, c16, text),
+                    },
+                    Kind::Bool => ws.write_boolean(r32, c16, value.eq_ignore_ascii_case("true")),
+                    Kind::Text => ws.write_string(r32, c16, text),
+                }
+                .map_err(xlsx_err)?;
+            }
+        }
+        if rows.len() > 1 {
+            ws.set_freeze_panes(1, 0).map_err(xlsx_err)?;
+        }
+        // Fitting widths reads every cell; skip it for very long sheets.
+        if rows.len() <= 50_000 {
+            ws.set_autofit_max_width(400).autofit();
+        }
+    }
+    if sheets.is_empty() {
+        book.add_worksheet();
+    }
+    book.save_to_buffer().map_err(xlsx_err)
+}
+
+/// A workbook as a document: each sheet a table, under its name when
+/// there are several.
+pub fn doc(path: &Path) -> Result<Doc> {
+    let sheets = read(path)?;
+    if sheets.is_empty() {
+        return Err(Error::NothingToDo("the workbook is empty".into()));
+    }
+    let several = sheets.len() > 1;
+    let mut d = Doc::default();
+    for (name, rows) in sheets {
+        if several {
+            d.blocks.push(Block::Heading {
+                level: 2,
+                text: doc::text(&name),
+            });
+        }
+        d.blocks.push(Block::Table {
+            rows: rows
+                .into_iter()
+                .map(|r| r.iter().map(|c| doc::text(c)).collect())
+                .collect(),
+            header: true,
+        });
+    }
+    Ok(d)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rows(t: &[&[&str]]) -> Vec<Vec<String>> {
+        t.iter()
+            .map(|r| r.iter().map(|c| c.to_string()).collect())
+            .collect()
+    }
+
+    #[test]
+    fn workbooks_round_trip_with_types() {
+        let dir = tempfile::tempdir().unwrap();
+        let sheets = vec![
+            (
+                "Orders".to_string(),
+                rows(&[
+                    &["Item", "Qty", "Zip", "Paid", "Note"],
+                    &["Tea", "2", "02134", "true", "=1+1"],
+                    &["Coffee", "10.5", "10001", "FALSE", ""],
+                ]),
+            ),
+            ("Orders".to_string(), rows(&[&["only a header"]])),
+            ("Bad/name:with*chars?".to_string(), rows(&[&["a"], &["b"]])),
+        ];
+        let bytes = write(&sheets).unwrap();
+        let p = dir.path().join("book.xlsx");
+        std::fs::write(&p, bytes).unwrap();
+        assert_eq!(crate::format::detect(&p).unwrap(), Format::Xlsx);
+        let back = read(&p).unwrap();
+        let names: Vec<&str> = back.iter().map(|s| s.0.as_str()).collect();
+        assert_eq!(names, ["Orders", "Orders 2", "Bad-name-with-chars-"]);
+        assert_eq!(back[0].1[1], ["Tea", "2", "02134", "TRUE", "=1+1"]);
+        assert_eq!(back[0].1[2], ["Coffee", "10.5", "10001", "FALSE"]);
+        // Numbers really are numbers in the file; formulas stay text.
+        let mut book: calamine::Xlsx<_> = calamine::open_workbook(&p).unwrap();
+        let range = book.worksheet_range("Orders").unwrap();
+        assert_eq!(range.get_value((1, 1)), Some(&Data::Float(2.0)));
+        assert_eq!(range.get_value((1, 2)), Some(&Data::String("02134".into())));
+        assert_eq!(range.get_value((1, 3)), Some(&Data::Bool(true)));
+        assert_eq!(range.get_value((1, 4)), Some(&Data::String("=1+1".into())));
+
+        let d = doc(&p).unwrap();
+        assert!(
+            matches!(&d.blocks[0], Block::Heading { text, .. } if doc::plain(text) == "Orders")
+        );
+        assert!(matches!(&d.blocks[1], Block::Table { rows, .. } if rows.len() == 3));
+    }
+
+    #[test]
+    fn sparse_sheets_are_refused_not_expanded() {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path().join("far.xlsx");
+        let mut book = Workbook::new();
+        let ws = book.add_worksheet();
+        ws.write_string(0, 0, "here").unwrap();
+        ws.write_string(1_048_575, 16_383, "and far away").unwrap();
+        std::fs::write(&p, book.save_to_buffer().unwrap()).unwrap();
+        let started = std::time::Instant::now();
+        assert!(matches!(read(&p), Err(Error::TooLarge(_))));
+        assert!(started.elapsed().as_secs() < 5);
+
+        // A table that starts at C3 reads from its first cell, as before.
+        let p = dir.path().join("offset.xlsx");
+        let mut book = Workbook::new();
+        let ws = book.add_worksheet();
+        ws.write_string(2, 2, "a").unwrap();
+        ws.write_string(2, 4, "c").unwrap();
+        ws.write_number(4, 3, 7.0).unwrap();
+        std::fs::write(&p, book.save_to_buffer().unwrap()).unwrap();
+        let back = read(&p).unwrap();
+        assert_eq!(back[0].1, [vec!["a", "", "c"], vec![], vec!["", "7"]]);
+    }
+
+    #[test]
+    fn names_are_made_valid() {
+        let mut used = Vec::new();
+        assert_eq!(sheet_name("'quoted'", &mut used), "quoted");
+        let long = "x".repeat(40);
+        assert_eq!(sheet_name(&long, &mut used).chars().count(), 31);
+        let again = sheet_name(&long, &mut used);
+        assert!(again.ends_with(" 2") && again.chars().count() == 31);
+        assert_eq!(sheet_name("", &mut used), "Sheet");
+    }
+}

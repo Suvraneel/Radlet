@@ -1,6 +1,6 @@
 # Wheel styles and skins
 
-Veer's wheel has two separate settings, both in **Settings → Wheel**:
+Radlet's wheel has two separate settings, both in **Settings → Wheel**:
 
 - **Style** decides how the wheel is laid out.
 - **Skin** decides how it looks: colours, rim, type and motion.
@@ -49,7 +49,7 @@ The engine sends a slot's presets with the wheel (`variants` in the `inspect` re
 
 ## Skins
 
-Veer comes with six skins. Each is original; the game-flavoured ones nod to a genre without borrowing any game's art, names or fonts.
+Radlet comes with six skins. Each is original; the game-flavoured ones nod to a genre without borrowing any game's art, names or fonts.
 
 | Skin | Look |
 | --- | --- |
@@ -62,11 +62,11 @@ Veer comes with six skins. Each is original; the game-flavoured ones nod to a ge
 
 ## Make your own
 
-A skin is a small CSS file of custom properties in the Skins folder (`~/Library/Application Support/Veer/Skins`). The quickest start:
+A skin is a small CSS file of custom properties in the Skins folder (`~/Library/Application Support/Radlet/Skins`). The quickest start:
 
 1. In **Settings → Wheel**, choose the skin closest to what you want.
-2. Click **New Skin from This**. Veer writes a complete copy, with a comment on every line, selects it and shows it in Finder.
-3. Open it in any text editor, change values and save. Veer picks it up the next time the wheel opens (or click **Reload**).
+2. Click **New Skin from This**. Radlet writes a complete copy, with a comment on every line, selects it and shows it in Finder.
+3. Open it in any text editor, change values and save. Radlet picks it up the next time the wheel opens (or click **Reload**).
 
 A skin only needs what it changes. Everything else comes from its `--base`, or from Glass if it names none:
 
@@ -91,23 +91,23 @@ A skin only needs what it changes. Everything else comes from its `--base`, or f
 }
 ```
 
-If something is wrong (a typo, a value out of range), Veer skips just that value, uses the rest, and lists the problems with their line numbers under the skin picker. A skin with problems is marked "(needs a fix)".
+If something is wrong (a typo, a value out of range), Radlet skips just that value, uses the rest, and lists the problems with their line numbers under the skin picker. A skin with problems is marked "(needs a fix)".
 
 ### The Wheel Lab
 
 The Wheel Lab is a storybook for the wheel, for designing skins and for checking the wheel while working on it. From the repository:
 
 ```sh
-swift run --package-path mac VeerLab
+swift run --package-path mac RadletLab
 ```
 
 Add `--skins <folder>` to work on skins in a folder other than the Skins folder.
 
-It draws the wheel with the app's own code (`mac/Sources/VeerUI`), so what you see is what ships.
+It draws the wheel with the app's own code (`mac/Sources/RadletUI`), so what you see is what ships.
 
 - **Stories.** The sidebar lists each style's states: opening, resting, a slot or preset picked, Orbit's presets brightening, Bloom's petals, long tool names, loading and empty. Hover a wheel to drive it with the app's own pointer tracking, including Bloom's rest-to-open; click to see a choice made; move away and the story comes back.
 - **Stage.** Show one wheel, or the story in every skin side by side. Choose 6, 8, 10 or 12 slots, a busy wallpaper (for Glass), a plain or checked backdrop, light or dark, and the zoom. Reduce Motion draws the wheel as the app does with that setting on; Slow Motion makes the springs four times slower; Tour moves the highlight round on its own; ⌘R replays the opening.
-- **Skin editor.** Every token, grouped as in the table below, with a colour well, slider or picker beside the CSS value. Changes show on the wheel as you make them, a dot marks each changed token, and the panel underneath shows them as a short skin file: the name, `--base`, and only what differs from the base. **Copy** puts that on the clipboard; **Save as New Skin** writes it to the Skins folder, where Veer's Settings lists it. Files in the folder reload in the lab as soon as they change, so you can also edit in a text editor and watch.
+- **Skin editor.** Every token, grouped as in the table below, with a colour well, slider or picker beside the CSS value. Changes show on the wheel as you make them, a dot marks each changed token, and the panel underneath shows them as a short skin file: the name, `--base`, and only what differs from the base. **Copy** puts that on the clipboard; **Save as New Skin** writes it to the Skins folder, where Radlet's Settings lists it. Files in the folder reload in the lab as soon as they change, so you can also edit in a text editor and watch.
 
 ### Tokens
 
@@ -169,7 +169,7 @@ It draws the wheel with the app's own code (`mac/Sources/VeerUI`), so what you s
 
 ### Rules
 
-- Veer reads only `:root { … }` (`.wheel { … }` works too). Other selectors are skipped and listed.
+- Radlet reads only `:root { … }` (`.wheel { … }` works too). Other selectors are skipped and listed.
 - Comments (`/* … */`) and `!important` are allowed; `!important` changes nothing.
 - Files over 64 KB, files that aren't UTF-8 text, and anything that isn't a regular file are skipped. A `var()` that loops, names nothing, or grows past a kilobyte is reported and skipped.
 - Skins hold only colours, sizes, keywords and font names: no paths, URLs, images or code. A skin from anywhere is safe to drop in.

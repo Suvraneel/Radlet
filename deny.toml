@@ -10,6 +10,8 @@ allow = [
     "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    # ISC is the OpenBSD licence: MIT-style permission and warranty text.
+    "ISC",
     "Zlib",
     "0BSD",
     "Unlicense",
@@ -18,6 +20,15 @@ allow = [
 confidence-threshold = 0.9
 # Our own crates are unpublished and proprietary.
 private = { ignore = true }
+
+[advisories]
+# "Unmaintained" notices for the SVG text stack: svg2pdf 0.13 (its latest
+# release) still needs usvg 0.45, which uses these. Drop these when
+# svg2pdf moves to a newer usvg. Vulnerabilities are never listed here.
+ignore = [
+    { id = "RUSTSEC-2026-0206", reason = "rustybuzz, via usvg 0.45 for svg2pdf" },
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser, via usvg 0.45 and svg2pdf" },
+]
 
 [bans]
 multiple-versions = "allow"

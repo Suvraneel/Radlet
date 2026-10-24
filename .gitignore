@@ -4,3 +4,8 @@
 /mac/.swiftpm
 .DS_Store
 Claude outputs
+brag-output*
+
+# Copied into the landing page when it's published (site/vercel.json, .github/workflows/pages.yml)
+site/media/demo.mp4
+site/media/skins.png

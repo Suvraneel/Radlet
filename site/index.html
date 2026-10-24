@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Radlet: a weapon wheel for your files</title>
+<meta name="description" content="Drag files in Finder, hold a key, flick to a tool. Convert, compress, crop, translate and dozens more. A free menu bar app for macOS that does all the work on your Mac.">
+<meta name="theme-color" content="#060608">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Radlet: a weapon wheel for your files">
+<meta property="og:description" content="Drag. Hold Shift. Drop. Convert, compress, crop, translate and more, without leaving Finder. Free, macOS 14+, and nothing leaves your Mac.">
+<meta property="og:image" content="https://radlet.vercel.app/og.jpg">
+<meta property="og:url" content="https://radlet.vercel.app/">
+<!-- Also served from GitHub Pages; this is the address search engines should use. -->
+<link rel="canonical" href="https://radlet.vercel.app/">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #060608;
+  --text: #ededf2;
+  --muted: #a1a1ad;
+  --dim: #85858f;
+  --hair: rgba(255, 255, 255, 0.07);
+  --hair-2: rgba(255, 255, 255, 0.12);
+  --glass: rgba(255, 255, 255, 0.035);
+  --accent: #3d8bff;
+  --accent-ink: #e9f2ff;
+  --violet: #7a5cff;
+  --copper: #c4693a;
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --radius: 28px;
+  --max: 1180px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 400 16px/1.6 "Geist", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+a { color: inherit; text-decoration: none; }
+img, video, svg { display: block; max-width: 100%; }
+::selection { background: rgba(61, 139, 255, 0.35); }
+
+/* The video's own palette: copper top left, indigo right, violet below. */
+.atmos { position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(48vw 42vw at 8% -6%, rgba(196, 105, 58, 0.22), transparent 62%),
+    radial-gradient(52vw 46vw at 96% 4%, rgba(47, 92, 220, 0.20), transparent 64%),
+    radial-gradient(60vw 50vw at 50% 110%, rgba(122, 92, 255, 0.16), transparent 66%);
+}
+.grain { position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+main, footer { position: relative; z-index: 2; }
+.wrap { max-width: var(--max); margin: 0 auto; padding: 0 28px; }
+
+/* ---------- navigation: a floating glass pill ---------- */
+.nav { position: fixed; z-index: 20; top: 18px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 16px; border-radius: 999px;
+  background: rgba(14, 14, 18, 0.62); backdrop-filter: blur(22px) saturate(1.4); -webkit-backdrop-filter: blur(22px) saturate(1.4);
+  box-shadow: inset 0 0 0 1px var(--hair), 0 20px 50px -30px rgba(0, 0, 0, 0.9);
+}
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 600; letter-spacing: -0.01em; margin-right: 10px; }
+.brand svg { width: 20px; height: 20px; }
+.nav .links { display: flex; gap: 2px; }
+.nav .links a { padding: 8px 13px; border-radius: 999px; font-size: 14px; color: var(--muted); transition: color .4s var(--ease), background .4s var(--ease); }
+.nav .links a:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
+.menu-btn { display: none; width: 40px; height: 40px; border-radius: 999px; border: 0; background: rgba(255, 255, 255, 0.06); position: relative; cursor: pointer; }
+.menu-btn span { position: absolute; left: 12px; right: 12px; height: 1.5px; background: var(--text); border-radius: 2px; transition: transform .5s var(--ease), top .5s var(--ease); }
+.menu-btn span:first-child { top: 16px; }
+.menu-btn span:last-child { top: 23px; }
+.menu-open .menu-btn span:first-child { top: 19.5px; transform: rotate(45deg); }
+.menu-open .menu-btn span:last-child { top: 19.5px; transform: rotate(-45deg); }
+.overlay { position: fixed; inset: 0; z-index: 15; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 0 32px;
+  background: rgba(6, 6, 8, 0.86); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px);
+  opacity: 0; pointer-events: none; transition: opacity .5s var(--ease); }
+.overlay a { font-size: 38px; font-weight: 600; letter-spacing: -0.03em; opacity: 0; transform: translateY(28px); transition: opacity .6s var(--ease), transform .6s var(--ease); }
+.menu-open .overlay { opacity: 1; pointer-events: auto; }
+.menu-open .overlay a { opacity: 1; transform: none; }
+.menu-open .overlay a:nth-child(2) { transition-delay: .05s; }
+.menu-open .overlay a:nth-child(3) { transition-delay: .1s; }
+.menu-open .overlay a:nth-child(4) { transition-delay: .15s; }
+.menu-open .overlay a:nth-child(5) { transition-delay: .2s; }
+
+/* ---------- buttons: pills with a nested icon ---------- */
+.btn { display: inline-flex; align-items: center; gap: 12px; padding: 7px 7px 7px 20px; border-radius: 999px; font-weight: 500; font-size: 15px;
+  transition: transform .5s var(--ease), background .5s var(--ease), box-shadow .5s var(--ease); cursor: pointer; border: 0; font-family: inherit; }
+.btn:active { transform: scale(0.98); }
+.btn .knob { width: 34px; height: 34px; border-radius: 999px; display: grid; place-items: center; transition: transform .5s var(--ease); }
+.btn .knob svg { width: 15px; height: 15px; }
+.btn:hover .knob { transform: translate(2px, -1px) scale(1.05); }
+.btn-primary { background: var(--accent); color: #fff; box-shadow: 0 14px 40px -16px rgba(61, 139, 255, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.25); }
+.btn-primary .knob { background: rgba(0, 0, 0, 0.18); }
+.btn-primary:hover { background: #5a9cff; }
+.btn-ghost { background: rgba(255, 255, 255, 0.05); color: var(--text); box-shadow: inset 0 0 0 1px var(--hair-2); }
+.btn-ghost .knob { background: rgba(255, 255, 255, 0.07); }
+.btn-ghost:hover { background: rgba(255, 255, 255, 0.08); }
+.btn-small { padding: 5px 5px 5px 14px; font-size: 14px; gap: 9px; }
+.btn-small .knob { width: 28px; height: 28px; }
+
+/* ---------- shared pieces ---------- */
+.eyebrow { display: inline-flex; align-items: center; gap: 8px; padding: 6px 13px; border-radius: 999px; font-size: 11px; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted); background: rgba(255, 255, 255, 0.04); box-shadow: inset 0 0 0 1px var(--hair); }
+.eyebrow i { width: 6px; height: 6px; border-radius: 99px; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+.shell { padding: 6px; border-radius: var(--radius); background: rgba(255, 255, 255, 0.025); box-shadow: inset 0 0 0 1px var(--hair); }
+.core { border-radius: calc(var(--radius) - 6px); background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 40px 90px -50px rgba(0, 0, 0, 0.9); overflow: hidden; position: relative; }
+section { padding: 120px 0; }
+h2 { font-size: clamp(34px, 4.8vw, 60px); line-height: 1.02; letter-spacing: -0.035em; font-weight: 600; }
+h3 { font-size: 21px; letter-spacing: -0.02em; font-weight: 600; line-height: 1.25; }
+.lead { font-size: clamp(17px, 1.6vw, 20px); color: var(--muted); max-width: 34em; }
+.sub { color: var(--muted); }
+kbd { font: 500 13px "Geist Mono", ui-monospace, monospace; padding: 3px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.4), inset 0 0 0 1px var(--hair-2); color: var(--text); white-space: nowrap; }
+code, pre { font-family: "Geist Mono", ui-monospace, monospace; }
+
+/* reveal on scroll */
+.reveal { opacity: 0; transform: translateY(40px); transition: opacity 1s var(--ease), transform 1s var(--ease); }
+.reveal.in { opacity: 1; transform: none; }
+.d1 { transition-delay: .08s; } .d2 { transition-delay: .16s; } .d3 { transition-delay: .24s; }
+
+/* ---------- hero ---------- */
+.hero { min-height: 100dvh; display: grid; align-items: center; padding: 130px 0 80px; }
+.hero-grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; align-items: center; }
+.hero h1 { font-size: clamp(48px, 7.4vw, 96px); line-height: 0.96; letter-spacing: -0.045em; font-weight: 700; margin: 26px 0 26px; }
+.hero h1 .soft { color: transparent; background: linear-gradient(100deg, #fff 10%, #a9c8ff 55%, #b9a6ff 90%); -webkit-background-clip: text; background-clip: text; }
+.hero .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 36px; }
+.hero .note { margin-top: 18px; font-size: 13px; color: var(--dim); }
+
+/* the playable wheel */
+.wheel-card .core { padding: 26px 26px 22px; }
+.modes { display: flex; gap: 6px; justify-content: center; margin-bottom: 14px; flex-wrap: wrap; }
+.mode { display: inline-flex; align-items: center; gap: 8px; padding: 7px 13px; border-radius: 999px; border: 0; cursor: pointer; font: 500 13px "Geist", sans-serif;
+  color: var(--muted); background: rgba(255, 255, 255, 0.04); box-shadow: inset 0 0 0 1px var(--hair); transition: all .45s var(--ease); }
+.mode b { font: 500 12px "Geist Mono", monospace; color: var(--dim); transition: color .45s var(--ease); }
+.mode[aria-pressed="true"] { color: #fff; background: rgba(61, 139, 255, 0.16); box-shadow: inset 0 0 0 1px rgba(61, 139, 255, 0.5); }
+.mode[aria-pressed="true"] b { color: #bcd6ff; }
+.wheel { width: 100%; max-width: 440px; margin: 0 auto; aspect-ratio: 1; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+.wheel svg { width: 100%; height: 100%; overflow: visible; outline: none; }
+.wheel svg:focus-visible .ring { stroke: var(--accent); stroke-width: 2; }
+.wheel .ring { fill: rgba(255, 255, 255, 0.045); stroke: rgba(255, 255, 255, 0.10); stroke-width: 1; }
+.wheel .divider { stroke: rgba(255, 255, 255, 0.06); stroke-width: 1; }
+.wheel .hl { fill: var(--accent); transition: transform .42s var(--ease), opacity .3s var(--ease); transform-origin: 0 0; opacity: 0; }
+.wheel .hl.on { opacity: 1; }
+.wheel .slot text { font: 500 11.5px "Geist", sans-serif; fill: #c9c9d4; text-anchor: middle; transition: fill .3s var(--ease); pointer-events: none; }
+.wheel .slot .ico { fill: none; stroke: #c9c9d4; stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round; transition: stroke .3s var(--ease); pointer-events: none; }
+.wheel .slot.on text { fill: #fff; }
+.wheel .slot.on .ico { stroke: #fff; }
+.wheel .slot .hit { fill: transparent; cursor: pointer; }
+.wheel .hub { fill: #17171d; stroke: rgba(255, 255, 255, 0.14); stroke-width: 1; }
+.wheel .hub-title { font: 600 13px "Geist", sans-serif; fill: #fff; text-anchor: middle; }
+.wheel .hub-sub { font: 400 10.5px "Geist", sans-serif; fill: var(--muted); text-anchor: middle; }
+.wheel .done { opacity: 0; transition: opacity .3s var(--ease); }
+.wheel .done.on { opacity: 1; }
+.wheel-hint { text-align: center; font-size: 13px; color: var(--dim); margin-top: 6px; min-height: 42px; }
+.wheel-hint.result { color: var(--text); }
+.wheel-hint .ok { color: #7fd99a; }
+@keyframes pop { 0% { transform: scale(.9); } 60% { transform: scale(1.04); } 100% { transform: scale(1); } }
+.popping { animation: pop .5s var(--spring); transform-origin: 50% 50%; }
+
+section[id] { scroll-margin-top: 96px; }
+
+/* ---------- demo video ---------- */
+.video .core { aspect-ratio: 16 / 9; }
+.video video { width: 100%; height: 100%; object-fit: cover; }
+.vctl { position: absolute; right: 16px; bottom: 16px; display: flex; gap: 8px; }
+.caption { text-align: center; margin-top: 18px; font-size: 13px; color: var(--dim); }
+
+/* ---------- three keys ---------- */
+.keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 56px; }
+.key .core { padding: 28px; height: 100%; }
+.key .cap { display: inline-flex; align-items: center; justify-content: center; min-width: 74px; height: 50px; padding: 0 16px; border-radius: 14px;
+  font: 500 15px "Geist Mono", monospace; background: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 -2px 0 rgba(0, 0, 0, 0.45), 0 10px 26px -14px rgba(0, 0, 0, 0.9); margin-bottom: 22px; }
+.key p { color: var(--muted); margin-top: 8px; font-size: 15px; }
+.nodrag { margin-top: 26px; text-align: center; color: var(--muted); font-size: 15px; }
+
+/* ---------- bento ---------- */
+.bento { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; margin-top: 60px; }
+.tile .core { padding: 30px; height: 100%; display: flex; flex-direction: column; gap: 10px; }
+.tile p { color: var(--muted); font-size: 15px; }
+.t-a { grid-column: span 7; grid-row: span 2; }
+.t-b { grid-column: span 5; }
+.t-c { grid-column: span 5; }
+.t-d { grid-column: span 4; }
+.t-e { grid-column: span 4; }
+.t-f { grid-column: span 4; }
+.t-g { grid-column: span 6; }
+.t-h { grid-column: span 6; }
+.ico-line { width: 30px; height: 30px; stroke: #cfd6ff; stroke-width: 1.25; fill: none; stroke-linecap: round; stroke-linejoin: round; margin-bottom: 8px; }
+.chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: auto; padding-top: 18px; }
+.chips span { font: 500 12.5px "Geist Mono", monospace; padding: 6px 11px; border-radius: 999px; background: rgba(255, 255, 255, 0.045); box-shadow: inset 0 0 0 1px var(--hair); color: #d4d4de; }
+.chips span.hot { color: #d9e8ff; background: rgba(61, 139, 255, 0.13); box-shadow: inset 0 0 0 1px rgba(61, 139, 255, 0.35); }
+.meter { margin-top: auto; padding-top: 18px; display: grid; gap: 9px; }
+.meter div { display: flex; justify-content: space-between; font: 500 12.5px "Geist Mono", monospace; color: var(--muted); }
+.meter .bar { height: 6px; border-radius: 99px; background: rgba(255, 255, 255, 0.06); overflow: hidden; display: block; }
+.meter .bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), #8fb8ff); transform-origin: left; transform: scaleX(0); transition: transform 1.6s var(--ease); }
+.in .meter .bar i { transform: scaleX(var(--w)); }
+.skins-img { margin-top: auto; padding-top: 18px; }
+.rows { display: grid; gap: 8px; margin-top: 18px; }
+.rows div { display: flex; align-items: center; gap: 10px; font: 500 13px "Geist Mono", ui-monospace, monospace; padding: 11px 14px; border-radius: 13px;
+  background: rgba(255, 255, 255, 0.03); box-shadow: inset 0 0 0 1px var(--hair); color: #cfcfda; }
+.rows .arrow { color: var(--dim); }
+.rows .to { color: #bcd6ff; }
+.rows .tag { margin-left: auto; font-size: 12px; }
+.rows .ok { color: #7fd99a; }
+.rows .bad { color: #ff8a80; }
+.rows div.failed { background: rgba(255, 90, 80, 0.06); box-shadow: inset 0 0 0 1px rgba(255, 120, 110, 0.18); }
+.skins-img img { border-radius: 14px; box-shadow: inset 0 0 0 1px var(--hair); width: 100%; }
+
+/* ---------- loadouts + agents ---------- */
+.split { display: grid; grid-template-columns: 1fr 1.1fr; gap: 56px; align-items: center; }
+.split > *, .hero-grid > *, .bento > *, .keys > * { min-width: 0; }
+.code .core { padding: 0; }
+.code .bar { display: flex; align-items: center; gap: 7px; padding: 14px 18px; box-shadow: inset 0 -1px 0 var(--hair); }
+.code .bar i { width: 10px; height: 10px; border-radius: 99px; background: rgba(255, 255, 255, 0.12); }
+.code .bar span { margin-left: 10px; font: 500 12px "Geist Mono", monospace; color: var(--dim); }
+.code pre { padding: 22px 24px 26px; font-size: 13.5px; line-height: 1.75; color: #d7d7e2; overflow-x: auto; }
+.code .k { color: #8fb8ff; } .code .s { color: #b9e3a6; } .code .c { color: var(--dim); } .code .n { color: #f0b37e; } .code .p { color: #b9a6ff; }
+.points { display: grid; gap: 14px; margin-top: 30px; }
+.points div { display: flex; gap: 12px; color: var(--muted); font-size: 15px; }
+.points svg { flex: none; width: 20px; height: 20px; stroke: var(--accent); stroke-width: 1.5; fill: none; margin-top: 2px; }
+
+/* ---------- name + final ---------- */
+.name .core { padding: 56px; text-align: center; }
+.name blockquote { font-size: clamp(22px, 2.6vw, 32px); letter-spacing: -0.02em; line-height: 1.3; max-width: 30em; margin: 18px auto 0; }
+.name blockquote em { font-style: normal; color: #a9c8ff; }
+.final { text-align: center; }
+.final h2 { max-width: 14em; margin: 22px auto 0; }
+.final .cta { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-top: 36px; }
+footer { padding: 40px 0 56px; color: var(--dim); font-size: 13px; }
+footer .row { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; padding-top: 28px; box-shadow: inset 0 1px 0 var(--hair); }
+footer a:hover { color: var(--text); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- small screens ---------- */
+@media (max-width: 900px) {
+  .hero-grid, .split { grid-template-columns: 1fr; gap: 44px; }
+  .keys { grid-template-columns: 1fr; }
+  .bento { grid-template-columns: 1fr; }
+  .bento > * { grid-column: span 1 !important; grid-row: auto !important; }
+  section { padding: 88px 0; }
+  .name .core { padding: 36px 22px; }
+}
+@media (max-width: 760px) {
+  .eyebrow { font-size: 10px; letter-spacing: 0.08em; padding: 6px 11px; }
+  .wrap { padding: 0 16px; }
+  .nav { left: 16px; right: 16px; transform: none; justify-content: space-between; }
+  .nav .links, .nav .gh { display: none; }
+  .menu-btn { display: block; }
+  .hero { padding-top: 112px; }
+  .tile .core, .key .core { padding: 24px; }
+  .vctl { right: 10px; bottom: 10px; transform: scale(0.82); transform-origin: right bottom; }
+  .rows div { font-size: 12px; padding: 10px 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; scroll-behavior: auto !important; }
+  .reveal { opacity: 1; transform: none; }
+}
+</style>
+</head>
+<body>
+<div class="atmos"></div>
+<div class="grain"></div>
+
+<nav class="nav" aria-label="Main">
+  <a class="brand" href="#top" aria-label="Radlet home">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="12" r="4.2"/></svg>
+    Radlet
+  </a>
+  <div class="links">
+    <a href="#demo">Demo</a>
+    <a href="#features">Features</a>
+    <a href="#loadouts">Loadouts</a>
+    <a href="#agents">CLI &amp; agents</a>
+  </div>
+  <a class="btn btn-ghost btn-small gh" href="https://github.com/Suvraneel/radlet">GitHub<span class="knob"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 11 11 5M6 5h5v5"/></svg></span></a>
+  <button class="menu-btn" aria-label="Menu" aria-expanded="false" aria-controls="menu"><span></span><span></span></button>
+</nav>
+<div class="overlay" id="menu" inert>
+  <a href="#demo">Demo</a>
+  <a href="#features">Features</a>
+  <a href="#loadouts">Loadouts</a>
+  <a href="#agents">CLI &amp; agents</a>
+  <a href="https://github.com/Suvraneel/radlet">GitHub</a>
+</div>
+
+<main id="top">
+  <!-- Hero -->
+  <section class="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <span class="eyebrow reveal"><i></i>Free · macOS 14+ · Nothing leaves your Mac</span>
+        <h1 class="reveal d1">A weapon wheel <span class="soft">for your files.</span></h1>
+        <p class="lead reveal d2">Drag files in Finder, hold a key, flick to a tool. Convert, compress, crop, translate and dozens more, right where your files already are.</p>
+        <div class="cta reveal d3">
+          <a class="btn btn-primary" href="https://github.com/Suvraneel/radlet#run-it-locally">Get Radlet<span class="knob"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3v8M4.5 7.5 8 11l3.5-3.5M3 13h10"/></svg></span></a>
+          <a class="btn btn-ghost" href="#demo">Watch the demo<span class="knob"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 3.8v8.4L12 8z"/></svg></span></a>
+        </div>
+        <p class="note reveal d3">No signed release yet: it builds from source in two commands, for Apple silicon and Intel.</p>
+      </div>
+
+      <div class="shell wheel-card reveal d2">
+        <div class="core">
+          <div class="modes" role="group" aria-label="Wheel">
+            <button class="mode" data-mode="convert" aria-pressed="true"><b>⇧</b>Convert</button>
+            <button class="mode" data-mode="tools" aria-pressed="false"><b>⌘</b>Tools</button>
+            <button class="mode" data-mode="loadouts" aria-pressed="false"><b>⌃</b>Loadouts</button>
+          </div>
+          <div class="wheel">
+            <svg id="wheel" viewBox="-200 -200 400 400" role="listbox" tabindex="0" aria-label="Try the wheel: use the arrow keys, then Return"></svg>
+          </div>
+          <p class="wheel-hint" id="hint">Point at a slot and click. Press <kbd>Shift</kbd>, <kbd>⌘</kbd> or <kbd>Control</kbd> to switch wheels.</p>
+          <p class="sr" aria-live="polite" id="live"></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Demo -->
+  <section id="demo" style="padding-top: 20px">
+    <div class="wrap">
+      <div class="shell video reveal">
+        <div class="core">
+          <video id="video" autoplay muted loop playsinline preload="metadata" poster="media/poster.jpg" aria-label="Radlet in Finder: three photos are dragged, Shift is held, a wheel of formats opens, and dropping on JPEG makes three JPEGs next to the originals">
+            <source src="media/demo.mp4" type="video/mp4">
+            <source src="https://cdn.jsdelivr.net/gh/Suvraneel/radlet@main/.github/media/demo.mp4" type="video/mp4">
+          </video>
+          <div class="vctl">
+          <button class="btn btn-ghost btn-small" id="play">Pause<span class="knob"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 3.5h2.4v9H4.5zM9.1 3.5h2.4v9H9.1z"/></svg></span></button>
+          <button class="btn btn-ghost btn-small" id="sound" aria-pressed="false">Sound on<span class="knob"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 6.2h2.2L8.5 3.5v9L5.2 9.8H3z"/><path d="M10.8 5.6a3.4 3.4 0 0 1 0 4.8M12.6 3.9a5.8 5.8 0 0 1 0 8.2"/></svg></span></button>
+          </div>
+        </div>
+      </div>
+      <p class="caption">20 seconds. The wheel is drawn by Radlet's own code, with slots the real engine returned.</p>
+    </div>
+  </section>
+
+  <!-- Three keys -->
+  <section>
+    <div class="wrap">
+      <span class="eyebrow reveal"><i></i>One gesture, three wheels</span>
+      <h2 class="reveal d1" style="margin-top: 22px; max-width: 13em">Keep dragging. Pick a key.</h2>
+      <div class="keys">
+        <div class="shell key reveal"><div class="core"><span class="cap">⇧ Shift</span><h3>Convert</h3><p>JPEG, PNG, WebP, PDF, Word, Excel, MP4, MP3 and more. Results land next to the originals.</p></div></div>
+        <div class="shell key reveal d1"><div class="core"><span class="cap">⌘ Command</span><h3>Tools</h3><p>Crop, compress, redact, hide faces, translate, make icons, read QR codes, share.</p></div></div>
+        <div class="shell key reveal d2"><div class="core"><span class="cap">⌃ Control</span><h3>Loadouts</h3><p>Your saved sets of steps, like “Web-ready image”, one flick away.</p></div></div>
+      </div>
+      <p class="nodrag reveal">No drag needed: select files and press <kbd>⌃⌥V</kbd> in Finder, or right-click and choose Services.</p>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features">
+    <div class="wrap">
+      <span class="eyebrow reveal"><i></i>What's on the wheel</span>
+      <h2 class="reveal d1" style="margin-top: 22px; max-width: 14em">Dozens of tools. Zero windows to open.</h2>
+      <div class="bento">
+        <div class="shell tile t-a reveal"><div class="core">
+          <svg class="ico-line" viewBox="0 0 32 32"><circle cx="16" cy="16" r="12"/><path d="M16 4v6M16 22v6M4 16h6M22 16h6"/></svg>
+          <h3>Convert almost anything</h3>
+          <p>Images, PDFs, documents, spreadsheets, audio, video, subtitles, SVGs, icons and archives. Documents keep their headings, lists, tables and links. Drop a whole folder for “Images to JPEG” or “Documents to PDF”.</p>
+          <div class="rows" aria-hidden="true">
+            <div>IMG_2041.HEIC <span class="arrow">→</span> <span class="to">IMG_2041.jpg</span><span class="tag ok">✓</span></div>
+            <div>notes.md <span class="arrow">→</span> <span class="to">notes.docx</span><span class="tag ok">✓</span></div>
+            <div>orders.csv <span class="arrow">→</span> <span class="to">orders.xlsx</span><span class="tag ok">✓</span></div>
+            <div>Trip/ <span class="arrow">→</span> <span class="to">Trip (JPEG)/</span><span class="tag ok">✓</span></div>
+          </div>
+          <div class="chips">
+            <span class="hot">HEIC → JPEG</span><span>PNG</span><span>WebP</span><span>AVIF</span><span class="hot">Markdown → Word</span><span>PDF</span><span>RTF</span><span class="hot">CSV → Excel</span><span>JSON</span><span>MP4</span><span>MOV</span><span>MP3</span><span>FLAC</span><span>SRT</span><span>SVG</span><span>ICNS</span><span>ZIP</span>
+          </div>
+        </div></div>
+        <div class="shell tile t-b reveal d1"><div class="core">
+          <svg class="ico-line" viewBox="0 0 32 32"><path d="M6 11h20M6 21h20M11 6l-5 5 5 5M21 16l5 5-5 5"/></svg>
+          <h3>Smart compression</h3>
+          <p>Finds the smallest JPEG or WebP that still looks the same, by measuring it. Or aim for a size: email, Discord, WhatsApp.</p>
+          <div class="meter">
+            <div><span>Original</span><span>4.8 MB</span></div><span class="bar"><i style="--w: 1"></i></span>
+            <div><span>Smart</span><span>1.1 MB</span></div><span class="bar"><i style="--w: .23"></i></span>
+          </div>
+        </div></div>
+        <div class="shell tile t-c reveal d2"><div class="core">
+          <svg class="ico-line" viewBox="0 0 32 32"><rect x="6" y="6" width="20" height="20" rx="6"/><circle cx="13" cy="14" r="1.2"/><circle cx="19" cy="14" r="1.2"/><path d="M12.5 19.5c2 1.6 5 1.6 7 0"/></svg>
+          <h3>On-device intelligence</h3>
+          <p>Copy text from pictures, remove backgrounds, hide faces, make subtitles and translate documents, with Apple's own frameworks.</p>
+        </div></div>
+        <div class="shell tile t-d reveal"><div class="core">
+          <svg class="ico-line" viewBox="0 0 32 32"><path d="M16 4l10 4v7c0 6.5-4.3 11-10 13-5.7-2-10-6.5-10-13V8z"/><path d="M12 16l3 3 5-6"/></svg>
+          <h3>Privacy check</h3>
+          <p>See the GPS, camera serial and hidden edits a file carries before you share it, then strip them.</p>
+        </div></div>
+        <div class="shell tile t-e reveal d1"><div class="core">
+          <svg class="ico-line" viewBox="0 0 32 32"><path d="M7 25V7h12l6 6v12z"/><path d="M19 7v6h6M11 18h10M11 22h6"/></svg>
+          <h3>A PDF toolkit</h3>
+          <p>Split, reorder, rotate, number pages, watermark, lock with a password, or make scans searchable.</p>
+        </div></div>
+        <div class="shell tile t-f reveal d2"><div class="core">
+          <svg class="ico-line" viewBox="0 0 32 32"><path d="M20 6a10 10 0 1 1-9.4 6.6"/><path d="M6 6v7h7"/></svg>
+          <h3>Never overwrites</h3>
+          <p>New files appear beside the originals under a free name. Every job can be undone from History.</p>
+        </div></div>
+        <div class="shell tile t-g reveal"><div class="core">
+          <svg class="ico-line" viewBox="0 0 32 32"><circle cx="16" cy="16" r="11"/><path d="M16 5v22M5 16h22" opacity=".5"/><path d="M16 5a11 11 0 0 1 11 11H16z" fill="rgba(61,139,255,.35)"/></svg>
+          <h3>Skins and styles</h3>
+          <p>Six built-in skins, or write your own as a few lines of CSS. Turn on Orbit or Bloom for a second ring of presets.</p>
+          <div class="skins-img"><img src="media/skins.png" alt="The wheel in six skins: Glass, Instrument, Tactical, Neon, Sunset and Porcelain" loading="lazy" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/gh/Suvraneel/radlet@main/docs/images/skins.png'"></div>
+        </div></div>
+        <div class="shell tile t-h reveal d1"><div class="core">
+          <svg class="ico-line" viewBox="0 0 32 32"><rect x="5" y="7" width="22" height="18" rx="4"/><path d="M10 13l3 3-3 3M16 19h6"/></svg>
+          <h3>Built to be trusted</h3>
+          <p>Each file runs in its own process, so one damaged file can't freeze the rest. No network access, no accounts, no telemetry.</p>
+          <div class="rows" aria-hidden="true">
+            <div>scan-01.png<span class="tag ok">✓ done</span></div>
+            <div class="failed">scan-02.png<span class="tag bad">✕ damaged: failed on its own</span></div>
+            <div>scan-03.png<span class="tag ok">✓ done</span></div>
+          </div>
+          <div class="chips"><span>Local only</span><span>Crash-isolated</span><span>Undo</span><span>Permissive licences</span></div>
+        </div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Loadouts -->
+  <section id="loadouts">
+    <div class="wrap split">
+      <div>
+        <span class="eyebrow reveal"><i></i>Loadouts</span>
+        <h2 class="reveal d1" style="margin-top: 22px">Your loadout, one flick away.</h2>
+        <p class="lead reveal d2" style="margin-top: 22px">Like a game loadout, but for files. Save any tool's settings as a loadout from its window, or chain steps in a small text file. Hold <kbd>Control</kbd> while dragging and they're on the wheel.</p>
+        <div class="points reveal d3">
+          <div><svg viewBox="0 0 20 20"><path d="M4 10.5l4 4 8-9"/></svg>One decode and one encode per chain, so steps never compress twice.</div>
+          <div><svg viewBox="0 0 20 20"><path d="M4 10.5l4 4 8-9"/></svg>Run them on watch folders: new files are handled as they arrive.</div>
+          <div><svg viewBox="0 0 20 20"><path d="M4 10.5l4 4 8-9"/></svg>Passwords never go into a loadout.</div>
+        </div>
+      </div>
+      <div class="shell code reveal d2"><div class="core">
+        <div class="bar"><i></i><i></i><i></i><span>web-ready-image.toml</span></div>
+<pre><span class="k">name</span> = <span class="s">"Web-ready image"</span>
+<span class="k">description</span> = <span class="s">"Longest side 2048 px, WebP, no metadata"</span>
+
+<span class="p">[[steps]]</span>
+<span class="k">op</span> = <span class="s">"resize"</span>
+<span class="k">max</span> = <span class="n">2048</span>
+
+<span class="p">[[steps]]</span>
+<span class="k">op</span> = <span class="s">"convert"</span>
+<span class="k">to</span> = <span class="s">"webp"</span>
+<span class="k">quality</span> = <span class="n">80</span>
+
+<span class="p">[[steps]]</span>
+<span class="k">op</span> = <span class="s">"strip_metadata"</span></pre>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- CLI and agents -->
+  <section id="agents">
+    <div class="wrap split">
+      <div class="shell code reveal"><div class="core">
+        <div class="bar"><i></i><i></i><i></i><span>Terminal</span></div>
+<pre><span class="c"># the same engine as the wheel</span>
+<span class="p">$</span> radlet convert *.heic --to jpg
+<span class="p">$</span> radlet compress photo.jpg --target 2MB
+<span class="p">$</span> radlet translate notes.md --to fr
+<span class="p">$</span> radlet loadout <span class="s">"Web-ready image"</span> *.png
+
+<span class="c"># let Claude and other AI apps use it, locally</span>
+<span class="p">$</span> claude mcp add radlet -- radlet mcp</pre>
+      </div></div>
+      <div>
+        <span class="eyebrow reveal"><i></i>Command line &amp; AI agents</span>
+        <h2 class="reveal d1" style="margin-top: 22px">Same engine, everywhere you work.</h2>
+        <p class="lead reveal d2" style="margin-top: 22px">Almost every tool on the wheel is a <code>radlet</code> command, ready for scripts and Shortcuts. <code>radlet mcp</code> lets Claude and other AI apps convert, compress and clean your files on your own Mac.</p>
+        <div class="points reveal d3">
+          <div><svg viewBox="0 0 20 20"><path d="M4 10.5l4 4 8-9"/></svg>JSON output for scripts with <code>--json</code>.</div>
+          <div><svg viewBox="0 0 20 20"><path d="M4 10.5l4 4 8-9"/></svg>Password tools are never offered to agents.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- The name -->
+  <section style="padding-top: 40px">
+    <div class="wrap">
+      <div class="shell name reveal"><div class="core">
+        <span class="eyebrow"><i></i>Why “Radlet”</span>
+        <blockquote>A little radial. The Latin <em>radius</em> was the spoke of a wheel, and in German and Dutch, <em>Rad</em> simply means wheel.</blockquote>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- Final call -->
+  <section class="final">
+    <div class="wrap">
+      <span class="eyebrow reveal"><i></i>Free for macOS 14 and later</span>
+      <h2 class="reveal d1">Put every file tool on one wheel.</h2>
+      <div class="cta reveal d2">
+        <a class="btn btn-primary" href="https://github.com/Suvraneel/radlet#run-it-locally">Get Radlet<span class="knob"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3v8M4.5 7.5 8 11l3.5-3.5M3 13h10"/></svg></span></a>
+        <a class="btn btn-ghost" href="https://github.com/Suvraneel/radlet">View the source<span class="knob"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 11 11 5M6 5h5v5"/></svg></span></a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap row">
+    <span>© 2026 Usemonoma. Radlet is clean-room work: no code or assets from other apps.</span>
+    <span><a href="https://github.com/Suvraneel/radlet">Source on GitHub</a></span>
+  </div>
+</footer>
+
+<script>
+(() => {
+  // ---------- navigation ----------
+  const menu = document.querySelector('.menu-btn');
+  const overlay = document.querySelector('.overlay');
+  const isOpen = () => document.body.classList.contains('menu-open');
+  const setMenu = (open) => {
+    document.body.classList.toggle('menu-open', open);
+    menu.setAttribute('aria-expanded', String(open));
+    overlay.inert = !open;
+    if (open) overlay.querySelector('a').focus();
+  };
+  menu.addEventListener('click', () => setMenu(!isOpen()));
+  overlay.querySelectorAll('a').forEach(a => a.addEventListener('click', () => setMenu(false)));
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen()) { setMenu(false); menu.focus(); } });
+
+  // ---------- reveal on scroll ----------
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+  }, { threshold: 0.14, rootMargin: '0px 0px -40px 0px' });
+  document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+  // ---------- video sound ----------
+  const video = document.getElementById('video');
+  const sound = document.getElementById('sound');
+  const play = document.getElementById('play');
+  const playIcon = play.querySelector('path');
+  const showPlaying = () => {
+    play.firstChild.textContent = video.paused ? 'Play' : 'Pause';
+    playIcon.setAttribute('d', video.paused ? 'M5.5 3.8v8.4L12 8z' : 'M4.5 3.5h2.4v9H4.5zM9.1 3.5h2.4v9H9.1z');
+  };
+  // With reduced motion, the video waits to be played.
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) { video.removeAttribute('autoplay'); video.pause(); }
+  video.addEventListener('play', showPlaying);
+  video.addEventListener('pause', showPlaying);
+  showPlaying();
+  play.addEventListener('click', () => { if (video.paused) video.play(); else video.pause(); });
+  sound.addEventListener('click', () => {
+    video.muted = !video.muted;
+    if (!video.muted) { video.currentTime = 0; video.play(); }
+    sound.setAttribute('aria-pressed', String(!video.muted));
+    sound.firstChild.textContent = video.muted ? 'Sound on' : 'Sound off';
+  });
+
+  // ---------- the playable wheel ----------
+  const NS = 'http://www.w3.org/2000/svg';
+  const R = 182, HUB = 60, LABEL_R = 124;
+  const icons = {
+    image: 'M-8 -6h16v12h-16z M-8 3 -3 -2 1 2 4 -1 8 3',
+    pdf: 'M-6 -8h8l4 4v12h-12z M2 -8v4h4 M-3 1h6 M-3 4h4',
+    more: 'M-6 0h0.01 M0 0h0.01 M6 0h0.01',
+    resize: 'M-7 7 7 -7 M1 -7h6v6 M-1 7h-6v-6',
+    crop: 'M-4 -9v13h13 M-9 -4h13v13',
+    compress: 'M-8 -8l5 5 M-3 -7v4h-4 M8 8l-5-5 M3 7v-4h4',
+    face: 'M0 -8a8 8 0 1 0 0.01 0 M-3 -2h0.01 M3 -2h0.01 M-3.5 3a5 5 0 0 0 7 0',
+    cutout: 'M0 -7a3 3 0 1 0 0.01 0 M-6 8c0-4 2.5-6 6-6s6 2 6 6',
+    text: 'M-7 -7h14 M0 -7v15 M-3 8h6',
+    shield: 'M0 -8l7 3v4c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9v-4z',
+    stack: 'M0 -8l8 4-8 4-8-4z M-8 1l8 4 8-4 M-8 5l8 4 8-4',
+  };
+  const modes = {
+    convert: { title: 'Convert', slots: [
+      ['JPEG', 'image'], ['PNG', 'image'], ['WebP', 'image'], ['HEIC', 'image'],
+      ['TIFF', 'image'], ['GIF', 'image'], ['PDF', 'pdf'], ['More…', 'more']],
+      done: (l) => `3 photos → ${l}, saved next to the originals` },
+    tools: { title: 'Tools', slots: [
+      ['Resize…', 'resize'], ['Crop…', 'crop'], ['Compress…', 'compress'], ['Hide faces', 'face'],
+      ['Copy text', 'text'], ['Privacy…', 'shield'], ['Remove bg', 'cutout'], ['More…', 'more']],
+      done: (l) => l.endsWith('…') ? `${l.slice(0, -1)} opens its window, with a live preview` : `${l}: 3 photos done, originals untouched` },
+    loadouts: { title: 'Loadouts', slots: [
+      ['Web-ready image', 'stack'], ['Email-friendly photo', 'stack'], ['Thumbnail', 'stack'], ['Shrink scans', 'stack']],
+      done: (l) => `${l}: every step ran, one encode per photo` },
+  };
+  const svg = document.getElementById('wheel');
+  const hint = document.getElementById('hint');
+  const live = document.getElementById('live');
+  const idle = hint.innerHTML;
+  let mode = 'convert', pick = -1, turn = 0, hlRot = 0, busy = false;
+
+  const el = (name, attrs, parent) => {
+    const n = document.createElementNS(NS, name);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(n);
+    return n;
+  };
+  const pt = (r, deg) => { const a = deg * Math.PI / 180; return [r * Math.sin(a), -r * Math.cos(a)]; };
+  const wedge = (span) => {
+    const a = -span / 2, b = span / 2, large = span > 180 ? 1 : 0;
+    const [x1, y1] = pt(R - 4, a), [x2, y2] = pt(R - 4, b), [x3, y3] = pt(HUB + 6, b), [x4, y4] = pt(HUB + 6, a);
+    return `M${x1} ${y1}A${R - 4} ${R - 4} 0 ${large} 1 ${x2} ${y2}L${x3} ${y3}A${HUB + 6} ${HUB + 6} 0 ${large} 0 ${x4} ${y4}Z`;
+  };
+
+  function draw() {
+    svg.textContent = '';
+    const m = modes[mode], n = m.slots.length, span = 360 / n;
+    el('circle', { class: 'ring', r: R }, svg);
+    for (let i = 0; i < n; i++) {
+      const [x1, y1] = pt(HUB + 4, i * span + span / 2), [x2, y2] = pt(R - 2, i * span + span / 2);
+      el('line', { class: 'divider', x1, y1, x2, y2 }, svg);
+    }
+    const hl = el('path', { class: 'hl', d: wedge(span), id: 'hl' }, svg);
+    hl.style.transform = `rotate(${hlRot}deg)`;
+    m.slots.forEach(([label, icon], i) => {
+      const g = el('g', { class: 'slot', role: 'option', id: `slot-${i}`, 'aria-label': label, 'aria-selected': 'false', 'data-i': i }, svg);
+      const hit = el('path', { class: 'hit', d: wedge(span) }, g);
+      hit.style.transform = `rotate(${i * span}deg)`;
+      const [cx, cy] = pt(LABEL_R, i * span);
+      const words = label.split(' ');
+      const twoLines = n <= 4 && words.length > 1;
+      el('path', { class: 'ico', d: icons[icon], transform: `translate(${cx} ${cy - (twoLines ? 19 : 12)})` }, g);
+      if (twoLines) {
+        const t = el('text', { x: cx, y: cy + 6 }, g); t.textContent = words.slice(0, -1).join(' ');
+        const t2 = el('text', { x: cx, y: cy + 20 }, g); t2.textContent = words[words.length - 1];
+      } else {
+        const t = el('text', { x: cx, y: cy + 12 }, g); t.textContent = label;
+      }
+    });
+    el('circle', { class: 'hub', r: HUB }, svg);
+    const hubT = el('text', { class: 'hub-title', y: -2, id: 'hubT' }, svg); hubT.textContent = '3 photos';
+    const hubS = el('text', { class: 'hub-sub', y: 15, id: 'hubS' }, svg); hubS.textContent = m.title;
+    const done = el('g', { class: 'done', id: 'done' }, svg);
+    el('circle', { r: HUB - 1, fill: '#1f6f3f' }, done);
+    el('path', { d: 'M-13 1l9 9 17-19', fill: 'none', stroke: '#fff', 'stroke-width': 3.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, done);
+    setPick(-1, true);
+  }
+
+  function setPick(i, quiet) {
+    const m = modes[mode], n = m.slots.length, span = 360 / n;
+    const hl = document.getElementById('hl');
+    svg.querySelectorAll('.slot').forEach(s => {
+      const on = Number(s.dataset.i) === i;
+      s.classList.toggle('on', on);
+      s.setAttribute('aria-selected', String(on));
+    });
+    if (i < 0) svg.removeAttribute('aria-activedescendant'); else svg.setAttribute('aria-activedescendant', `slot-${i}`);
+    if (i < 0) {
+      hl.classList.remove('on');
+      document.getElementById('hubT').textContent = '3 photos';
+      document.getElementById('hubS').textContent = m.title;
+    } else {
+      // Glide the short way round.
+      let target = i * span, delta = ((target - hlRot) % 360 + 540) % 360 - 180;
+      if (pick < 0) { hl.style.transition = 'none'; hlRot = target; hl.style.transform = `rotate(${hlRot}deg)`; hl.getBoundingClientRect(); hl.style.transition = ''; }
+      else { hlRot += delta; hl.style.transform = `rotate(${hlRot}deg)`; }
+      hl.classList.add('on');
+      document.getElementById('hubT').textContent = m.slots[i][0].length > 11 ? m.slots[i][0].split(' ')[0] : m.slots[i][0];
+      document.getElementById('hubS').textContent = 'release to run';
+    }
+    pick = i;
+  }
+
+  function slotAt(evt) {
+    const r = svg.getBoundingClientRect();
+    const x = (evt.clientX - r.left) / r.width * 400 - 200, y = (evt.clientY - r.top) / r.height * 400 - 200;
+    const d = Math.hypot(x, y);
+    if (d < HUB || d > R + 24) return -1;
+    const n = modes[mode].slots.length, span = 360 / n;
+    let deg = Math.atan2(x, -y) * 180 / Math.PI; if (deg < 0) deg += 360;
+    return Math.round(deg / span) % n;
+  }
+
+  function run(i) {
+    if (i < 0 || busy) return;
+    busy = true;
+    const label = modes[mode].slots[i][0];
+    const msg = label === 'More…' ? 'Everything that doesn\'t fit waits behind More…' : modes[mode].done(label);
+    const done = document.getElementById('done');
+    done.classList.add('on');
+    hint.classList.add('result');
+    hint.innerHTML = `<span class="ok">✓</span> ${msg}`;
+    live.textContent = msg;
+    setTimeout(() => { done.classList.remove('on'); busy = false; setPick(-1, true); }, 1300);
+    setTimeout(() => { if (!busy) { hint.classList.remove('result'); hint.innerHTML = idle; } }, 4200);
+  }
+
+  function setMode(next) {
+    if (next === mode || busy) return;
+    mode = next; pick = -1; hlRot = 0;
+    document.querySelectorAll('.mode').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+    draw();
+    svg.classList.remove('popping'); void svg.getBoundingClientRect(); svg.classList.add('popping');
+  }
+
+  svg.addEventListener('pointermove', (e) => { if (!busy && e.pointerType !== 'touch') { const i = slotAt(e); if (i !== pick) setPick(i); } });
+  svg.addEventListener('pointerleave', () => { if (!busy) setPick(-1, true); });
+  svg.addEventListener('click', (e) => { const i = slotAt(e); if (i >= 0) { setPick(i); run(i); } });
+  svg.addEventListener('keydown', (e) => {
+    const n = modes[mode].slots.length;
+    if (['ArrowRight', 'ArrowDown'].includes(e.key)) { e.preventDefault(); setPick(((pick < 0 ? -1 : pick) + 1) % n); }
+    else if (['ArrowLeft', 'ArrowUp'].includes(e.key)) { e.preventDefault(); setPick(pick < 0 ? n - 1 : (pick - 1 + n) % n); }
+    else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); run(pick); }
+    else if (e.key === 'Escape') { setPick(-1, true); }
+  });
+  document.querySelectorAll('.mode').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+  // Tapping a modifier switches wheels, as holding one does in the app.
+  // Shortcuts such as ⌘C don't count: another key cancels the switch.
+  const modKeys = { Shift: 'convert', Meta: 'tools', Control: 'loadouts' };
+  let tapped = null;
+  window.addEventListener('keydown', (e) => {
+    if (e.repeat && e.key === tapped) return;
+    tapped = modKeys[e.key] && !tapped ? e.key : null;
+  });
+  window.addEventListener('keyup', (e) => {
+    if (e.key === tapped) setMode(modKeys[e.key]);
+    tapped = null;
+  });
+  window.addEventListener('blur', () => { tapped = null; });
+  draw();
+})();
+</script>
+</body>
+</html>

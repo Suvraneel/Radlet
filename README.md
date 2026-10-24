@@ -1,235 +1,321 @@
-# Veer
+<div align="center">
 
-<p align="center">
-  <img src="docs/images/wheel.gif" width="420" alt="The Veer wheel in its default Glass skin, its highlight gliding from slot to slot as the pointer moves round">
+<a href="https://cdn.jsdelivr.net/gh/Suvraneel/radlet@main/.github/media/demo.mp4"><img src=".github/media/demo.gif" alt="Radlet in action: three HEIC photos are dragged in Finder, Shift is held, a wheel of formats opens under the pointer, and dropping on JPEG puts three JPEGs next to the originals" width="100%"></a>
+
+<h1>Radlet</h1>
+
+<p><strong>A weapon wheel for your files.</strong><br>
+Drag files, hold a key, flick to a tool. Convert, compress, crop, translate and dozens more, without leaving Finder. A free menu bar app for macOS that does all the work on your Mac.</p>
+
+<p>
+  <a href="https://cdn.jsdelivr.net/gh/Suvraneel/radlet@main/.github/media/demo.mp4"><strong>▶ Watch the 20-second demo</strong></a> (with sound)
+  &nbsp;·&nbsp;
+  <a href="https://radlet.vercel.app"><strong>Website</strong></a>
+  &nbsp;·&nbsp;
+  <a href="#run-it-locally"><strong>Run it locally</strong></a>
 </p>
 
-Convert and tidy files without leaving Finder. Drag files, hold **Shift**, and drop on a format. Hold **Command** for tools, **Control** for recipes. Everything runs on your Mac.
+<p>
+  <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-111111?logo=apple&logoColor=white">
+  <img alt="Swift 5.10" src="https://img.shields.io/badge/Swift-5.10-F05138?logo=swift&logoColor=white">
+  <img alt="SwiftUI and AppKit" src="https://img.shields.io/badge/SwiftUI%20%2B%20AppKit-0A84FF?logo=apple&logoColor=white">
+  <img alt="Rust 1.88+" src="https://img.shields.io/badge/Rust-1.88%2B-B7410E?logo=rust&logoColor=white">
+  <img alt="Model Context Protocol server" src="https://img.shields.io/badge/MCP-server-6E56CF">
+</p>
+
+</div>
+
+## Why
+
+Doing anything to a file on a Mac usually means a detour: open Preview and export, or upload it to a converter website and download the result. Radlet takes the drag you're already making and adds one key, the way a game's weapon wheel puts all your gear one flick away. Hold **Shift** mid-drag and a wheel of formats opens under the pointer. Drop on **JPEG** and the JPEGs appear next to the originals.
+
+- **No window to open.** The wheel appears where the pointer is, in the middle of a Finder drag. Hold **Command** instead for tools, or **Control** for your loadouts. Or select files and press **⌃⌥V**.
+- **Nothing leaves your Mac.** No network access, accounts or telemetry. Text recognition, background removal, face detection, subtitles and translation use Apple's on-device frameworks.
+- **Nothing gets overwritten.** Results land beside the originals under a free name, and every job can be undone from History.
+
+*Radlet* is a little radial: the Latin *radius* was the spoke of a wheel, and in German and Dutch *Rad* simply means wheel.
+
+## How it works
+
+```
+Finder drag + Shift ──▶ DragWatcher ──▶ WheelController ──inspect──▶ radlet serve ──▶ catalog::wheel
+                                              │                          │
+                                         user drops                     run
+                                              ▼                          ▼
+                                     HUD (progress, Undo) ◀──events── job::run_batch ──▶ one `radlet worker`
+                                                                                         process per file
+```
+
+Radlet is two programs. The **Mac app** (Swift) spots the drag, draws the wheel and shows progress. The **engine** (Rust) does the work. It runs as `radlet serve`, a helper process the app talks to in JSON lines over stdin and stdout.
+
+1. **Spotting the drag.** The app listens to global mouse events and, only while a drag is in progress, polls the modifier keys and the drag pasteboard. That's why it needs no Accessibility or Input Monitoring permission.
+2. **Filling the wheel.** The app sends the dragged paths to `inspect`. The engine detects each file's format and returns three sets of slots (convert, tools, loadouts), each carrying an opaque `action`.
+3. **Running the job.** On drop, the app sends that action back unchanged. The wheel knows nothing about formats, so a new conversion, tool or loadout in the engine shows up on the wheel with no app changes.
+4. **One worker per file.** `job::run_batch` runs each file in its own `radlet worker` process with a time limit. A crash or hang fails only that file, its partial outputs are deleted, and progress events stream back to the HUD.
+5. **Helpers on demand.** For Apple's Vision, Speech and Translation frameworks, the engine runs `radlet-vision`, a small Swift helper bundled in the app. Audio and video go through FFmpeg when it's installed, HEIC and AVIF through macOS's `sips`, and PDF to image through a bundled PDFium.
+
+### Guarantees
+
+- **Never overwrites.** Outputs are written to a hidden temporary file and hard-linked into place under a free name (`photo 2.jpg`), which fails if the name is taken. Originals are never modified. With "Replace originals" on, the app moves them to the Trash, where Undo can find them.
+- **Tidy multi-file results.** Up to four pages or parts are saved next to the original; more go into one folder, such as `report (pages)`.
+- **One bad file fails only itself.** Crashes and hangs are reported per file.
+- **Upright and colour-correct.** EXIF orientation is applied to pixels, and ICC profiles are carried into PNG, JPEG, WebP, TIFF and PDF outputs.
+- **Bounded inputs.** Images up to 40,000 px a side and 1 GiB decoded; PDFs decompress to at most 512 MB; text files up to 64 MB; SVGs drawn at most 16,384 px a side; ZIPs extract at most 1,000 times their size (and 64 GB); folders up to 500,000 items.
+- **Local only.** No network access, accounts or telemetry.
+- **Cleans up after itself.** When stdin closes (the app quit or crashed), the helper cancels its jobs and exits. A worker whose supervisor dies kills itself and its FFmpeg.
+
+## Features
+
+### The wheel
 
 <p align="center">
   <img src="docs/images/skins.png" alt="The wheel in its six built-in skins: Glass, Instrument, Tactical, Neon, Sunset and Porcelain">
   <br>
-  <sub>Six built-in skins, or write your own in CSS. Previews rendered from Veer's design files.</sub>
+  <sub>Six built-in skins, or write your own in CSS. Previews rendered from Radlet's design files.</sub>
 </p>
 
-Veer is a working name. Everything in this repository is original, clean-room work (see [Clean-room policy](#clean-room-policy)).
+- **Three wheels on one gesture.** **Shift** converts, **Command** opens tools, **Control** runs your loadouts. Drop on a slot to run it, or in the middle to cancel.
+- **Styles** (Settings → Wheel). **Dial**, one ring, is the default. Turn on **Advanced styles** for **Orbit**, which adds an outer ring of presets behind each slot (JPEG → Smart or Best, Compress → Email or Discord), and **Bloom**, where resting on a slot or flicking past it fans out its presets. The highlight glides between slots, borders are slightly sticky so it doesn't flicker, and a Force Touch trackpad taps as you cross into a slot.
+- **Slots that stay put.** The wheel holds eight (or 6, 10 or 12), and anything more is under **More…**. The slots you use most stay on the wheel, but nothing moves around: the most useful go up, right, down and left, and stay there.
+- **Skins.** Glass (the plain system look and the default), Instrument, Tactical, Neon, Sunset and Porcelain, plus your own as small CSS files of custom properties (`--accent: #00FF9C;`), starting from any built-in with `--base`. Radlet picks up an edited skin the next time the wheel opens and lists any mistakes with line numbers. See [docs/skins.md](docs/skins.md).
 
-## Install
+### Convert (Shift)
 
-Veer is free. It runs on macOS 14 (Sonoma) or later, on Apple silicon and Intel Macs.
-
-1. Download **Veer-‹version›.dmg** from the [latest release](../../releases/latest).
-2. Open it and drag **Veer** into **Applications**.
-3. Open Veer from Applications. It isn't notarized by Apple yet, so macOS blocks it the first time:
-   - **macOS 15 Sequoia or later:** click **Done**. Open **System Settings → Privacy & Security**, scroll to "Veer was blocked to protect your Mac", click **Open Anyway**, and confirm with Touch ID or your password.
-   - **macOS 14 Sonoma:** Control-click Veer in Applications, choose **Open**, then click **Open** again.
-
-   If you're comfortable in Terminal, this clears the download flag instead, and Veer then opens normally:
-
-   ```sh
-   xattr -dr com.apple.quarantine /Applications/Veer.app
-   ```
-
-   macOS asks once per download, so again after each update.
-4. For audio and video, install FFmpeg with [Homebrew](https://brew.sh). Images, PDFs and text work without it.
-
-   ```sh
-   brew install ffmpeg
-   ```
-
-### First steps
-
-Veer lives in the menu bar (a circle-in-a-circle icon), not the Dock. The first time, it opens a short welcome guide.
-
-- Start dragging files in Finder, then hold **Shift** to convert, **Command** for tools or **Control** for recipes. The wheel opens under the pointer: drop on a slot to run it, or in the middle to cancel. Results appear next to the originals, and nothing is overwritten.
-- Prefer clicking? Use the menu bar icon (**Convert Files…**, **Tools for Files…**), or right-click files in Finder and choose **Services → Convert with Veer**.
-- **Settings → Wheel** changes the wheel's style and skin.
-
-Veer needs no Accessibility or Input Monitoring permission.
-
-### Build from source
-
-You need macOS 14 or later, Xcode or just the Command Line Tools (`xcode-select --install`), and [Rust](https://rustup.rs). Get the source (the **Code → Download ZIP** button, a release's source archive, or `git clone`), then in its folder run:
-
-```sh
-mac/scripts/run.sh
-```
-
-It builds Veer, installs it in Applications and starts it. An app built on your own Mac opens without the warning in step 3. For audio and video, install FFmpeg as in step 4.
-
-## What's here
-
-| Path | What it is |
+| Kind | What you get |
 | --- | --- |
-| `crates/veer-core` | The conversion engine (Rust). Format detection, the conversion catalogue, image/PDF/text/media engines, never-overwrite publishing, batches and crash-isolated workers. |
-| `crates/veer-cli` | The `veer` command: a CLI for power users, plus `veer serve`, the helper process the Mac app talks to. |
-| `mac/` | The Mac app (Swift, AppKit + SwiftUI): menu bar item, drag detection, the wheel, progress HUD, settings, welcome window, Finder Services. `VeerKit` holds its unit-tested logic. `veer-vision` is a small helper the engine runs for text recognition and background removal (Apple's Vision framework). |
-| `examples/recipes/` | Sample recipe files. |
-| `docs/` | Guides: wheel styles and skins ([docs/skins.md](docs/skins.md)). |
-| `deny.toml` | Licence policy: every dependency must be permissive. |
+| **Images** | JPEG, PNG, WebP, HEIC, TIFF, GIF, BMP, ICO, ICNS, TGA and QOI to each other or to PDF (AVIF reads in too). A picture converts to **Text** through text recognition. A PDF converted to JPEG, PNG, WebP or TIFF gives one image per page. |
+| **SVG** | Treated as an image: PNG, JPEG, WebP, ICO and the rest, drawn sharp at 1×, 2× or 4× (at least 1024 px on its longest side by default). SVG to PDF stays vector. |
+| **Icons** | Any picture or SVG to a macOS ICNS (16 to 1024 px) or an ICO. |
+| **Documents** | TXT, Markdown, HTML, Word (.docx) and RTF convert to each other and to PDF, keeping headings, lists, quotes, code, tables, bold, italic and links. A PDF converts to text or Markdown. |
+| **Data** | CSV, TSV, JSON and Excel (.xlsx) convert to each other (numbers stay numbers, IDs with leading zeros stay text). A table also becomes a Markdown or HTML table, or a PDF. A workbook of several sheets becomes one CSV per sheet. |
+| **Audio and video** | Through FFmpeg: MP3, M4A, WAV, FLAC, AIFF, OGG, Opus and WMA; MP4, MOV, WebM, MKV, AVI, WMV and GIF. Video is remuxed without re-encoding when the codecs allow. |
+| **Subtitles** | SRT and WebVTT to each other or to plain text. |
+| **Folders** | Drop a folder for **Images to JPEG**, **Documents to PDF**, **Audio to MP3** and so on. Results go into a copy of the folder ("Trip (JPEG)") with the same subfolders, and anything that couldn't be converted is listed in "Not converted.txt". |
+| **ZIPs** | A folder becomes a ZIP and a ZIP becomes a folder. Extraction never writes outside its folder, skips links and `__MACOSX` clutter, and refuses zip bombs. |
 
-## What it does
+### Tools (Command)
 
-- **Convert** images, PDFs, audio, video, text and subtitles (Shift wheel). A PDF converted to JPEG, PNG, WebP or TIFF gives one image per page.
-- **Tools** (Command wheel). Tools ending in "…" open a window first:
-  - **Resize…** by percentage, longest side, exact width or height.
-  - **Crop…** with a live preview, aspect presets and pixel size.
-  - **Redact…** with black boxes, pixelate or blur, previewed as they'll look. Video redaction is always black.
-  - **Compress…** by quality level or to a target size such as 2 MB, with a before-and-after preview. **Smart** (the default) finds the smallest JPEG or WebP that still looks the same, by measuring visual similarity (SSIM) against the original instead of guessing a quality number. **Fit for** presets fill in sizes that get through email, Discord and WhatsApp. PDFs shrink too: their pictures are scaled down and recompressed.
-  - **Split…** a PDF into every page, every few pages, or ranges like `1-3, 5, 8-`.
-  - **Pages…** to reorder, delete and rotate single PDF pages.
-  - **Page numbers…** in six positions and four styles ("3", "Page 3", "Page 3 of 12", "3 / 12"), with a live preview.
-  - **Watermark…** faint text such as DRAFT, corner to corner or level, at the strength you choose.
-  - **Password…** locks a PDF with a password (AES-256), or removes it when you know it. Passwords are never saved or logged.
-  - **Trim…** audio or video with the system's trim handles; **Make GIF…** turns all or part of a video into a GIF.
-  - **Save stills** saves ten evenly spaced frames from a video; **Even out volume** levels loudness to -16 LUFS, as podcasts do.
-  - **Privacy check…** shows what files give away before you share them: GPS location (with Show in Maps), camera or phone and its serial number, names, dates, editing apps and edit history, and hidden content such as preview images, earlier versions kept inside PDFs, attachments, scripts and comment authors. **Remove Metadata** saves cleaned copies, and the report says what it can't remove.
-  - **Make subtitles…** turns speech in a video or recording into SRT or WebVTT subtitles, or a plain transcript, with Apple's on-device speech recognition. The subtitles are saved next to the video under the same name, so players pick them up.
-  - **Rename…** renames a batch with a pattern such as `Trip {date} {n}` (name, number, date taken, time, folder), previewed before anything changes.
-  - **Remove background**: keeps the main subject on a transparent background (PNG, or WebP/TIFF if that's what you started with).
-  - **Copy text**: recognises the text in pictures and scanned PDFs and puts it on the clipboard. Convert a picture to **Text** to save it as a file instead.
-  - **Make searchable PDF**: turns photos of documents and scanned PDFs into PDFs you can search, select and copy from. Pages that already have text are left as they are.
-  - One-step tools: rotate, remove metadata, combine into a PDF, copy SHA-256.
-  - The wheel holds eight (Settings → Wheel can make it 6, 10 or 12); anything more is under **More…**. The slots you use most are the ones that stay, but nothing moves around: the most useful go up, right, down and left, and stay there.
-- **Wheel styles** (Settings → Wheel): **Dial**, one ring, is the default. Turn on **Advanced styles** for **Orbit**, which adds an outer ring of presets behind each slot (JPEG → Smart or Best, Compress → Email or Discord), and **Bloom**, where resting on a slot or flicking past it fans out its presets. Slots stay in the same places in every style. The highlight glides between slots, borders are slightly sticky so it doesn't flicker, and a Force Touch trackpad taps as you cross into a slot. See [docs/skins.md](docs/skins.md).
-- **Skins**: six built in (Glass, the plain system look and the default, plus Instrument, Tactical, Neon, Sunset and Porcelain), and your own as small CSS files of custom properties (`--accent: #00FF9C;`), starting from any built-in with `--base`. Veer picks up an edited skin the next time the wheel opens and lists any mistakes with line numbers. Reference: [docs/skins.md](docs/skins.md).
-- **On-device intelligence**: text recognition and background removal use Apple's Vision framework on your Mac. Nothing is uploaded.
-- **Recipes** (Control wheel): your own chains of steps. **Save as Recipe…** in a tool window keeps its settings for next time, and **Settings → Recipes** edits, duplicates and deletes them.
+Tools ending in "…" open a window first, with a live preview where it helps.
+
+| Group | Tools |
+| --- | --- |
+| **Images** | **Resize…** (percentage, longest side, exact width or height) · **Crop…** with aspect presets · **Redact…** with black boxes, pixelate or blur · Rotate · **Make icons** (favicons with the HTML for `<head>`, a macOS .icns or an iOS app icon set) |
+| **Compress…** | By quality level or to a target size such as 2 MB. **Smart** (the default) finds the smallest JPEG or WebP that still looks the same by measuring visual similarity (SSIM), instead of guessing a quality number. **Fit for** presets fill in sizes that get through email, Discord and WhatsApp. PDFs shrink too. |
+| **PDF** | **Split…** (every page, every few pages, or ranges like `1-3, 5, 8-`) · **Pages…** to reorder, delete and rotate · **Page numbers…** · **Watermark…** · **Password…** (AES-256; passwords are never saved or logged) · Combine into PDF · **Make searchable PDF** |
+| **Audio and video** | **Trim…** · **Make GIF…** · **Save stills** (ten evenly spaced frames) · **Even out volume** (-16 LUFS, as podcasts do) · **Make subtitles…** as SRT, WebVTT or a transcript, with on-device speech recognition |
+| **Privacy** | **Privacy check…** shows what a file gives away before you share it: GPS location, camera and serial number, names, dates, editing apps, and hidden content such as earlier versions kept inside PDFs. **Remove Metadata** saves cleaned copies. **Hide faces** pixelates, blurs or blacks out every face Vision finds. |
+| **Text and AI** | **Copy text** from pictures and scanned PDFs · **Remove background** to a transparent PNG · **Translate…** documents and subtitles on device (macOS 26), keeping headings, lists, tables and timings · **Read QR code** / **Make QR code** |
+| **Documents and data** | **Word count** ("1,234 words · 6 min read") · Copy text · **Clean up text** · **Combine into one** · **Format JSON** / **Minify JSON**, keeping key order and numbers exactly · **Combine into workbook** (several tables into one .xlsx, a sheet each) |
+| **Folders** (on copies) | **Zip together** · **Merge folders** (identical files kept once) · **Flatten** · **Sort by kind** · **List contents** (a tree with sizes, or a CSV) · **Find duplicates** |
+| **Everyday** | **Rename…** with a pattern such as `Trip {date} {n}`, previewed first · **Copy path** · **Copy name** · **Open in Terminal** · **Share…** (AirDrop, Mail and Messages as presets) · **Copy image** · Copy SHA-256 |
+
+### Around the wheel
+
 - **History** (menu bar → History…): the last 50 jobs, each with Undo. Undo moves results to the Trash, puts replaced originals back and restores old names after Rename.
-- **Drag results out**: the progress window shows the results as an icon you can drag into Finder, Mail or any app (a copy; the files stay put).
-- **Convert Clipboard** (menu bar): converts files copied in Finder, or a copied image such as a screenshot, and puts the result back on the clipboard. A copied image's results go to Downloads.
-- **Replace originals** (Settings → Output, off by default): originals go to the Trash, and a same-format result takes the original's name. Undo puts them back.
-- **Watch folders** (Settings → Watch): files added to a folder are converted, compressed or run through a recipe automatically, into a `Converted` folder inside.
-- **Command line and Shortcuts**: Settings → Advanced → Install Command-Line Tool links `/usr/local/bin/veer` to the app's helper.
-- **AI agents (MCP)**: `veer mcp` is a Model Context Protocol server, so Claude and other AI apps can inspect, convert, compress, clean, subtitle and run recipes on your files, locally. Settings → Advanced → AI agents copies the configuration for Claude Desktop or Claude Code. Password tools aren't offered to agents.
+- **Drag results out** of the progress window into Finder, Mail or any app, or press **Next…** to open the wheel again for the results (convert to PDF, then compress it).
+- **Convert Clipboard** (menu bar): converts files copied in Finder, or a copied image such as a screenshot, and puts the result back on the clipboard.
+- **Replace originals** (Settings → Output, off by default): originals go to the Trash, and a same-format result takes the original's name.
+- **Watch folders** (Settings → Watch): files added to a folder are converted, compressed or run through a loadout automatically, into a `Converted` folder inside.
+- **Loadouts** (Control wheel): your own sets of steps, like a game loadout for your files. **Save as Loadout…** in a tool window keeps its settings, and **Settings → Loadouts** edits them.
+- **Other ways in.** Finder's right-click **Services → Convert with Radlet** (or **Radlet Tools**), **Open With → Radlet**, **⌃⌥V** in Finder for the selected files, and the menu bar (**Convert Files…**, **Tools for Files…**, **Run a Loadout…**, **Convert Finder Selection**). Each opens the wheel for the keyboard: arrow keys to choose, Return to run, Tab to switch wheels, Escape to cancel.
+- **Command line, Shortcuts and AI agents.** The same engine is the `radlet` command. `radlet mcp` is a Model Context Protocol server, so Claude and other AI apps can inspect, convert, compress, clean, subtitle and run loadouts on your files, locally. Password tools aren't offered to agents. See [Reference](#reference).
 
-## How it fits together
+## Tech stack
 
-```
-Finder drag + Shift ──▶ DragWatcher ──▶ WheelController ──inspect──▶ veer serve ──▶ catalog::wheel
-                                              │                          │
-                                         user drops                     run
-                                              ▼                          ▼
-                                     HUD (progress, Undo) ◀──events── job::run_batch ──▶ one `veer worker`
-                                                                                         process per file
-```
+| Layer | Built with |
+| --- | --- |
+| Mac app | Swift 5.10 as a Swift package (no Xcode project), AppKit + SwiftUI, macOS 14+. It avoids SwiftUI macros so it builds with just the Command Line Tools. |
+| On-device intelligence | Apple's Vision (text, subject masks, faces), Speech (subtitles), Translation (macOS 26) and the system text engine for PDF layout, all in the `radlet-vision` helper |
+| Engine and CLI | Rust 2021 (1.88+): `clap`, `serde`, `image` + `webp`, `lopdf`, `resvg` + `svg2pdf`, `pulldown-cmark`, `calamine` + `rust_xlsxwriter`, `zip`, `qrcode` + `rqrr`, `kamadak-exif` |
+| Media | FFmpeg and ffprobe (optional, from Homebrew), macOS `sips` for HEIC and AVIF, PDFium for PDF to image |
+| Protocols | JSON lines between app and engine (`radlet serve`), Model Context Protocol for AI agents (`radlet mcp`) |
+| Quality | 200+ Rust tests and 90+ Swift tests, `rustfmt`, `clippy -D warnings`, `cargo deny` licence checks, GitHub Actions on Linux and macOS |
 
-The wheel knows nothing about formats. The engine returns slots, each with an opaque `action`. The app sends that action back unchanged to run it. New conversions, tools or recipes in the engine show up on the wheel with no app changes.
+## Run it locally
 
-## Build and test the engine (macOS or Linux)
-
-```sh
-cargo test --all               # ~100 unit and end-to-end tests
-cargo build --release
-./target/release/veer formats  # what converts to what on this machine
-```
-
-Optional helpers: `ffmpeg` (and `ffprobe`) for audio and video; macOS's built-in `sips` for HEIC/AVIF; [PDFium](https://github.com/bblanchon/pdfium-binaries) for PDF to image. Set `VEER_PDFIUM=/path/to/libpdfium.dylib` (or `.so`) to use PDFium outside the app; the PDF-to-image tests are skipped without it.
-
-## Build the Mac app (macOS 14+, Xcode or the Command Line Tools)
+There's no published release yet, so for now you build Radlet yourself. You need macOS 14 or later, Xcode or just the Command Line Tools (`xcode-select --install`), and [Rust](https://rustup.rs).
 
 ```sh
-mac/scripts/run.sh             # builds, replaces /Applications/Veer.app and starts it
+git clone https://github.com/Suvraneel/radlet.git
+cd radlet
+mac/scripts/run.sh             # builds Radlet, replaces /Applications/Radlet.app and starts it
 mac/scripts/run.sh --check     # the same, plus a self-test of text recognition
 ```
 
-`run.sh` uses `build-app.sh`, which on its own just makes `dist/Veer.app` (ad-hoc signed).
-
-### Make a release
-
-Pushing a tag such as `v0.2.0` runs `.github/workflows/release.yml`. It builds Veer for Apple silicon and Intel, smoke-tests the bundled helpers, and publishes `Veer-0.2.0.dmg`, a zip and their SHA-256 checksums on the Releases page, with the install steps from `docs/release-notes.md`. GitHub adds the source archives.
+For audio and video, install FFmpeg. Images, PDFs and text work without it.
 
 ```sh
-git tag v0.2.0
-git push origin v0.2.0
+brew install ffmpeg
 ```
 
-`mac/scripts/make-dmg.sh` makes the same files in `dist/` on your own Mac. Set `UNIVERSAL=1` for both architectures and `VERSION=0.2.0` to stamp the version. Releases are ad-hoc signed and not notarized, which is why the first open needs the steps under [Install](#install). `build-app.sh` already takes a `SIGN_IDENTITY` for a Developer ID certificate, if you get one later.
+Radlet lives in the menu bar (a circle-in-a-circle icon), not the Dock, and opens a short welcome guide the first time. Start dragging files in Finder, then hold **Shift**. An app built on your own Mac opens without Gatekeeper's warning.
 
-The build script downloads a pinned PDFium build once (into `target/pdfium`) and bundles it next to the helper. `SKIP_PDFIUM=1` leaves it out, and the app then simply doesn't offer PDF to image.
-
-To work on the wheel or its skins, `swift run --package-path mac VeerLab` opens the Wheel Lab: every style and state of the wheel, drawn by the app's own code, with a skin editor (see [docs/skins.md](docs/skins.md#the-wheel-lab)).
-
-For development you can run the Swift app against a debug helper: `VEER_HELPER=$PWD/target/debug/veer swift run --package-path mac Veer`. The engine finds `veer-vision` next to itself in the app; elsewhere, point `VEER_VISION` at `$(swift build --package-path mac --show-bin-path)/veer-vision`. `veer-vision selftest` checks that text recognition and searchable PDFs work on this Mac.
-
-The Mac app needs **no Accessibility or Input Monitoring permission**. It listens to global mouse events only, and polls the modifier keys and the drag pasteboard while a drag is in progress.
-
-Swift tests cover the app's pure logic (`mac/Sources/VeerKit`): wheel hit-testing and placement for every style, the skin parser and the built-in skins, protocol framing and decoding, HUD state, the diagnostics log, the crop and redact editors, page ranges, the actions tool windows send, "Replace originals" naming and the watch-folder scanner. A contract test decodes a real `veer serve` session, and CI re-records that session with the freshly built helper, so an engine change that would break the app fails the build.
+### The engine on its own (macOS or Linux)
 
 ```sh
-swift test --package-path mac   # needs full Xcode; the Command Line Tools have no XCTest
+cargo test --all               # about 200 unit and end-to-end tests
+cargo build --release
+./target/release/radlet formats  # what converts to what on this machine
 ```
 
-The app avoids `@State` and other SwiftUI macros, because their compiler plugin ships only with Xcode. Keep it that way so the app still builds with just the Command Line Tools.
+The PDF-to-image tests are skipped unless `RADLET_PDFIUM` points at a PDFium library.
 
-### Other ways in
+| Variable | What it does |
+| --- | --- |
+| `RADLET_PDFIUM` | Path to `libpdfium.dylib` (or `.so`), for PDF to image outside the app |
+| `RADLET_FFMPEG`, `RADLET_FFPROBE` | Use these binaries instead of the ones on `PATH` or in Homebrew's usual locations |
+| `RADLET_VISION` | Path to the `radlet-vision` helper, when the engine isn't running inside the app |
+| `RADLET_HELPER` | Run the Swift app against this `radlet` binary, such as a debug build |
+| `RADLET_LOADOUTS_DIR` | Where loadouts live (default `~/Library/Application Support/Radlet/Loadouts/`) |
+| `RADLET_PASSWORD` | The password for `radlet protect` and `radlet unlock`, kept out of `ps` |
 
-The drag gesture is the fast path, but every conversion is reachable without it:
-
-- **Finder right-click → Services → Convert with Veer** (or **Veer Tools**)
-- **Open With → Veer** on any file
-- The menu bar: **Convert Files…**, **Tools for Files…**, **Run a Recipe…**, **Convert Clipboard**
-
-Each opens the wheel for keyboard use: arrow keys to choose, Return to run, Tab to switch wheels, Escape to cancel.
-
-### Shortcuts
-
-After **Settings → Advanced → Install Command-Line Tool…**, any shortcut can use Veer through a **Run Shell Script** action. Set **Pass Input** to **as arguments**, then use a script such as:
+### Working on the Mac app
 
 ```sh
-/usr/local/bin/veer convert --to jpeg "$@"
+swift run --package-path mac RadletLab     # the Wheel Lab: every style and state, plus a skin editor
+swift test --package-path mac            # needs full Xcode; the Command Line Tools have no XCTest
+RADLET_HELPER=$PWD/target/debug/radlet swift run --package-path mac Radlet   # against a debug engine
 ```
 
-Other examples: `veer compress --target 2MB "$@"`, `veer resize --max 1600 "$@"`, `veer recipe "Web-ready image" "$@"`. Add `--json` to get one JSON line per file, which **Get Dictionary from Input** can read. Use the full path, because Shortcuts doesn't read your shell's `PATH`.
+Outside the app, point `RADLET_VISION` at `$(swift build --package-path mac --show-bin-path)/radlet-vision`. `radlet-vision selftest` checks that text recognition and searchable PDFs work on this Mac. Keep SwiftUI macros such as `@State` out of the app, so it still builds with just the Command Line Tools.
 
-Native Shortcuts actions (App Intents) need Xcode's build tools, which this project deliberately doesn't require. They're on the roadmap for a release built with Xcode.
+The Swift tests cover the app's pure logic in `RadletKit`: wheel hit-testing for every style, the skin parser and built-in skins, protocol framing, HUD state, the crop and redact editors, "Replace originals" naming and the watch-folder scanner. A contract test decodes a real `radlet serve` session, and CI re-records that session with the freshly built engine, so an engine change that would break the app fails the build.
+
+### Sharing a build
+
+`mac/scripts/build-app.sh` makes `dist/Radlet.app` (ad-hoc signed). `mac/scripts/make-dmg.sh` packs `dist/Radlet-<version>.dmg`, a zip and their SHA-256 checksums. Set `UNIVERSAL=1` for Apple silicon and Intel, `VERSION=0.2.0` to stamp a version, and `SKIP_PDFIUM=1` to leave out PDF to image. The build downloads a pinned PDFium once into `target/pdfium`.
+
+These builds aren't notarized, so whoever opens one has to allow it once. [docs/release-notes.md](docs/release-notes.md) has the steps. `build-app.sh` already takes a `SIGN_IDENTITY` for a Developer ID certificate.
+
+### Upgrading from a Veer build
+
+Radlet was called Veer in earlier builds. When it starts, it carries everything over: settings, loadouts (then called recipes), skins and History. A few things need a hand:
+
+- **Command-line tool:** the old `/usr/local/bin/veer` link points at the old app. Use **Settings → Advanced → Install Command-Line Tool…** to add `radlet`, then delete the old link.
+- **Start at login:** turn it on again in **Settings → General**.
+- **AI agents:** the MCP server is now `radlet`; copy the new configuration from **Settings → Advanced**.
+- **Environment variables:** `VEER_*` variables are now `RADLET_*`, and `VEER_RECIPES_DIR` is `RADLET_LOADOUTS_DIR`.
+- **Delete `Veer.app`** from Applications once Radlet is running.
+
+### The landing page
+
+`site/` is a single static page, served from two places. **[radlet.vercel.app](https://radlet.vercel.app)** is the canonical address: the page names it in its canonical link and share-card tags, so search engines and link previews use it. **[suvraneel.github.io/radlet](https://suvraneel.github.io/radlet/)** is a mirror.
+
+- **Vercel:** import the repository and set **Root Directory** to `site`, leaving **Include files outside the root directory in the Build Step** on. `site/vercel.json` copies the demo video and the skins image in from `.github/media` and `docs/images`, so they aren't stored twice.
+- **GitHub Pages:** in the repository's **Settings → Pages**, set **Source** to **GitHub Actions**. `.github/workflows/pages.yml` copies the same two files in and publishes the page on every push to `main` that changes it.
+
+If the media can't be copied, the page loads it from GitHub through jsDelivr. `python3 -m http.server --directory site` previews it locally (copy those two files into `site/media/` first, or the page uses the copies on GitHub).
 
 ### Troubleshooting
 
-Veer keeps a diagnostics log at `~/Library/Logs/Veer/veer.log`. It records what the drag watcher saw (pasteboard types, modifier keys, trigger decisions), wheel choices and helper restarts. It records file counts and extensions, never names or paths. **Menu bar → Troubleshooting → Copy Diagnostics** puts the system details and the last 200 log lines on the clipboard, ready to paste into a bug report.
+Radlet keeps a diagnostics log at `~/Library/Logs/Radlet/radlet.log`: what the drag watcher saw, wheel choices and helper restarts. It records file counts and extensions, never names or paths. **Menu bar → Troubleshooting → Copy Diagnostics** copies the system details and the last 200 log lines, ready for a bug report.
 
-## CLI
+## Project structure
+
+```
+crates/
+  radlet-core/            the engine: format detection, the catalogue behind the wheel,
+                        jobs and workers, never-overwrite naming, loadouts, privacy check
+    src/engines/        one module per kind: image, pdf, doc, docx, sheet, media,
+                        archive, folder, svg, icons, codes, vision, speech, translate…
+  radlet-cli/             the `radlet` binary: the CLI, `radlet serve` (for the app), `radlet mcp`
+mac/
+  Sources/Radlet/         the menu bar app: drag watcher, wheel, progress HUD, settings, tool windows
+  Sources/RadletKit/      unit-tested logic: protocol models, wheel geometry, skins, history, rename
+  Sources/RadletUI/       draws and drives the wheel, shared by the app and the Wheel Lab
+  Sources/RadletLab/      the Wheel Lab, a storybook and skin editor for the wheel
+  Sources/radlet-vision/  the Vision, Speech and Translation helper the engine runs
+  Tests/RadletKitTests/   Swift tests, including the live protocol contract
+  scripts/              run.sh, build-app.sh, make-dmg.sh, contract-session.sh
+examples/loadouts/      a sample loadout
+docs/                   wheel styles and skins, release notes, images
+site/                   the landing page: radlet.vercel.app, mirrored on GitHub Pages
+.github/                CI and Pages workflows, and the README's demo media
+deny.toml               licence policy: every dependency must be permissive
+```
+
+## Reference
+
+<details>
+<summary><strong>CLI</strong></summary>
 
 ```sh
-veer convert *.heic --to jpg              # one output per input, beside the original
-veer convert talk.mkv --to mp4            # remuxes without re-encoding when codecs allow
-veer convert report.pdf --to png          # one image per page (needs PDFium)
-veer text receipt.jpg                     # prints the recognised text (macOS app)
-veer convert scan.png --to txt            # saves it as scan.txt instead
-veer searchable scan.pdf                  # "scan (searchable).pdf"
-veer cutout portrait.jpg --crop           # transparent PNG trimmed to the subject
-veer resize photos/*.jpg --max 1600 --out ~/Desktop/small
-veer resize banner.png --width 1200       # exact width, keeps the aspect ratio
-veer crop photo.jpg --rect 0.1,0.1,0.8,0.8 # fractions x,y,w,h: keeps the middle 80%
-veer redact scan.png --rect 0.6,0.05,0.35,0.1 --style black
-veer strip IMG_0042.jpg                   # lossless: drops GPS/EXIF, keeps orientation and colour profile
-veer compress clip.mov --level strong
-veer compress photo.jpg --target 500KB
-veer split book.pdf --ranges "1-3, 5, 8-" # or --every 10; default: every page
-veer pages deck.pdf --order 3 --order 1 --order 2 --rotate 1:90
-veer numbers report.pdf --style page-of-total --position bottom-right --skip-first
-veer watermark contract.pdf --text DRAFT --opacity 0.2
-VEER_PASSWORD=secret veer protect statement.pdf # env keeps the password out of `ps`
-VEER_PASSWORD=secret veer unlock "statement (protected).pdf"
-veer trim interview.m4a --start 1:30 --end 12:05
-veer gif clip.mov --start 3 --end 6.5
-veer frames talk.mp4 --count 12 --format png
-veer normalize podcast.wav
-veer compress photo.jpg --level smart      # smallest file that still looks the same
-veer privacy IMG_0042.jpg report.pdf      # what they reveal; veer strip removes it
-veer subtitles talk.mp4 --language en-US  # talk.srt (--to vtt or txt); macOS app
-veer mcp                                  # serve Veer's tools to an AI agent
-veer combine scan1.png scan2.png notes.pdf
-veer checksum installer.dmg
-veer recipe "Web-ready image" *.png
-veer --json convert a.png --to webp       # JSON lines for scripts
+radlet convert *.heic --to jpg              # one output per input, beside the original
+radlet convert talk.mkv --to mp4            # remuxes without re-encoding when codecs allow
+radlet convert report.pdf --to png          # one image per page (needs PDFium)
+radlet text receipt.jpg                     # prints the recognised text (macOS app)
+radlet convert scan.png --to txt            # saves it as scan.txt instead
+radlet searchable scan.pdf                  # "scan (searchable).pdf"
+radlet cutout portrait.jpg --crop           # transparent PNG trimmed to the subject
+radlet resize photos/*.jpg --max 1600 --out ~/Desktop/small
+radlet resize banner.png --width 1200       # exact width, keeps the aspect ratio
+radlet crop photo.jpg --rect 0.1,0.1,0.8,0.8 # fractions x,y,w,h: keeps the middle 80%
+radlet redact scan.png --rect 0.6,0.05,0.35,0.1 --style black
+radlet strip IMG_0042.jpg                   # lossless: drops GPS/EXIF, keeps orientation and colour profile
+radlet compress clip.mov --level strong
+radlet compress photo.jpg --target 500KB
+radlet compress photo.jpg --level smart     # smallest file that still looks the same
+radlet split book.pdf --ranges "1-3, 5, 8-" # or --every 10; default: every page
+radlet pages deck.pdf --order 3 --order 1 --order 2 --rotate 1:90
+radlet numbers report.pdf --style page-of-total --position bottom-right --skip-first
+radlet watermark contract.pdf --text DRAFT --opacity 0.2
+RADLET_PASSWORD=secret radlet protect statement.pdf # env keeps the password out of `ps`
+RADLET_PASSWORD=secret radlet unlock "statement (protected).pdf"
+radlet trim interview.m4a --start 1:30 --end 12:05
+radlet gif clip.mov --start 3 --end 6.5
+radlet frames talk.mp4 --count 12 --format png
+radlet normalize podcast.wav
+radlet privacy IMG_0042.jpg report.pdf      # what they reveal; radlet strip removes it
+radlet subtitles talk.mp4 --language en-US  # talk.srt (--to vtt or txt); macOS app
+radlet mcp                                  # serve Radlet's tools to an AI agent
+radlet combine scan1.png scan2.png notes.pdf  # documents and SVGs go in too
+radlet convert notes.md --to docx           # or pdf, html, rtf, txt; and back again
+radlet convert logo.svg --to png            # at least 1024 px; radlet resize logo.svg --max 4096
+radlet convert orders.csv --to json         # csv, tsv, json, md and html tables
+radlet convert orders.csv --to xlsx         # and back: radlet convert book.xlsx --to csv
+radlet workbook jan.csv feb.csv mar.csv     # "jan (combined).xlsx", a sheet each
+radlet convert Photos --to jpeg             # "Photos (JPEG)": the pictures inside, converted
+radlet codes poster.jpg                     # prints what its QR code says
+radlet qr wifi.txt                          # "wifi (QR code).png"
+radlet icons logo.svg --set favicon         # or --set mac (logo.icns), --set ios
+radlet faces party.jpg --style blur         # Vision; macOS app
+radlet translate notes.md --to fr           # "notes (fr).md"; macOS 26 app
+radlet words essay.docx                     # 1,234 words · 6 min read
+radlet join week1.md week2.md               # "week1 (combined).md"
+radlet json data.json --minify              # or without --minify to re-indent
+radlet clean notes.txt                      # UTF-8, \n line endings, no trailing spaces
+radlet zip Photos notes.txt                 # Archive.zip; radlet convert Photos --to zip for one each
+radlet unzip Archive.zip
+radlet merge "Photos 2023" "Photos 2024"    # "Photos 2023 (merged)"
+radlet flatten Downloads                    # or: radlet sort, radlet list --csv, radlet duplicates
+radlet checksum installer.dmg
+radlet loadout "Web-ready image" *.png
+radlet --json convert a.png --to webp       # JSON lines for scripts
 ```
 
 Exit codes: `0` everything done or skipped, `1` at least one file failed, `2` usage error.
 
-## Recipes
+**Settings → Advanced → Install Command-Line Tool** links `/usr/local/bin/radlet` to the app's helper.
 
-A recipe is a named chain of steps in a TOML file. Put recipes in `~/Library/Application Support/Veer/recipes/` (or `$VEER_RECIPES_DIR`), and they appear on the Control wheel and in `veer recipes`.
+</details>
+
+<details>
+<summary><strong>Shortcuts</strong></summary>
+
+After installing the command-line tool, any shortcut can use Radlet through a **Run Shell Script** action. Set **Pass Input** to **as arguments**, then use a script such as:
+
+```sh
+/usr/local/bin/radlet convert --to jpeg "$@"
+```
+
+Other examples: `radlet compress --target 2MB "$@"`, `radlet resize --max 1600 "$@"`, `radlet loadout "Web-ready image" "$@"`. Add `--json` to get one JSON line per file, which **Get Dictionary from Input** can read. Use the full path, because Shortcuts doesn't read your shell's `PATH`.
+
+</details>
+
+<details>
+<summary><strong>Loadouts</strong></summary>
+
+A loadout is a named set of steps in a TOML file. Put loadouts in `~/Library/Application Support/Radlet/Loadouts/` (or `$RADLET_LOADOUTS_DIR`), and they appear on the Control wheel and in `radlet loadouts`. Loadouts used to be called recipes: `radlet recipe`, `radlet recipes` and older files still work.
 
 ```toml
 name = "Web-ready image"
@@ -250,11 +336,14 @@ op = "strip_metadata"
 
 Steps: `convert {to, quality?}`, `resize {max | percent | width | height}`, `rotate {degrees}`, `crop {rect}`, `redact {rects, style?}`, `strip_metadata`, `compress {level?: light|balanced|strong|smart, target_bytes?}`, `pages {pages, rotate?}`, `page_numbers {position?, style?, start?, size?, skip_first?}`, `watermark {text, opacity?, size?, diagonal?}`, `trim {start?, end?}`, `normalize_audio`, `remove_background {crop?}`, `make_searchable`, `transcribe {to?: srt|vtt|txt, language?}`. A `rect` is `{x, y, w, h}` in fractions of the picture; times are in seconds. Image steps share one decode and one encode, so chains never compress twice.
 
-You don't have to write TOML: **Save as Recipe…** in a tool window, or **Settings → Recipes**, writes the file for you. Saving never overwrites another recipe; a name that's taken gets a number. Passwords can't go in a recipe.
+You don't have to write TOML: **Save as Loadout…** in a tool window, or **Settings → Loadouts**, writes the file for you. Saving never overwrites another loadout; a name that's taken gets a number. Passwords can't go in a loadout. [examples/loadouts/thumbnail.toml](examples/loadouts/thumbnail.toml) is a starting point.
 
-## Helper protocol (`veer serve`)
+</details>
 
-JSON, one object per line. Every request gets exactly one reply with the same `id`.
+<details>
+<summary><strong>Helper protocol (<code>radlet serve</code>)</strong></summary>
+
+JSON, one object per line. Every request gets exactly one reply with the same `id`. Loadouts keep their earlier name, recipes, in the protocol.
 
 | Method | Params | Result |
 | --- | --- | --- |
@@ -264,33 +353,35 @@ JSON, one object per line. Every request gets exactly one reply with the same `i
 | `cancel` | `job` | `cancelled` |
 | `recipes` | `recipes_dir?` | `recipes` (built-ins marked `builtin`, the user's with their `path`), `errors` |
 | `privacy` | `paths` | `reports`: per file, `findings` (`kind`, `label`, `detail`, `removable`, `latitude`/`longitude` for places) or an `error` |
-| `save_recipe` | `recipe`, `recipes_dir?`, `replace?` | `path`. A new file never overwrites; `replace` rewrites one recipe file in the recipes folder. |
+| `save_recipe` | `recipe`, `recipes_dir?`, `replace?` | `path`. A new file never overwrites; `replace` rewrites one loadout file in the loadouts folder. |
 | `shutdown` | none | `{}`, then the helper exits |
 
-When stdin closes (the app quit or crashed), the helper cancels its jobs and exits. A worker whose supervisor dies kills itself and its FFmpeg.
+</details>
 
-## Guarantees
+## Current status
 
-- **Never overwrites.** Outputs are written to a hidden temporary file and hard-linked into place under a free name (`photo 2.jpg`), which fails if the name is taken. Originals are never modified; with "Replace originals" on, the app moves them to the Trash, where Undo can find them.
-- **Tidy multi-file results.** Up to four pages or parts are saved next to the original; more go into one folder, such as `report (pages)`.
-- **One bad file fails only itself.** Each file runs in its own worker process with a time limit. Crashes and hangs are reported per file, and partial outputs are deleted.
-- **Upright and colour-correct.** EXIF orientation is applied to pixels, and ICC profiles are carried into PNG, JPEG, WebP, TIFF and PDF outputs.
-- **Bounded inputs.** Images up to 40,000 px a side and 1 GiB decoded; PDFs decompress to at most 512 MB; text files up to 64 MB.
-- **Local only.** No network access, accounts or telemetry.
+Version 0.1.0, working towards 1.0.
 
-## Clean-room policy
+- **No release yet.** There's no download on the Releases page and no release workflow, so you build from source (or share a DMG from `make-dmg.sh`). Builds are ad-hoc signed and not notarized.
+- **What CI checks.** On Linux: formatting, clippy, every engine test (including the end-to-end, protocol, FFmpeg and PDFium tests) and the licence policy. On macOS: the engine tests again, the Swift tests, a live protocol contract against the freshly built engine, the app bundle build, and a smoke test of the bundled helpers, including `radlet-vision selftest`.
+- **Tested on a Mac.** The newest pieces (Hide faces, Translate, Share, Copy image, Next… and ⌃⌥V) have been run on a real Mac, on top of the Linux end-to-end tests.
+- **About the demo video.** The wheel frames are drawn by Radlet's own SwiftUI code, using slots the real engine returned for three HEIC photos. The Finder window, pointer and progress HUD were recreated for the video, and the photos are generated. Its title and end cards were re-lettered when Veer became Radlet.
 
-No code, assets or text were taken from other apps, and no other app's source code was opened. Behaviour was specified from public material only: websites, store listings and reviews. Every dependency is permissively licensed (MIT, Apache-2.0, BSD, Zlib, ISC), and `cargo deny check licenses` enforces this. See `THIRD_PARTY.md`.
-
-## Known limits
+<details>
+<summary><strong>Known limits</strong></summary>
 
 - Resize and rotate refuse animated GIFs rather than flatten them. Converting an animated GIF to a still format keeps the first frame. Removing metadata from a GIF is lossless and keeps every frame.
-- Office formats (DOCX, PPTX, XLSX) aren't implemented yet. See the roadmap.
+- Word files are read for their text and structure: headings, lists, quotes, code, tables, bold, italic and links. Pictures, comments, footnotes, headers and footers aren't carried over, and Word output uses Calibri and simple styles. PowerPoint files aren't handled yet.
+- Excel workbooks are read for their values: a formula gives the result Excel last saved, and formatting, charts and merged cells aren't carried over. Workbooks are refused if they'd unpack to more than 512 MB.
+- Hide faces finds the faces Vision detects; very small, turned-away or covered faces can be missed, so check the result before sharing. Read QR code reads QR codes only, not other barcodes.
+- Translate needs macOS 26 and the two languages downloaded in System Settings → General → Language & Region → Translation Languages. Each paragraph is translated as a whole, so bold or italic words inside one come out plain.
+- Without the Mac app, documents become PDF through a built-in writer with the standard PDF fonts (Helvetica, Courier), which cover Western European languages; other letters print as "?".
+- Password-protected ZIP files can't be opened yet, nor archives compressed with methods other than Deflate and Deflate64.
 - Text recognition, Remove background and searchable PDFs need the Mac app (macOS 14 or later); the engine on Linux doesn't offer them. A searchable PDF made from a PDF is redrawn page by page, so links, form fields and bookmarks aren't carried over.
 - PDF to image needs the bundled PDFium. Password-protected PDFs are refused by the other PDF tools; remove the password first with **Password…**.
-- A PDF with only an owner password (editing restrictions, no password to open it) opens without one, so Veer's PDF tools treat it as unlocked and their results drop those restrictions.
-- Make subtitles needs the Mac app (macOS 14 or later), permission for speech recognition (Veer asks the first time) and the language's on-device model, which macOS downloads when Dictation is turned on for it. macOS grants this per app, so from Terminal or an AI app subtitles work only if that app has been allowed speech recognition; Veer doesn't ask from there. Accuracy is that of macOS dictation: good for clear speech, weaker with music, crosstalk or strong accents.
-- Smart compression measures JPEG and WebP; other formats use Balanced. It is honest: if the original is already as small as it can get without visible change, Veer says so instead of making a worse copy.
+- A PDF with only an owner password (editing restrictions, no password to open it) opens without one, so Radlet's PDF tools treat it as unlocked and their results drop those restrictions.
+- Make subtitles needs the Mac app (macOS 14 or later), permission for speech recognition (Radlet asks the first time) and the language's on-device model, which macOS downloads when Dictation is turned on for it. macOS grants this per app, so from Terminal or an AI app subtitles work only if that app has been allowed speech recognition. Accuracy is that of macOS dictation: good for clear speech, weaker with music, crosstalk or strong accents.
+- Smart compression measures JPEG and WebP; other formats use Balanced. If the original is already as small as it can get without visible change, Radlet says so instead of making a worse copy.
 - Page numbers and watermarks use Helvetica, so they take Latin letters, numbers and punctuation only.
 - Shrinking a PDF recompresses its 8-bit RGB and greyscale pictures; text, vector drawings and CMYK pictures are left as they are.
 - Trim, Make GIF and Even out volume re-encode what they keep, so cuts are exact but take as long as a conversion.
@@ -298,7 +389,21 @@ No code, assets or text were taken from other apps, and no other app's source co
 - Compress to a target size for video needs `ffprobe` and works out a bitrate from the duration, so the result lands near the target rather than exactly on it.
 - PDF to text only returns selectable text. Run **Make searchable PDF** on a scan first.
 
-## Status
+</details>
 
+## Roadmap
+
+- [ ] Publish the first release: a tag-triggered workflow around `make-dmg.sh`, with the notes in `docs/release-notes.md`.
+- [ ] Sign with a Developer ID and notarize, so the first open needs no workaround.
+- [ ] Rename the GitHub repository to `radlet`, and publish the landing page on Vercel and GitHub Pages.
+- [ ] Native Shortcuts actions (App Intents), in a release built with Xcode.
+- [ ] PowerPoint files, password-protected ZIPs and other ZIP compression methods.
+
+## License
+
+There's no open-source licence yet. `Cargo.toml` marks the code `LicenseRef-Proprietary`, so all rights are reserved for now, even though the source is public.
+
+Every dependency is permissively licensed (MIT, Apache-2.0, BSD, Zlib, ISC), and `cargo deny check licenses` enforces it. See [THIRD_PARTY.md](THIRD_PARTY.md).
+
+Radlet is clean-room work. No code, assets or text were taken from other apps, and no other app's source code was opened. Behaviour was specified from public material only: websites, store listings and reviews.
 Version 1.0 in progress. Newest: wheel styles (Dial, plus Orbit and Bloom as advanced options) with presets from the engine, and skins written as CSS custom properties, with six built in. The wheel's tracking (dead zone, sticky borders, Orbit's ring line, Bloom's rest-or-flick) and the skin parser are unit-tested on Linux; the drawing itself still needs a look on a Mac. Before that: Privacy check, Make subtitles (on-device speech recognition), Smart compression and an MCP server for AI agents. Before that, the extras: PDF page numbers, watermarks, passwords, shrinking and single-page rotation; trim, GIF, stills and loudness for media; batch rename; History with multi-step undo; drag-out; Convert Clipboard; and a recipe editor. The engine is built and tested on Linux, including the end-to-end, protocol and PDFium tests, and its licences are checked with `cargo deny`. The Mac app builds with the Command Line Tools. Text recognition, Remove background and searchable PDFs are new: the engine side is tested against a stand-in helper, and `veer-vision selftest` (run by CI and by `run.sh --check`) checks the real one on a Mac.
-# Veer
