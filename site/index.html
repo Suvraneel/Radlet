@@ -11,6 +11,8 @@
 <meta property="og:description" content="Drag. Hold Shift. Drop. Convert, compress, crop, translate and more, without leaving Finder. Free, macOS 14+, and nothing leaves your Mac.">
 <meta property="og:image" content="https://radlet.vercel.app/og.jpg">
 <meta property="og:url" content="https://radlet.vercel.app/">
+<!-- Also served from GitHub Pages; this is the address search engines should use. -->
+<link rel="canonical" href="https://radlet.vercel.app/">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -280,7 +282,7 @@ footer a:hover { color: var(--text); }
     <a href="#loadouts">Loadouts</a>
     <a href="#agents">CLI &amp; agents</a>
   </div>
-  <a class="btn btn-ghost btn-small gh" href="https://github.com/Suvraneel/Veer">GitHub<span class="knob"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 11 11 5M6 5h5v5"/></svg></span></a>
+  <a class="btn btn-ghost btn-small gh" href="https://github.com/Suvraneel/radlet">GitHub<span class="knob"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 11 11 5M6 5h5v5"/></svg></span></a>
   <button class="menu-btn" aria-label="Menu" aria-expanded="false" aria-controls="menu"><span></span><span></span></button>
 </nav>
 <div class="overlay" id="menu" inert>
@@ -288,7 +290,7 @@ footer a:hover { color: var(--text); }
   <a href="#features">Features</a>
   <a href="#loadouts">Loadouts</a>
   <a href="#agents">CLI &amp; agents</a>
-  <a href="https://github.com/Suvraneel/Veer">GitHub</a>
+  <a href="https://github.com/Suvraneel/radlet">GitHub</a>
 </div>
 
 <main id="top">
@@ -300,7 +302,7 @@ footer a:hover { color: var(--text); }
         <h1 class="reveal d1">A weapon wheel <span class="soft">for your files.</span></h1>
         <p class="lead reveal d2">Drag files in Finder, hold a key, flick to a tool. Convert, compress, crop, translate and dozens more, right where your files already are.</p>
         <div class="cta reveal d3">
-          <a class="btn btn-primary" href="https://github.com/Suvraneel/Veer#run-it-locally">Get Radlet<span class="knob"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3v8M4.5 7.5 8 11l3.5-3.5M3 13h10"/></svg></span></a>
+          <a class="btn btn-primary" href="https://github.com/Suvraneel/radlet#run-it-locally">Get Radlet<span class="knob"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3v8M4.5 7.5 8 11l3.5-3.5M3 13h10"/></svg></span></a>
           <a class="btn btn-ghost" href="#demo">Watch the demo<span class="knob"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 3.8v8.4L12 8z"/></svg></span></a>
         </div>
         <p class="note reveal d3">No signed release yet: it builds from source in two commands, for Apple silicon and Intel.</p>
@@ -330,7 +332,7 @@ footer a:hover { color: var(--text); }
         <div class="core">
           <video id="video" autoplay muted loop playsinline preload="metadata" poster="media/poster.jpg" aria-label="Radlet in Finder: three photos are dragged, Shift is held, a wheel of formats opens, and dropping on JPEG makes three JPEGs next to the originals">
             <source src="media/demo.mp4" type="video/mp4">
-            <source src="https://cdn.jsdelivr.net/gh/Suvraneel/Veer@main/.github/media/demo.mp4" type="video/mp4">
+            <source src="https://cdn.jsdelivr.net/gh/Suvraneel/radlet@main/.github/media/demo.mp4" type="video/mp4">
           </video>
           <div class="vctl">
           <button class="btn btn-ghost btn-small" id="play">Pause<span class="knob"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 3.5h2.4v9H4.5zM9.1 3.5h2.4v9H9.1z"/></svg></span></button>
@@ -409,7 +411,7 @@ footer a:hover { color: var(--text); }
           <svg class="ico-line" viewBox="0 0 32 32"><circle cx="16" cy="16" r="11"/><path d="M16 5v22M5 16h22" opacity=".5"/><path d="M16 5a11 11 0 0 1 11 11H16z" fill="rgba(61,139,255,.35)"/></svg>
           <h3>Skins and styles</h3>
           <p>Six built-in skins, or write your own as a few lines of CSS. Turn on Orbit or Bloom for a second ring of presets.</p>
-          <div class="skins-img"><img src="media/skins.png" alt="The wheel in six skins: Glass, Instrument, Tactical, Neon, Sunset and Porcelain" loading="lazy" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/gh/Suvraneel/Veer@main/docs/images/skins.png'"></div>
+          <div class="skins-img"><img src="media/skins.png" alt="The wheel in six skins: Glass, Instrument, Tactical, Neon, Sunset and Porcelain" loading="lazy" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/gh/Suvraneel/radlet@main/docs/images/skins.png'"></div>
         </div></div>
         <div class="shell tile t-h reveal d1"><div class="core">
           <svg class="ico-line" viewBox="0 0 32 32"><rect x="5" y="7" width="22" height="18" rx="4"/><path d="M10 13l3 3-3 3M16 19h6"/></svg>
@@ -501,8 +503,8 @@ footer a:hover { color: var(--text); }
       <span class="eyebrow reveal"><i></i>Free for macOS 14 and later</span>
       <h2 class="reveal d1">Put every file tool on one wheel.</h2>
       <div class="cta reveal d2">
-        <a class="btn btn-primary" href="https://github.com/Suvraneel/Veer#run-it-locally">Get Radlet<span class="knob"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3v8M4.5 7.5 8 11l3.5-3.5M3 13h10"/></svg></span></a>
-        <a class="btn btn-ghost" href="https://github.com/Suvraneel/Veer">View the source<span class="knob"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 11 11 5M6 5h5v5"/></svg></span></a>
+        <a class="btn btn-primary" href="https://github.com/Suvraneel/radlet#run-it-locally">Get Radlet<span class="knob"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3v8M4.5 7.5 8 11l3.5-3.5M3 13h10"/></svg></span></a>
+        <a class="btn btn-ghost" href="https://github.com/Suvraneel/radlet">View the source<span class="knob"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 11 11 5M6 5h5v5"/></svg></span></a>
       </div>
     </div>
   </section>
@@ -511,7 +513,7 @@ footer a:hover { color: var(--text); }
 <footer>
   <div class="wrap row">
     <span>© 2026 Usemonoma. Radlet is clean-room work: no code or assets from other apps.</span>
-    <span><a href="https://github.com/Suvraneel/Veer">Source on GitHub</a></span>
+    <span><a href="https://github.com/Suvraneel/radlet">Source on GitHub</a></span>
   </div>
 </footer>
 
