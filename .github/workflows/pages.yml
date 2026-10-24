@@ -1,0 +1,44 @@
+name: Site
+
+# Publishes site/ to GitHub Pages (suvraneel.github.io/radlet), a mirror of
+# radlet.vercel.app. Turn it on in Settings → Pages → Source: GitHub Actions.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/media/demo.mp4"
+      - "docs/images/skins.png"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a newer push waits rather than cancelling one
+# that's halfway out.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Publish the landing page
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Copy in the demo video and skins image
+        run: |
+          mkdir -p site/media
+          cp .github/media/demo.mp4 docs/images/skins.png site/media/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,6 +1,6 @@
 <div align="center">
 
-<a href="https://cdn.jsdelivr.net/gh/Suvraneel/Veer@main/.github/media/demo.mp4"><img src=".github/media/demo.gif" alt="Radlet in action: three HEIC photos are dragged in Finder, Shift is held, a wheel of formats opens under the pointer, and dropping on JPEG puts three JPEGs next to the originals" width="100%"></a>
+<a href="https://cdn.jsdelivr.net/gh/Suvraneel/radlet@main/.github/media/demo.mp4"><img src=".github/media/demo.gif" alt="Radlet in action: three HEIC photos are dragged in Finder, Shift is held, a wheel of formats opens under the pointer, and dropping on JPEG puts three JPEGs next to the originals" width="100%"></a>
 
 <h1>Radlet</h1>
 
@@ -8,7 +8,7 @@
 Drag files, hold a key, flick to a tool. Convert, compress, crop, translate and dozens more, without leaving Finder. A free menu bar app for macOS that does all the work on your Mac.</p>
 
 <p>
-  <a href="https://cdn.jsdelivr.net/gh/Suvraneel/Veer@main/.github/media/demo.mp4"><strong>▶ Watch the 20-second demo</strong></a> (with sound)
+  <a href="https://cdn.jsdelivr.net/gh/Suvraneel/radlet@main/.github/media/demo.mp4"><strong>▶ Watch the 20-second demo</strong></a> (with sound)
   &nbsp;·&nbsp;
   <a href="https://radlet.vercel.app"><strong>Website</strong></a>
   &nbsp;·&nbsp;
@@ -136,7 +136,7 @@ Tools ending in "…" open a window first, with a live preview where it helps.
 There's no published release yet, so for now you build Radlet yourself. You need macOS 14 or later, Xcode or just the Command Line Tools (`xcode-select --install`), and [Rust](https://rustup.rs).
 
 ```sh
-git clone https://github.com/Suvraneel/Veer.git radlet
+git clone https://github.com/Suvraneel/radlet.git
 cd radlet
 mac/scripts/run.sh             # builds Radlet, replaces /Applications/Radlet.app and starts it
 mac/scripts/run.sh --check     # the same, plus a self-test of text recognition
@@ -199,7 +199,12 @@ Radlet was called Veer in earlier builds. When it starts, it carries everything 
 
 ### The landing page
 
-`site/` is a single static page. In Vercel, import the repository and set **Root Directory** to `site`, leaving **Include files outside the root directory in the Build Step** on. Its build copies the demo video and the skins image in from `.github/media` and `docs/images`, so they aren't stored twice. If they can't be copied, the page loads them from GitHub through jsDelivr; those links name the `Suvraneel/Veer` repository, so update them if the repository is renamed. `python3 -m http.server --directory site` previews it locally (copy those two files into `site/media/` first, or the page uses the copies on GitHub).
+`site/` is a single static page, served from two places. **[radlet.vercel.app](https://radlet.vercel.app)** is the canonical address: the page names it in its canonical link and share-card tags, so search engines and link previews use it. **[suvraneel.github.io/radlet](https://suvraneel.github.io/radlet/)** is a mirror.
+
+- **Vercel:** import the repository and set **Root Directory** to `site`, leaving **Include files outside the root directory in the Build Step** on. `site/vercel.json` copies the demo video and the skins image in from `.github/media` and `docs/images`, so they aren't stored twice.
+- **GitHub Pages:** in the repository's **Settings → Pages**, set **Source** to **GitHub Actions**. `.github/workflows/pages.yml` copies the same two files in and publishes the page on every push to `main` that changes it.
+
+If the media can't be copied, the page loads it from GitHub through jsDelivr. `python3 -m http.server --directory site` previews it locally (copy those two files into `site/media/` first, or the page uses the copies on GitHub).
 
 ### Troubleshooting
 
@@ -224,8 +229,8 @@ mac/
   scripts/              run.sh, build-app.sh, make-dmg.sh, contract-session.sh
 examples/loadouts/      a sample loadout
 docs/                   wheel styles and skins, release notes, images
-site/                   the landing page for radlet.vercel.app
-.github/                CI workflow and the README's demo media
+site/                   the landing page: radlet.vercel.app, mirrored on GitHub Pages
+.github/                CI and Pages workflows, and the README's demo media
 deny.toml               licence policy: every dependency must be permissive
 ```
 
@@ -390,7 +395,7 @@ Version 0.1.0, working towards 1.0.
 
 - [ ] Publish the first release: a tag-triggered workflow around `make-dmg.sh`, with the notes in `docs/release-notes.md`.
 - [ ] Sign with a Developer ID and notarize, so the first open needs no workaround.
-- [ ] Rename the GitHub repository to Radlet, and deploy the landing page in `site/` to radlet.vercel.app.
+- [ ] Rename the GitHub repository to `radlet`, and publish the landing page on Vercel and GitHub Pages.
 - [ ] Native Shortcuts actions (App Intents), in a release built with Xcode.
 - [ ] PowerPoint files, password-protected ZIPs and other ZIP compression methods.
 
