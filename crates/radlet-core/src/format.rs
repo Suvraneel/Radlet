@@ -502,8 +502,8 @@ fn classify_ftyp(h: &[u8], hint: Option<Format>) -> Format {
     };
     let size = u32::from_be_bytes([h[0], h[1], h[2], h[3]]) as usize;
     let end = size.clamp(16, 256).min(h.len());
-    let compatible: Vec<&[u8]> = h.get(16..end).unwrap_or(&[]).chunks_exact(4).collect();
-    let has = |b: &[u8]| major == b || compatible.contains(&b);
+    let (compatible, _) = h.get(16..end).unwrap_or(&[]).as_chunks::<4>();
+    let has = |b: &[u8]| major == b || compatible.iter().any(|c| c == b);
 
     if has(b"avif") || has(b"avis") {
         return Avif;
