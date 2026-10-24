@@ -1,6 +1,6 @@
 # Third-party software
 
-Veer's own code is original. It depends on the following open-source components, all under permissive licences. `cargo deny check licenses` (see `deny.toml`) fails the build if a dependency with any other licence is added.
+Radlet's own code is original. It depends on the following open-source components, all under permissive licences. `cargo deny check licenses` (see `deny.toml`) fails the build if a dependency with any other licence is added.
 
 ## Rust crates (engine and CLI)
 
@@ -35,11 +35,11 @@ A shipped app should include these notices in an About → Acknowledgements scre
 
 ## Bundled libraries
 
-- **PDFium** (BSD-3-Clause), the PDF renderer from Chromium, used for PDF to image. The app bundles a prebuilt copy from the [pdfium-binaries](https://github.com/bblanchon/pdfium-binaries) project (packaging under MIT) and loads it at run time; it isn't linked into the helper. PDFium includes further permissively licensed libraries: FreeType, HarfBuzz, ICU, Abseil, libjpeg-turbo, libpng, zlib, OpenJPEG, Little CMS, Highway and a few smaller ones. `build-app.sh` copies every licence file from the PDFium download into `Veer.app/Contents/Resources/Licenses/PDFium/`.
+- **PDFium** (BSD-3-Clause), the PDF renderer from Chromium, used for PDF to image. The app bundles a prebuilt copy from the [pdfium-binaries](https://github.com/bblanchon/pdfium-binaries) project (packaging under MIT) and loads it at run time; it isn't linked into the helper. PDFium includes further permissively licensed libraries: FreeType, HarfBuzz, ICU, Abseil, libjpeg-turbo, libpng, zlib, OpenJPEG, Little CMS, Highway and a few smaller ones. `build-app.sh` copies every licence file from the PDFium download into `Radlet.app/Contents/Resources/Licenses/PDFium/`.
 
 ## External programs
 
-- **FFmpeg / FFprobe.** Optional. Veer runs them as separate programs and doesn't link them. If a release bundles them, it must be an **LGPL** build (no `--enable-gpl` or `--enable-nonfree`), shipped with its licence and a link to its source.
+- **FFmpeg / FFprobe.** Optional. Radlet runs them as separate programs and doesn't link them. If a release bundles them, it must be an **LGPL** build (no `--enable-gpl` or `--enable-nonfree`), shipped with its licence and a link to its source.
 - **sips.** Part of macOS. Used for HEIC and AVIF.
 
 ## Apple frameworks

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Builds dist/Veer.app: the Swift shell, the Rust `veer` helper, the
-# `veer-vision` helper (text recognition, background removal) and the
+# Builds dist/Radlet.app: the Swift shell, the Rust `radlet` helper, the
+# `radlet-vision` helper (text recognition, background removal) and the
 # PDFium library (for PDF-to-image).
 #
 #   mac/scripts/build-app.sh                 # this Mac's architecture, ad-hoc signed
@@ -30,17 +30,17 @@ fetch_pdfium() {
 
 if [[ "${UNIVERSAL:-0}" == "1" ]]; then
   rustup target add aarch64-apple-darwin x86_64-apple-darwin
-  cargo build --release -p veer-cli --target aarch64-apple-darwin
-  cargo build --release -p veer-cli --target x86_64-apple-darwin
+  cargo build --release -p radlet-cli --target aarch64-apple-darwin
+  cargo build --release -p radlet-cli --target x86_64-apple-darwin
   mkdir -p target/universal
-  lipo -create -output target/universal/veer \
-    target/aarch64-apple-darwin/release/veer target/x86_64-apple-darwin/release/veer
-  HELPER=target/universal/veer
+  lipo -create -output target/universal/radlet \
+    target/aarch64-apple-darwin/release/radlet target/x86_64-apple-darwin/release/radlet
+  HELPER=target/universal/radlet
   SWIFT_FLAGS=(-c release --arch arm64 --arch x86_64)
   PDFIUM_ARCHES=(arm64 x64)
 else
-  cargo build --release -p veer-cli
-  HELPER=target/release/veer
+  cargo build --release -p radlet-cli
+  HELPER=target/release/radlet
   SWIFT_FLAGS=(-c release)
   if [[ "$(uname -m)" == "arm64" ]]; then PDFIUM_ARCHES=(arm64); else PDFIUM_ARCHES=(x64); fi
 fi
@@ -48,7 +48,7 @@ fi
 swift build --package-path mac "${SWIFT_FLAGS[@]}"
 BIN_DIR="$(swift build --package-path mac "${SWIFT_FLAGS[@]}" --show-bin-path)"
 
-APP="$ROOT/dist/Veer.app"
+APP="$ROOT/dist/Radlet.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Helpers" "$APP/Contents/Resources/Licenses"
 cp mac/Resources/Info.plist "$APP/Contents/Info.plist"
@@ -56,9 +56,9 @@ if [[ -n "${VERSION:-}" ]]; then
   /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" \
     -c "Set :CFBundleVersion $VERSION" "$APP/Contents/Info.plist"
 fi
-cp "$BIN_DIR/Veer" "$APP/Contents/MacOS/Veer"
-cp "$HELPER" "$APP/Contents/Helpers/veer"
-cp "$BIN_DIR/veer-vision" "$APP/Contents/Helpers/veer-vision"
+cp "$BIN_DIR/Radlet" "$APP/Contents/MacOS/Radlet"
+cp "$HELPER" "$APP/Contents/Helpers/radlet"
+cp "$BIN_DIR/radlet-vision" "$APP/Contents/Helpers/radlet-vision"
 cp THIRD_PARTY.md "$APP/Contents/Resources/Licenses/"
 
 if [[ "${SKIP_PDFIUM:-0}" != "1" ]]; then
@@ -93,6 +93,6 @@ else
   SIGN_FLAGS=(--options runtime --timestamp)
 fi
 codesign --force "${SIGN_FLAGS[@]}" --sign "$IDENTITY" "$APP/Contents/Helpers/"*
-codesign --force "${SIGN_FLAGS[@]}" --entitlements mac/Resources/Veer.entitlements --sign "$IDENTITY" "$APP"
+codesign --force "${SIGN_FLAGS[@]}" --entitlements mac/Resources/Radlet.entitlements --sign "$IDENTITY" "$APP"
 codesign --verify --strict "$APP"
 echo "Built $APP"

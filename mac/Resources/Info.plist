@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>Veer</string>
+    <string>Radlet</string>
     <key>CFBundleDisplayName</key>
-    <string>Veer</string>
+    <string>Radlet</string>
     <key>CFBundleIdentifier</key>
-    <string>com.usemonoma.veer</string>
+    <string>com.usemonoma.radlet</string>
     <key>CFBundleExecutable</key>
-    <string>Veer</string>
+    <string>Radlet</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -23,9 +23,9 @@
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Veer turns speech in your videos and recordings into subtitles. Recognition runs on this Mac; nothing is sent anywhere.</string>
+    <string>Radlet turns speech in your videos and recordings into subtitles. Recognition runs on this Mac; nothing is sent anywhere.</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Veer reads which files are selected in Finder when you press its shortcut, to open the wheel for them. It doesn't change anything in Finder.</string>
+    <string>Radlet reads which files are selected in Finder when you press its shortcut, to open the wheel for them. It doesn't change anything in Finder.</string>
     <key>NSHumanReadableCopyright</key>
     <string>© 2026 Usemonoma</string>
     <!-- Finder right-click → Services. NSMessage names a method on ServiceProvider. -->
@@ -35,12 +35,12 @@
             <key>NSMenuItem</key>
             <dict>
                 <key>default</key>
-                <string>Convert with Veer</string>
+                <string>Convert with Radlet</string>
             </dict>
             <key>NSMessage</key>
             <string>convertFiles</string>
             <key>NSPortName</key>
-            <string>Veer</string>
+            <string>Radlet</string>
             <key>NSSendFileTypes</key>
             <array>
                 <string>public.item</string>
@@ -52,12 +52,12 @@
             <key>NSMenuItem</key>
             <dict>
                 <key>default</key>
-                <string>Veer Tools</string>
+                <string>Radlet Tools</string>
             </dict>
             <key>NSMessage</key>
             <string>toolsForFiles</string>
             <key>NSPortName</key>
-            <string>Veer</string>
+            <string>Radlet</string>
             <key>NSSendFileTypes</key>
             <array>
                 <string>public.item</string>
@@ -66,7 +66,7 @@
             <dict/>
         </dict>
     </array>
-    <!-- Open With → Veer for any file, never as the default app. -->
+    <!-- Open With → Radlet for any file, never as the default app. -->
     <key>CFBundleDocumentTypes</key>
     <array>
         <dict>
