@@ -455,14 +455,21 @@ final class TrimModel: ObservableObject {
                 try? await Task.sleep(nanoseconds: 200_000_000)
                 guard let self, let view, !Task.isCancelled else { return }
                 if view.window != nil && view.canBeginTrimming {
-                    self.playerTrims = true
-                    view.beginTrimming { [weak self] result in
-                        Task { @MainActor in self?.trimmed(result) }
-                    }
+                    self.startTrimming(view)
                     return
                 }
             }
             self?.playerTrims = false
+        }
+    }
+
+    /// Uses the completion handler rather than `await`: an awaiting task
+    /// would keep this window's player alive until the user chose Trim or
+    /// Cancel, even after the window closed.
+    private func startTrimming(_ view: AVPlayerView) {
+        playerTrims = true
+        view.beginTrimming { [weak self] result in
+            Task { @MainActor in self?.trimmed(result) }
         }
     }
 

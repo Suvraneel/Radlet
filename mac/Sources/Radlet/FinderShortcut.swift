@@ -19,8 +19,8 @@ final class FinderShortcut {
     private var enabled = false
     private var watcher: NSObjectProtocol?
 
-    /// Shown in Settings and messages.
-    static let keys = "⌃⌥V"
+    /// Shown in Settings and messages (a constant, so usable from anywhere).
+    nonisolated static let keys = "⌃⌥V"
 
     func setEnabled(_ on: Bool) {
         enabled = on

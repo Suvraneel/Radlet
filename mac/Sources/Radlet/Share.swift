@@ -51,10 +51,13 @@ final class Sharing: NSObject, NSSharingServicePickerDelegate {
         picker.show(relativeTo: view.bounds, of: view, preferredEdge: .minY)
     }
 
-    func sharingServicePicker(_ picker: NSSharingServicePicker, didChoose service: NSSharingService?) {
-        // The chosen service brings up its own window; the anchor isn't
-        // needed any more (kept until the next share, out of sight).
-        anchor?.orderOut(nil)
+    // AppKit calls picker delegates on the main thread.
+    nonisolated func sharingServicePicker(_ picker: NSSharingServicePicker, didChoose service: NSSharingService?) {
+        MainActor.assumeIsolated {
+            // The chosen service brings up its own window; the anchor isn't
+            // needed any more (kept until the next share, out of sight).
+            anchor?.orderOut(nil)
+        }
     }
 
     /// Puts one picture on the clipboard as an image (PNG and TIFF), for

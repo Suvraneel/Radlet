@@ -16,8 +16,10 @@ import NaturalLanguage
 @_weakLinked import Translation
 #endif
 
-/// The result of async work, collected on the main run loop.
-final class AsyncBox<T> {
+/// The result of async work, collected on the main run loop. Only the
+/// main thread reads or writes it (the task hands its result over with
+/// DispatchQueue.main), so it's safe to send.
+final class AsyncBox<T>: @unchecked Sendable {
     var result: Result<T, Error>?
 }
 
