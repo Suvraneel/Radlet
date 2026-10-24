@@ -1,122 +1,37 @@
-# Veer
+<div align="center">
 
-<p align="center">
-  <img src="docs/images/wheel.gif" width="420" alt="The Veer wheel in its default Glass skin, its highlight gliding from slot to slot as the pointer moves round">
+<a href="https://cdn.jsdelivr.net/gh/Suvraneel/Veer@main/.github/media/demo.mp4"><img src=".github/media/demo.gif" alt="Veer in action: three HEIC photos are dragged in Finder, Shift is held, a wheel of formats opens under the pointer, and dropping on JPEG puts three JPEGs next to the originals" width="100%"></a>
+
+<h1>Veer</h1>
+
+<p><strong>Convert and tidy files without leaving Finder.</strong><br>
+Drag files, hold Shift, drop on a format. A free menu bar app for macOS that does all the work on your Mac.</p>
+
+<p>
+  <a href="https://cdn.jsdelivr.net/gh/Suvraneel/Veer@main/.github/media/demo.mp4"><strong>▶ Watch the 20-second demo</strong></a> (with sound)
+  &nbsp;·&nbsp;
+  <a href="#run-it-locally"><strong>Run it locally</strong></a>
 </p>
 
-Convert and tidy files without leaving Finder. Drag files, hold **Shift**, and drop on a format. Hold **Command** for tools, **Control** for recipes. Everything runs on your Mac.
-
-<p align="center">
-  <img src="docs/images/skins.png" alt="The wheel in its six built-in skins: Glass, Instrument, Tactical, Neon, Sunset and Porcelain">
-  <br>
-  <sub>Six built-in skins, or write your own in CSS. Previews rendered from Veer's design files.</sub>
+<p>
+  <img alt="macOS 14+" src="https://img.shields.io/badge/macOS-14%2B-111111?logo=apple&logoColor=white">
+  <img alt="Swift 5.10" src="https://img.shields.io/badge/Swift-5.10-F05138?logo=swift&logoColor=white">
+  <img alt="SwiftUI and AppKit" src="https://img.shields.io/badge/SwiftUI%20%2B%20AppKit-0A84FF?logo=apple&logoColor=white">
+  <img alt="Rust 1.88+" src="https://img.shields.io/badge/Rust-1.88%2B-B7410E?logo=rust&logoColor=white">
+  <img alt="Model Context Protocol server" src="https://img.shields.io/badge/MCP-server-6E56CF">
 </p>
 
-Veer is a working name. Everything in this repository is original, clean-room work (see [Clean-room policy](#clean-room-policy)).
+</div>
 
-## Install
+## Why
 
-Veer is free. It runs on macOS 14 (Sonoma) or later, on Apple silicon and Intel Macs.
+Converting a file on a Mac usually means a detour: open Preview and export, or upload it to a converter website and download the result. Veer takes the drag you're already making and adds one key. Hold **Shift** mid-drag and a wheel of formats opens under the pointer. Drop on **JPEG** and the JPEGs appear next to the originals.
 
-1. Download **Veer-‹version›.dmg** from the [latest release](../../releases/latest).
-2. Open it and drag **Veer** into **Applications**.
-3. Open Veer from Applications. It isn't notarized by Apple yet, so macOS blocks it the first time:
-   - **macOS 15 Sequoia or later:** click **Done**. Open **System Settings → Privacy & Security**, scroll to "Veer was blocked to protect your Mac", click **Open Anyway**, and confirm with Touch ID or your password.
-   - **macOS 14 Sonoma:** Control-click Veer in Applications, choose **Open**, then click **Open** again.
+- **No window to open.** The wheel appears where the pointer is, in the middle of a Finder drag. Hold **Command** instead for tools, or **Control** for your own recipes.
+- **Nothing leaves your Mac.** No network access, accounts or telemetry. Text recognition, background removal, face detection, subtitles and translation use Apple's on-device frameworks.
+- **Nothing gets overwritten.** Results land beside the originals under a free name, and every job can be undone from History.
 
-   If you're comfortable in Terminal, this clears the download flag instead, and Veer then opens normally:
-
-   ```sh
-   xattr -dr com.apple.quarantine /Applications/Veer.app
-   ```
-
-   macOS asks once per download, so again after each update.
-4. For audio and video, install FFmpeg with [Homebrew](https://brew.sh). Images, PDFs and text work without it.
-
-   ```sh
-   brew install ffmpeg
-   ```
-
-### First steps
-
-Veer lives in the menu bar (a circle-in-a-circle icon), not the Dock. The first time, it opens a short welcome guide.
-
-- Start dragging files in Finder, then hold **Shift** to convert, **Command** for tools or **Control** for recipes. The wheel opens under the pointer: drop on a slot to run it, or in the middle to cancel. Results appear next to the originals, and nothing is overwritten.
-- Prefer clicking? Use the menu bar icon (**Convert Files…**, **Tools for Files…**), or right-click files in Finder and choose **Services → Convert with Veer**.
-- **Settings → Wheel** changes the wheel's style and skin.
-
-Veer needs no Accessibility or Input Monitoring permission.
-
-### Build from source
-
-You need macOS 14 or later, Xcode or just the Command Line Tools (`xcode-select --install`), and [Rust](https://rustup.rs). Get the source (the **Code → Download ZIP** button, a release's source archive, or `git clone`), then in its folder run:
-
-```sh
-mac/scripts/run.sh
-```
-
-It builds Veer, installs it in Applications and starts it. An app built on your own Mac opens without the warning in step 3. For audio and video, install FFmpeg as in step 4.
-
-## What's here
-
-| Path | What it is |
-| --- | --- |
-| `crates/veer-core` | The conversion engine (Rust). Format detection, the conversion catalogue, image/PDF/text/media engines, never-overwrite publishing, batches and crash-isolated workers. |
-| `crates/veer-cli` | The `veer` command: a CLI for power users, plus `veer serve`, the helper process the Mac app talks to. |
-| `mac/` | The Mac app (Swift, AppKit + SwiftUI): menu bar item, drag detection, the wheel, progress HUD, settings, welcome window, Finder Services. `VeerKit` holds its unit-tested logic. `veer-vision` is a small helper the engine runs for text recognition and background removal (Apple's Vision framework). |
-| `examples/recipes/` | Sample recipe files. |
-| `docs/` | Guides: wheel styles and skins ([docs/skins.md](docs/skins.md)). |
-| `deny.toml` | Licence policy: every dependency must be permissive. |
-
-## What it does
-
-- **Convert** images, PDFs, audio, video, documents, data files and subtitles (Shift wheel). A PDF converted to JPEG, PNG, WebP or TIFF gives one image per page.
-  - **Documents**: TXT, Markdown, HTML, Word (.docx) and RTF all convert to each other and to PDF, keeping headings, lists, quotes, code, tables, bold, italic and links. A PDF converts to text or Markdown. On a Mac, PDFs are laid out by the system's text engine, with fonts for every script; elsewhere a built-in writer covers Western languages.
-  - **SVG** is an image: PNG, JPEG, WebP, ICO and the rest, drawn sharp at **1×**, **2×** or **4×** (or at least 1024 px on its longest side by default), and **Resize…** redraws it at any size. SVG to PDF stays vector.
-  - **Data**: CSV, TSV, JSON and Excel (.xlsx) convert to each other (numbers stay numbers, IDs with leading zeros stay text), and a table becomes a Markdown or HTML table or a PDF. A CSV made into Excel gets a bold header row that stays in view and fitted column widths; a workbook of several sheets becomes one CSV per sheet. **Combine into workbook** puts several tables into one .xlsx, a sheet each.
-  - **Icons**: any picture or SVG converts to a macOS **ICNS** icon (16 to 1024 px) or an ICO.
-  - **What's inside a folder**: drop a folder and the wheel offers **Images to JPEG**, **Images to WebP**, **Documents to PDF**, **Audio to MP3** and so on, for the kinds of file it holds. The results go into a copy of the folder ("Trip (JPEG)") with the same subfolders; files already in that format, or of other kinds, are left out, and anything that couldn't be converted is listed in "Not converted.txt".
-  - **Folders and ZIPs**: a folder becomes a ZIP and a ZIP becomes a folder (**Unzip**). Extraction never writes outside its folder, skips links and Finder's `__MACOSX` clutter, and refuses archives that would expand absurdly (zip bombs).
-- **Tools** (Command wheel). Tools ending in "…" open a window first:
-  - **Resize…** by percentage, longest side, exact width or height.
-  - **Crop…** with a live preview, aspect presets and pixel size.
-  - **Redact…** with black boxes, pixelate or blur, previewed as they'll look. Video redaction is always black.
-  - **Compress…** by quality level or to a target size such as 2 MB, with a before-and-after preview. **Smart** (the default) finds the smallest JPEG or WebP that still looks the same, by measuring visual similarity (SSIM) against the original instead of guessing a quality number. **Fit for** presets fill in sizes that get through email, Discord and WhatsApp. PDFs shrink too: their pictures are scaled down and recompressed.
-  - **Split…** a PDF into every page, every few pages, or ranges like `1-3, 5, 8-`.
-  - **Pages…** to reorder, delete and rotate single PDF pages.
-  - **Page numbers…** in six positions and four styles ("3", "Page 3", "Page 3 of 12", "3 / 12"), with a live preview.
-  - **Watermark…** faint text such as DRAFT, corner to corner or level, at the strength you choose.
-  - **Password…** locks a PDF with a password (AES-256), or removes it when you know it. Passwords are never saved or logged.
-  - **Trim…** audio or video with the system's trim handles; **Make GIF…** turns all or part of a video into a GIF.
-  - **Save stills** saves ten evenly spaced frames from a video; **Even out volume** levels loudness to -16 LUFS, as podcasts do.
-  - **Privacy check…** shows what files give away before you share them: GPS location (with Show in Maps), camera or phone and its serial number, names, dates, editing apps and edit history, and hidden content such as preview images, earlier versions kept inside PDFs, attachments, scripts and comment authors. **Remove Metadata** saves cleaned copies, and the report says what it can't remove.
-  - **Make subtitles…** turns speech in a video or recording into SRT or WebVTT subtitles, or a plain transcript, with Apple's on-device speech recognition. The subtitles are saved next to the video under the same name, so players pick them up.
-  - **Rename…** renames a batch with a pattern such as `Trip {date} {n}` (name, number, date taken, time, folder), previewed before anything changes.
-  - **Remove background**: keeps the main subject on a transparent background (PNG, or WebP/TIFF if that's what you started with).
-  - **Copy text**: recognises the text in pictures and scanned PDFs and puts it on the clipboard. Convert a picture to **Text** to save it as a file instead.
-  - **Make searchable PDF**: turns photos of documents and scanned PDFs into PDFs you can search, select and copy from. Pages that already have text are left as they are.
-  - **Documents**: **Word count** ("1,234 words · 6 min read", also on the clipboard), **Copy text** (the whole text, ready to paste), **Clean up text** (UTF-8, one kind of line ending, no trailing spaces), **Combine into one** (several notes into one file) and **Combine into PDF**, which takes any mix of documents, pictures, SVGs and PDFs. JSON gets **Format JSON** and **Minify JSON**, keeping key order and numbers exactly.
-  - **Folders** (all on copies; the originals are only read): **Zip together** (anything selected, into one archive), **Merge folders** (identical files kept once, clashing names numbered), **Flatten** (every file at the top), **Sort by kind** (Images, Documents, Audio, Videos…), **List contents** (a tree with sizes, or a CSV with dates) and **Find duplicates** (a report of identical files and the space they take).
-  - **Read QR code** puts what a QR code in a picture says on the clipboard (and shows it); **Make QR code** turns a text file (a link, Wi-Fi details) into a QR code picture.
-  - **Make icons**: **Favicons** for a website (favicon.ico, PNG sizes, the Apple touch icon, a web manifest and the HTML to paste into `<head>`), a **macOS** .icns, or an **iOS** app icon set for Xcode. Pictures that aren't square are centred on a transparent square, never stretched.
-  - **Hide faces** finds faces with Apple's Vision framework and pixelates, blurs or blacks them out, for sharing photos of people who didn't sign up for it.
-  - **Translate…** translates documents (TXT, Markdown, HTML, Word, RTF) and subtitles (SRT, WebVTT) with Apple's on-device translation (macOS 26), keeping headings, lists, tables and timings; code isn't translated. "notes.md" becomes "notes (fr).md".
-  - **Copy path**, **Copy name** and **Open in Terminal** (the folder itself, or a file's folder) for anything, in the app. **Share…** opens the share menu where the wheel was, with **AirDrop**, **Mail** and **Messages** as presets; **Copy image** puts one picture on the clipboard as an image, ready to paste into a chat or document.
-  - One-step tools: rotate, remove metadata, combine into a PDF, copy SHA-256.
-  - The wheel holds eight (Settings → Wheel can make it 6, 10 or 12); anything more is under **More…**. The slots you use most are the ones that stay, but nothing moves around: the most useful go up, right, down and left, and stay there.
-- **Wheel styles** (Settings → Wheel): **Dial**, one ring, is the default. Turn on **Advanced styles** for **Orbit**, which adds an outer ring of presets behind each slot (JPEG → Smart or Best, Compress → Email or Discord), and **Bloom**, where resting on a slot or flicking past it fans out its presets. Slots stay in the same places in every style. The highlight glides between slots, borders are slightly sticky so it doesn't flicker, and a Force Touch trackpad taps as you cross into a slot. See [docs/skins.md](docs/skins.md).
-- **Skins**: six built in (Glass, the plain system look and the default, plus Instrument, Tactical, Neon, Sunset and Porcelain), and your own as small CSS files of custom properties (`--accent: #00FF9C;`), starting from any built-in with `--base`. Veer picks up an edited skin the next time the wheel opens and lists any mistakes with line numbers. Reference: [docs/skins.md](docs/skins.md).
-- **On-device intelligence**: text recognition, background removal and face detection use Apple's Vision framework, and translation uses Apple's Translation framework, on your Mac. Nothing is uploaded.
-- **Recipes** (Control wheel): your own chains of steps. **Save as Recipe…** in a tool window keeps its settings for next time, and **Settings → Recipes** edits, duplicates and deletes them.
-- **History** (menu bar → History…): the last 50 jobs, each with Undo. Undo moves results to the Trash, puts replaced originals back and restores old names after Rename.
-- **Drag results out**: the progress window shows the results as an icon you can drag into Finder, Mail or any app (a copy; the files stay put). **Next…** opens the wheel again for the results, to keep going (convert to PDF, then compress it).
-- **Convert Clipboard** (menu bar): converts files copied in Finder, or a copied image such as a screenshot, and puts the result back on the clipboard. A copied image's results go to Downloads.
-- **Replace originals** (Settings → Output, off by default): originals go to the Trash, and a same-format result takes the original's name. Undo puts them back.
-- **Watch folders** (Settings → Watch): files added to a folder are converted, compressed or run through a recipe automatically, into a `Converted` folder inside.
-- **Command line and Shortcuts**: Settings → Advanced → Install Command-Line Tool links `/usr/local/bin/veer` to the app's helper.
-- **AI agents (MCP)**: `veer mcp` is a Model Context Protocol server, so Claude and other AI apps can inspect, convert, compress, clean, subtitle and run recipes on your files, locally. Settings → Advanced → AI agents copies the configuration for Claude Desktop or Claude Code. Password tools aren't offered to agents.
-
-## How it fits together
+## How it works
 
 ```
 Finder drag + Shift ──▶ DragWatcher ──▶ WheelController ──inspect──▶ veer serve ──▶ catalog::wheel
@@ -127,82 +42,178 @@ Finder drag + Shift ──▶ DragWatcher ──▶ WheelController ──inspec
                                                                                          process per file
 ```
 
-The wheel knows nothing about formats. The engine returns slots, each with an opaque `action`. The app sends that action back unchanged to run it. New conversions, tools or recipes in the engine show up on the wheel with no app changes.
+Veer is two programs. The **Mac app** (Swift) spots the drag, draws the wheel and shows progress. The **engine** (Rust) does the work. It runs as `veer serve`, a helper process the app talks to in JSON lines over stdin and stdout.
 
-## Build and test the engine (macOS or Linux)
+1. **Spotting the drag.** The app listens to global mouse events and, only while a drag is in progress, polls the modifier keys and the drag pasteboard. That's why it needs no Accessibility or Input Monitoring permission.
+2. **Filling the wheel.** The app sends the dragged paths to `inspect`. The engine detects each file's format and returns three sets of slots (convert, tools, recipes), each carrying an opaque `action`.
+3. **Running the job.** On drop, the app sends that action back unchanged. The wheel knows nothing about formats, so a new conversion, tool or recipe in the engine shows up on the wheel with no app changes.
+4. **One worker per file.** `job::run_batch` runs each file in its own `veer worker` process with a time limit. A crash or hang fails only that file, its partial outputs are deleted, and progress events stream back to the HUD.
+5. **Helpers on demand.** For Apple's Vision, Speech and Translation frameworks, the engine runs `veer-vision`, a small Swift helper bundled in the app. Audio and video go through FFmpeg when it's installed, HEIC and AVIF through macOS's `sips`, and PDF to image through a bundled PDFium.
+
+### Guarantees
+
+- **Never overwrites.** Outputs are written to a hidden temporary file and hard-linked into place under a free name (`photo 2.jpg`), which fails if the name is taken. Originals are never modified. With "Replace originals" on, the app moves them to the Trash, where Undo can find them.
+- **Tidy multi-file results.** Up to four pages or parts are saved next to the original; more go into one folder, such as `report (pages)`.
+- **One bad file fails only itself.** Crashes and hangs are reported per file.
+- **Upright and colour-correct.** EXIF orientation is applied to pixels, and ICC profiles are carried into PNG, JPEG, WebP, TIFF and PDF outputs.
+- **Bounded inputs.** Images up to 40,000 px a side and 1 GiB decoded; PDFs decompress to at most 512 MB; text files up to 64 MB; SVGs drawn at most 16,384 px a side; ZIPs extract at most 1,000 times their size (and 64 GB); folders up to 500,000 items.
+- **Local only.** No network access, accounts or telemetry.
+- **Cleans up after itself.** When stdin closes (the app quit or crashed), the helper cancels its jobs and exits. A worker whose supervisor dies kills itself and its FFmpeg.
+
+## Features
+
+### The wheel
+
+<p align="center">
+  <img src="docs/images/skins.png" alt="The wheel in its six built-in skins: Glass, Instrument, Tactical, Neon, Sunset and Porcelain">
+  <br>
+  <sub>Six built-in skins, or write your own in CSS. Previews rendered from Veer's design files.</sub>
+</p>
+
+- **Three wheels on one gesture.** **Shift** converts, **Command** opens tools, **Control** runs recipes. Drop on a slot to run it, or in the middle to cancel.
+- **Styles** (Settings → Wheel). **Dial**, one ring, is the default. Turn on **Advanced styles** for **Orbit**, which adds an outer ring of presets behind each slot (JPEG → Smart or Best, Compress → Email or Discord), and **Bloom**, where resting on a slot or flicking past it fans out its presets. The highlight glides between slots, borders are slightly sticky so it doesn't flicker, and a Force Touch trackpad taps as you cross into a slot.
+- **Slots that stay put.** The wheel holds eight (or 6, 10 or 12), and anything more is under **More…**. The slots you use most stay on the wheel, but nothing moves around: the most useful go up, right, down and left, and stay there.
+- **Skins.** Glass (the plain system look and the default), Instrument, Tactical, Neon, Sunset and Porcelain, plus your own as small CSS files of custom properties (`--accent: #00FF9C;`), starting from any built-in with `--base`. Veer picks up an edited skin the next time the wheel opens and lists any mistakes with line numbers. See [docs/skins.md](docs/skins.md).
+
+### Convert (Shift)
+
+| Kind | What you get |
+| --- | --- |
+| **Images** | JPEG, PNG, WebP, HEIC, TIFF, GIF, BMP, ICO, ICNS, TGA and QOI to each other or to PDF (AVIF reads in too). A picture converts to **Text** through text recognition. A PDF converted to JPEG, PNG, WebP or TIFF gives one image per page. |
+| **SVG** | Treated as an image: PNG, JPEG, WebP, ICO and the rest, drawn sharp at 1×, 2× or 4× (at least 1024 px on its longest side by default). SVG to PDF stays vector. |
+| **Icons** | Any picture or SVG to a macOS ICNS (16 to 1024 px) or an ICO. |
+| **Documents** | TXT, Markdown, HTML, Word (.docx) and RTF convert to each other and to PDF, keeping headings, lists, quotes, code, tables, bold, italic and links. A PDF converts to text or Markdown. |
+| **Data** | CSV, TSV, JSON and Excel (.xlsx) convert to each other (numbers stay numbers, IDs with leading zeros stay text). A table also becomes a Markdown or HTML table, or a PDF. A workbook of several sheets becomes one CSV per sheet. |
+| **Audio and video** | Through FFmpeg: MP3, M4A, WAV, FLAC, AIFF, OGG, Opus and WMA; MP4, MOV, WebM, MKV, AVI, WMV and GIF. Video is remuxed without re-encoding when the codecs allow. |
+| **Subtitles** | SRT and WebVTT to each other or to plain text. |
+| **Folders** | Drop a folder for **Images to JPEG**, **Documents to PDF**, **Audio to MP3** and so on. Results go into a copy of the folder ("Trip (JPEG)") with the same subfolders, and anything that couldn't be converted is listed in "Not converted.txt". |
+| **ZIPs** | A folder becomes a ZIP and a ZIP becomes a folder. Extraction never writes outside its folder, skips links and `__MACOSX` clutter, and refuses zip bombs. |
+
+### Tools (Command)
+
+Tools ending in "…" open a window first, with a live preview where it helps.
+
+| Group | Tools |
+| --- | --- |
+| **Images** | **Resize…** (percentage, longest side, exact width or height) · **Crop…** with aspect presets · **Redact…** with black boxes, pixelate or blur · Rotate · **Make icons** (favicons with the HTML for `<head>`, a macOS .icns or an iOS app icon set) |
+| **Compress…** | By quality level or to a target size such as 2 MB. **Smart** (the default) finds the smallest JPEG or WebP that still looks the same by measuring visual similarity (SSIM), instead of guessing a quality number. **Fit for** presets fill in sizes that get through email, Discord and WhatsApp. PDFs shrink too. |
+| **PDF** | **Split…** (every page, every few pages, or ranges like `1-3, 5, 8-`) · **Pages…** to reorder, delete and rotate · **Page numbers…** · **Watermark…** · **Password…** (AES-256; passwords are never saved or logged) · Combine into PDF · **Make searchable PDF** |
+| **Audio and video** | **Trim…** · **Make GIF…** · **Save stills** (ten evenly spaced frames) · **Even out volume** (-16 LUFS, as podcasts do) · **Make subtitles…** as SRT, WebVTT or a transcript, with on-device speech recognition |
+| **Privacy** | **Privacy check…** shows what a file gives away before you share it: GPS location, camera and serial number, names, dates, editing apps, and hidden content such as earlier versions kept inside PDFs. **Remove Metadata** saves cleaned copies. **Hide faces** pixelates, blurs or blacks out every face Vision finds. |
+| **Text and AI** | **Copy text** from pictures and scanned PDFs · **Remove background** to a transparent PNG · **Translate…** documents and subtitles on device (macOS 26), keeping headings, lists, tables and timings · **Read QR code** / **Make QR code** |
+| **Documents and data** | **Word count** ("1,234 words · 6 min read") · Copy text · **Clean up text** · **Combine into one** · **Format JSON** / **Minify JSON**, keeping key order and numbers exactly · **Combine into workbook** (several tables into one .xlsx, a sheet each) |
+| **Folders** (on copies) | **Zip together** · **Merge folders** (identical files kept once) · **Flatten** · **Sort by kind** · **List contents** (a tree with sizes, or a CSV) · **Find duplicates** |
+| **Everyday** | **Rename…** with a pattern such as `Trip {date} {n}`, previewed first · **Copy path** · **Copy name** · **Open in Terminal** · **Share…** (AirDrop, Mail and Messages as presets) · **Copy image** · Copy SHA-256 |
+
+### Around the wheel
+
+- **History** (menu bar → History…): the last 50 jobs, each with Undo. Undo moves results to the Trash, puts replaced originals back and restores old names after Rename.
+- **Drag results out** of the progress window into Finder, Mail or any app, or press **Next…** to open the wheel again for the results (convert to PDF, then compress it).
+- **Convert Clipboard** (menu bar): converts files copied in Finder, or a copied image such as a screenshot, and puts the result back on the clipboard.
+- **Replace originals** (Settings → Output, off by default): originals go to the Trash, and a same-format result takes the original's name.
+- **Watch folders** (Settings → Watch): files added to a folder are converted, compressed or run through a recipe automatically, into a `Converted` folder inside.
+- **Recipes** (Control wheel): your own chains of steps. **Save as Recipe…** in a tool window keeps its settings, and **Settings → Recipes** edits them.
+- **Other ways in.** Finder's right-click **Services → Convert with Veer** (or **Veer Tools**), **Open With → Veer**, **⌃⌥V** in Finder for the selected files, and the menu bar (**Convert Files…**, **Tools for Files…**, **Run a Recipe…**, **Convert Finder Selection**). Each opens the wheel for the keyboard: arrow keys to choose, Return to run, Tab to switch wheels, Escape to cancel.
+- **Command line, Shortcuts and AI agents.** The same engine is the `veer` command. `veer mcp` is a Model Context Protocol server, so Claude and other AI apps can inspect, convert, compress, clean, subtitle and run recipes on your files, locally. Password tools aren't offered to agents. See [Reference](#reference).
+
+## Tech stack
+
+| Layer | Built with |
+| --- | --- |
+| Mac app | Swift 5.10 as a Swift package (no Xcode project), AppKit + SwiftUI, macOS 14+. It avoids SwiftUI macros so it builds with just the Command Line Tools. |
+| On-device intelligence | Apple's Vision (text, subject masks, faces), Speech (subtitles), Translation (macOS 26) and the system text engine for PDF layout, all in the `veer-vision` helper |
+| Engine and CLI | Rust 2021 (1.88+): `clap`, `serde`, `image` + `webp`, `lopdf`, `resvg` + `svg2pdf`, `pulldown-cmark`, `calamine` + `rust_xlsxwriter`, `zip`, `qrcode` + `rqrr`, `kamadak-exif` |
+| Media | FFmpeg and ffprobe (optional, from Homebrew), macOS `sips` for HEIC and AVIF, PDFium for PDF to image |
+| Protocols | JSON lines between app and engine (`veer serve`), Model Context Protocol for AI agents (`veer mcp`) |
+| Quality | 204 Rust tests and 92 Swift tests, `rustfmt`, `clippy -D warnings`, `cargo deny` licence checks, GitHub Actions on Linux and macOS |
+
+## Run it locally
+
+There's no published release yet, so for now you build Veer yourself. You need macOS 14 or later, Xcode or just the Command Line Tools (`xcode-select --install`), and [Rust](https://rustup.rs).
 
 ```sh
-cargo test --all               # ~100 unit and end-to-end tests
+git clone https://github.com/Suvraneel/Veer.git
+cd Veer
+mac/scripts/run.sh             # builds Veer, replaces /Applications/Veer.app and starts it
+mac/scripts/run.sh --check     # the same, plus a self-test of text recognition
+```
+
+For audio and video, install FFmpeg. Images, PDFs and text work without it.
+
+```sh
+brew install ffmpeg
+```
+
+Veer lives in the menu bar (a circle-in-a-circle icon), not the Dock, and opens a short welcome guide the first time. Start dragging files in Finder, then hold **Shift**. An app built on your own Mac opens without Gatekeeper's warning.
+
+### The engine on its own (macOS or Linux)
+
+```sh
+cargo test --all               # about 200 unit and end-to-end tests
 cargo build --release
 ./target/release/veer formats  # what converts to what on this machine
 ```
 
-Optional helpers: `ffmpeg` (and `ffprobe`) for audio and video; macOS's built-in `sips` for HEIC/AVIF; [PDFium](https://github.com/bblanchon/pdfium-binaries) for PDF to image. Set `VEER_PDFIUM=/path/to/libpdfium.dylib` (or `.so`) to use PDFium outside the app; the PDF-to-image tests are skipped without it.
+The PDF-to-image tests are skipped unless `VEER_PDFIUM` points at a PDFium library.
 
-## Build the Mac app (macOS 14+, Xcode or the Command Line Tools)
+| Variable | What it does |
+| --- | --- |
+| `VEER_PDFIUM` | Path to `libpdfium.dylib` (or `.so`), for PDF to image outside the app |
+| `VEER_FFMPEG`, `VEER_FFPROBE` | Use these binaries instead of the ones on `PATH` or in Homebrew's usual locations |
+| `VEER_VISION` | Path to the `veer-vision` helper, when the engine isn't running inside the app |
+| `VEER_HELPER` | Run the Swift app against this `veer` binary, such as a debug build |
+| `VEER_RECIPES_DIR` | Where recipes live (default `~/Library/Application Support/Veer/recipes/`) |
+| `VEER_PASSWORD` | The password for `veer protect` and `veer unlock`, kept out of `ps` |
 
-```sh
-mac/scripts/run.sh             # builds, replaces /Applications/Veer.app and starts it
-mac/scripts/run.sh --check     # the same, plus a self-test of text recognition
-```
-
-`run.sh` uses `build-app.sh`, which on its own just makes `dist/Veer.app` (ad-hoc signed).
-
-### Make a release
-
-Pushing a tag such as `v0.2.0` runs `.github/workflows/release.yml`. It builds Veer for Apple silicon and Intel, smoke-tests the bundled helpers, and publishes `Veer-0.2.0.dmg`, a zip and their SHA-256 checksums on the Releases page, with the install steps from `docs/release-notes.md`. GitHub adds the source archives.
+### Working on the Mac app
 
 ```sh
-git tag v0.2.0
-git push origin v0.2.0
+swift run --package-path mac VeerLab     # the Wheel Lab: every style and state, plus a skin editor
+swift test --package-path mac            # needs full Xcode; the Command Line Tools have no XCTest
+VEER_HELPER=$PWD/target/debug/veer swift run --package-path mac Veer   # against a debug engine
 ```
 
-`mac/scripts/make-dmg.sh` makes the same files in `dist/` on your own Mac. Set `UNIVERSAL=1` for both architectures and `VERSION=0.2.0` to stamp the version. Releases are ad-hoc signed and not notarized, which is why the first open needs the steps under [Install](#install). `build-app.sh` already takes a `SIGN_IDENTITY` for a Developer ID certificate, if you get one later.
+Outside the app, point `VEER_VISION` at `$(swift build --package-path mac --show-bin-path)/veer-vision`. `veer-vision selftest` checks that text recognition and searchable PDFs work on this Mac. Keep SwiftUI macros such as `@State` out of the app, so it still builds with just the Command Line Tools.
 
-The build script downloads a pinned PDFium build once (into `target/pdfium`) and bundles it next to the helper. `SKIP_PDFIUM=1` leaves it out, and the app then simply doesn't offer PDF to image.
+The Swift tests cover the app's pure logic in `VeerKit`: wheel hit-testing for every style, the skin parser and built-in skins, protocol framing, HUD state, the crop and redact editors, "Replace originals" naming and the watch-folder scanner. A contract test decodes a real `veer serve` session, and CI re-records that session with the freshly built engine, so an engine change that would break the app fails the build.
 
-To work on the wheel or its skins, `swift run --package-path mac VeerLab` opens the Wheel Lab: every style and state of the wheel, drawn by the app's own code, with a skin editor (see [docs/skins.md](docs/skins.md#the-wheel-lab)).
+### Sharing a build
 
-For development you can run the Swift app against a debug helper: `VEER_HELPER=$PWD/target/debug/veer swift run --package-path mac Veer`. The engine finds `veer-vision` next to itself in the app; elsewhere, point `VEER_VISION` at `$(swift build --package-path mac --show-bin-path)/veer-vision`. `veer-vision selftest` checks that text recognition and searchable PDFs work on this Mac.
+`mac/scripts/build-app.sh` makes `dist/Veer.app` (ad-hoc signed). `mac/scripts/make-dmg.sh` packs `dist/Veer-<version>.dmg`, a zip and their SHA-256 checksums. Set `UNIVERSAL=1` for Apple silicon and Intel, `VERSION=0.2.0` to stamp a version, and `SKIP_PDFIUM=1` to leave out PDF to image. The build downloads a pinned PDFium once into `target/pdfium`.
 
-The Mac app needs **no Accessibility or Input Monitoring permission**. It listens to global mouse events only, and polls the modifier keys and the drag pasteboard while a drag is in progress.
-
-Swift tests cover the app's pure logic (`mac/Sources/VeerKit`): wheel hit-testing and placement for every style, the skin parser and the built-in skins, protocol framing and decoding, HUD state, the diagnostics log, the crop and redact editors, page ranges, the actions tool windows send, "Replace originals" naming and the watch-folder scanner. A contract test decodes a real `veer serve` session, and CI re-records that session with the freshly built helper, so an engine change that would break the app fails the build.
-
-```sh
-swift test --package-path mac   # needs full Xcode; the Command Line Tools have no XCTest
-```
-
-The app avoids `@State` and other SwiftUI macros, because their compiler plugin ships only with Xcode. Keep it that way so the app still builds with just the Command Line Tools.
-
-### Other ways in
-
-The drag gesture is the fast path, but every conversion is reachable without it:
-
-- **Finder right-click → Services → Convert with Veer** (or **Veer Tools**)
-- **Open With → Veer** on any file
-- **⌃⌥V** in Finder opens the wheel for the selected files (Settings → General turns it off). The shortcut is only taken while Finder is in front, so other apps keep it. macOS asks once to let Veer read Finder's selection; Veer never reads keystrokes.
-- The menu bar: **Convert Files…**, **Tools for Files…**, **Run a Recipe…**, **Convert Clipboard**, **Convert Finder Selection**
-
-Each opens the wheel for keyboard use: arrow keys to choose, Return to run, Tab to switch wheels, Escape to cancel.
-
-### Shortcuts
-
-After **Settings → Advanced → Install Command-Line Tool…**, any shortcut can use Veer through a **Run Shell Script** action. Set **Pass Input** to **as arguments**, then use a script such as:
-
-```sh
-/usr/local/bin/veer convert --to jpeg "$@"
-```
-
-Other examples: `veer compress --target 2MB "$@"`, `veer resize --max 1600 "$@"`, `veer recipe "Web-ready image" "$@"`. Add `--json` to get one JSON line per file, which **Get Dictionary from Input** can read. Use the full path, because Shortcuts doesn't read your shell's `PATH`.
-
-Native Shortcuts actions (App Intents) need Xcode's build tools, which this project deliberately doesn't require. They're on the roadmap for a release built with Xcode.
+These builds aren't notarized, so whoever opens one has to allow it once. [docs/release-notes.md](docs/release-notes.md) has the steps. `build-app.sh` already takes a `SIGN_IDENTITY` for a Developer ID certificate.
 
 ### Troubleshooting
 
-Veer keeps a diagnostics log at `~/Library/Logs/Veer/veer.log`. It records what the drag watcher saw (pasteboard types, modifier keys, trigger decisions), wheel choices and helper restarts. It records file counts and extensions, never names or paths. **Menu bar → Troubleshooting → Copy Diagnostics** puts the system details and the last 200 log lines on the clipboard, ready to paste into a bug report.
+Veer keeps a diagnostics log at `~/Library/Logs/Veer/veer.log`: what the drag watcher saw, wheel choices and helper restarts. It records file counts and extensions, never names or paths. **Menu bar → Troubleshooting → Copy Diagnostics** copies the system details and the last 200 log lines, ready for a bug report.
 
-## CLI
+## Project structure
+
+```
+crates/
+  veer-core/            the engine: format detection, the catalogue behind the wheel,
+                        jobs and workers, never-overwrite naming, recipes, privacy check
+    src/engines/        one module per kind: image, pdf, doc, docx, sheet, media,
+                        archive, folder, svg, icons, codes, vision, speech, translate…
+  veer-cli/             the `veer` binary: the CLI, `veer serve` (for the app), `veer mcp`
+mac/
+  Sources/Veer/         the menu bar app: drag watcher, wheel, progress HUD, settings, tool windows
+  Sources/VeerKit/      unit-tested logic: protocol models, wheel geometry, skins, history, rename
+  Sources/VeerUI/       draws and drives the wheel, shared by the app and the Wheel Lab
+  Sources/VeerLab/      the Wheel Lab, a storybook and skin editor for the wheel
+  Sources/veer-vision/  the Vision, Speech and Translation helper the engine runs
+  Tests/VeerKitTests/   Swift tests, including the live protocol contract
+  scripts/              run.sh, build-app.sh, make-dmg.sh, contract-session.sh
+examples/recipes/       a sample recipe
+docs/                   wheel styles and skins, release notes, images
+.github/                CI workflow and the README's demo media
+deny.toml               licence policy: every dependency must be permissive
+```
+
+## Reference
+
+<details>
+<summary><strong>CLI</strong></summary>
 
 ```sh
 veer convert *.heic --to jpg              # one output per input, beside the original
@@ -219,6 +230,7 @@ veer redact scan.png --rect 0.6,0.05,0.35,0.1 --style black
 veer strip IMG_0042.jpg                   # lossless: drops GPS/EXIF, keeps orientation and colour profile
 veer compress clip.mov --level strong
 veer compress photo.jpg --target 500KB
+veer compress photo.jpg --level smart     # smallest file that still looks the same
 veer split book.pdf --ranges "1-3, 5, 8-" # or --every 10; default: every page
 veer pages deck.pdf --order 3 --order 1 --order 2 --rotate 1:90
 veer numbers report.pdf --style page-of-total --position bottom-right --skip-first
@@ -229,22 +241,21 @@ veer trim interview.m4a --start 1:30 --end 12:05
 veer gif clip.mov --start 3 --end 6.5
 veer frames talk.mp4 --count 12 --format png
 veer normalize podcast.wav
-veer compress photo.jpg --level smart      # smallest file that still looks the same
 veer privacy IMG_0042.jpg report.pdf      # what they reveal; veer strip removes it
 veer subtitles talk.mp4 --language en-US  # talk.srt (--to vtt or txt); macOS app
 veer mcp                                  # serve Veer's tools to an AI agent
 veer combine scan1.png scan2.png notes.pdf  # documents and SVGs go in too
-veer convert notes.md --to docx            # or pdf, html, rtf, txt; and back again
-veer convert logo.svg --to png             # at least 1024 px; veer resize logo.svg --max 4096
-veer convert orders.csv --to json          # csv, tsv, json, md and html tables
-veer convert orders.csv --to xlsx          # and back: veer convert book.xlsx --to csv
-veer workbook jan.csv feb.csv mar.csv      # "jan (combined).xlsx", a sheet each
-veer convert Photos --to jpeg              # "Photos (JPEG)": the pictures inside, converted
-veer codes poster.jpg                      # prints what its QR code says
-veer qr wifi.txt                           # "wifi (QR code).png"
-veer icons logo.svg --set favicon          # or --set mac (logo.icns), --set ios
-veer faces party.jpg --style blur          # Vision; macOS app
-veer translate notes.md --to fr            # "notes (fr).md"; macOS 26 app
+veer convert notes.md --to docx           # or pdf, html, rtf, txt; and back again
+veer convert logo.svg --to png            # at least 1024 px; veer resize logo.svg --max 4096
+veer convert orders.csv --to json         # csv, tsv, json, md and html tables
+veer convert orders.csv --to xlsx         # and back: veer convert book.xlsx --to csv
+veer workbook jan.csv feb.csv mar.csv     # "jan (combined).xlsx", a sheet each
+veer convert Photos --to jpeg             # "Photos (JPEG)": the pictures inside, converted
+veer codes poster.jpg                     # prints what its QR code says
+veer qr wifi.txt                          # "wifi (QR code).png"
+veer icons logo.svg --set favicon         # or --set mac (logo.icns), --set ios
+veer faces party.jpg --style blur         # Vision; macOS app
+veer translate notes.md --to fr           # "notes (fr).md"; macOS 26 app
 veer words essay.docx                     # 1,234 words · 6 min read
 veer join week1.md week2.md               # "week1 (combined).md"
 veer json data.json --minify              # or without --minify to re-indent
@@ -260,7 +271,25 @@ veer --json convert a.png --to webp       # JSON lines for scripts
 
 Exit codes: `0` everything done or skipped, `1` at least one file failed, `2` usage error.
 
-## Recipes
+**Settings → Advanced → Install Command-Line Tool** links `/usr/local/bin/veer` to the app's helper.
+
+</details>
+
+<details>
+<summary><strong>Shortcuts</strong></summary>
+
+After installing the command-line tool, any shortcut can use Veer through a **Run Shell Script** action. Set **Pass Input** to **as arguments**, then use a script such as:
+
+```sh
+/usr/local/bin/veer convert --to jpeg "$@"
+```
+
+Other examples: `veer compress --target 2MB "$@"`, `veer resize --max 1600 "$@"`, `veer recipe "Web-ready image" "$@"`. Add `--json` to get one JSON line per file, which **Get Dictionary from Input** can read. Use the full path, because Shortcuts doesn't read your shell's `PATH`.
+
+</details>
+
+<details>
+<summary><strong>Recipes</strong></summary>
 
 A recipe is a named chain of steps in a TOML file. Put recipes in `~/Library/Application Support/Veer/recipes/` (or `$VEER_RECIPES_DIR`), and they appear on the Control wheel and in `veer recipes`.
 
@@ -283,9 +312,12 @@ op = "strip_metadata"
 
 Steps: `convert {to, quality?}`, `resize {max | percent | width | height}`, `rotate {degrees}`, `crop {rect}`, `redact {rects, style?}`, `strip_metadata`, `compress {level?: light|balanced|strong|smart, target_bytes?}`, `pages {pages, rotate?}`, `page_numbers {position?, style?, start?, size?, skip_first?}`, `watermark {text, opacity?, size?, diagonal?}`, `trim {start?, end?}`, `normalize_audio`, `remove_background {crop?}`, `make_searchable`, `transcribe {to?: srt|vtt|txt, language?}`. A `rect` is `{x, y, w, h}` in fractions of the picture; times are in seconds. Image steps share one decode and one encode, so chains never compress twice.
 
-You don't have to write TOML: **Save as Recipe…** in a tool window, or **Settings → Recipes**, writes the file for you. Saving never overwrites another recipe; a name that's taken gets a number. Passwords can't go in a recipe.
+You don't have to write TOML: **Save as Recipe…** in a tool window, or **Settings → Recipes**, writes the file for you. Saving never overwrites another recipe; a name that's taken gets a number. Passwords can't go in a recipe. [examples/recipes/thumbnail.toml](examples/recipes/thumbnail.toml) is a starting point.
 
-## Helper protocol (`veer serve`)
+</details>
+
+<details>
+<summary><strong>Helper protocol (<code>veer serve</code>)</strong></summary>
 
 JSON, one object per line. Every request gets exactly one reply with the same `id`.
 
@@ -300,22 +332,19 @@ JSON, one object per line. Every request gets exactly one reply with the same `i
 | `save_recipe` | `recipe`, `recipes_dir?`, `replace?` | `path`. A new file never overwrites; `replace` rewrites one recipe file in the recipes folder. |
 | `shutdown` | none | `{}`, then the helper exits |
 
-When stdin closes (the app quit or crashed), the helper cancels its jobs and exits. A worker whose supervisor dies kills itself and its FFmpeg.
+</details>
 
-## Guarantees
+## Current status
 
-- **Never overwrites.** Outputs are written to a hidden temporary file and hard-linked into place under a free name (`photo 2.jpg`), which fails if the name is taken. Originals are never modified; with "Replace originals" on, the app moves them to the Trash, where Undo can find them.
-- **Tidy multi-file results.** Up to four pages or parts are saved next to the original; more go into one folder, such as `report (pages)`.
-- **One bad file fails only itself.** Each file runs in its own worker process with a time limit. Crashes and hangs are reported per file, and partial outputs are deleted.
-- **Upright and colour-correct.** EXIF orientation is applied to pixels, and ICC profiles are carried into PNG, JPEG, WebP, TIFF and PDF outputs.
-- **Bounded inputs.** Images up to 40,000 px a side and 1 GiB decoded; PDFs decompress to at most 512 MB; text files up to 64 MB; SVGs drawn at most 16,384 px a side; ZIPs extract at most 1,000 times their size (and 64 GB); folders up to 500,000 items.
-- **Local only.** No network access, accounts or telemetry.
+Version 0.1.0, working towards 1.0. "Veer" is a working name, so expect a rename before 1.0.
 
-## Clean-room policy
+- **No release yet.** There's no download on the Releases page and no release workflow, so you build from source (or share a DMG from `make-dmg.sh`). Builds are ad-hoc signed and not notarized.
+- **What CI checks.** On Linux: formatting, clippy, every engine test (including the end-to-end, protocol, FFmpeg and PDFium tests) and the licence policy. On macOS: the engine tests again, the Swift tests, a live protocol contract against the freshly built engine, the app bundle build, and a smoke test of the bundled helpers, including `veer-vision selftest`.
+- **Not yet run on a real Mac.** The newest pieces are tested on Linux end to end, with a stand-in for the Vision helper. Still waiting for a run on a Mac: the helper's real `faces` and `translate` commands, the Mac text-engine PDF layout (`veer-vision document-pdf`), the app's quick actions, Share, Copy image, Next… and ⌃⌥V.
+- **About the demo video.** The wheel frames are drawn by Veer's own SwiftUI code, using slots the real engine returned for three HEIC photos. The Finder window, pointer and progress HUD were recreated for the video, and the photos are generated.
 
-No code, assets or text were taken from other apps, and no other app's source code was opened. Behaviour was specified from public material only: websites, store listings and reviews. Every dependency is permissively licensed (MIT, Apache-2.0, BSD, Zlib, ISC), and `cargo deny check licenses` enforces this. See `THIRD_PARTY.md`.
-
-## Known limits
+<details>
+<summary><strong>Known limits</strong></summary>
 
 - Resize and rotate refuse animated GIFs rather than flatten them. Converting an animated GIF to a still format keeps the first frame. Removing metadata from a GIF is lossless and keeps every frame.
 - Word files are read for their text and structure: headings, lists, quotes, code, tables, bold, italic and links. Pictures, comments, footnotes, headers and footers aren't carried over, and Word output uses Calibri and simple styles. PowerPoint files aren't handled yet.
@@ -327,8 +356,8 @@ No code, assets or text were taken from other apps, and no other app's source co
 - Text recognition, Remove background and searchable PDFs need the Mac app (macOS 14 or later); the engine on Linux doesn't offer them. A searchable PDF made from a PDF is redrawn page by page, so links, form fields and bookmarks aren't carried over.
 - PDF to image needs the bundled PDFium. Password-protected PDFs are refused by the other PDF tools; remove the password first with **Password…**.
 - A PDF with only an owner password (editing restrictions, no password to open it) opens without one, so Veer's PDF tools treat it as unlocked and their results drop those restrictions.
-- Make subtitles needs the Mac app (macOS 14 or later), permission for speech recognition (Veer asks the first time) and the language's on-device model, which macOS downloads when Dictation is turned on for it. macOS grants this per app, so from Terminal or an AI app subtitles work only if that app has been allowed speech recognition; Veer doesn't ask from there. Accuracy is that of macOS dictation: good for clear speech, weaker with music, crosstalk or strong accents.
-- Smart compression measures JPEG and WebP; other formats use Balanced. It is honest: if the original is already as small as it can get without visible change, Veer says so instead of making a worse copy.
+- Make subtitles needs the Mac app (macOS 14 or later), permission for speech recognition (Veer asks the first time) and the language's on-device model, which macOS downloads when Dictation is turned on for it. macOS grants this per app, so from Terminal or an AI app subtitles work only if that app has been allowed speech recognition. Accuracy is that of macOS dictation: good for clear speech, weaker with music, crosstalk or strong accents.
+- Smart compression measures JPEG and WebP; other formats use Balanced. If the original is already as small as it can get without visible change, Veer says so instead of making a worse copy.
 - Page numbers and watermarks use Helvetica, so they take Latin letters, numbers and punctuation only.
 - Shrinking a PDF recompresses its 8-bit RGB and greyscale pictures; text, vector drawings and CMYK pictures are left as they are.
 - Trim, Make GIF and Even out volume re-encode what they keep, so cuts are exact but take as long as a conversion.
@@ -336,6 +365,21 @@ No code, assets or text were taken from other apps, and no other app's source co
 - Compress to a target size for video needs `ffprobe` and works out a bitrate from the duration, so the result lands near the target rather than exactly on it.
 - PDF to text only returns selectable text. Run **Make searchable PDF** on a scan first.
 
-## Status
+</details>
 
-Version 1.0 in progress. Newest: Excel (both ways, and Combine into workbook), converting what's inside a folder, QR codes (read and make), icon sets (favicons, ICNS, iOS), Hide faces and Translate (on-device, through the Vision helper), Share and Copy image on the wheel, Next… in the progress window, and ⌃⌥V for Finder's selection. The engine side is tested on Linux end to end (faces and translation against a stand-in helper); the helper's real `faces` and `translate` commands and the new app pieces still need a run on a Mac. Before that: documents (TXT, Markdown, HTML, Word, RTF and PDF, converting every way, with word counts, cleanup and combining), SVG as an image drawn at any size, CSV/TSV/JSON, and folders and ZIPs (zip, unzip, merge, flatten, sort, list, find duplicates), plus Copy path, Copy name and Open in Terminal. All of it is tested on Linux end to end; the Mac's text-engine PDF layout (`veer-vision document-pdf`) and the app's quick actions still need a run on a Mac. Before that: wheel styles (Dial, plus Orbit and Bloom as advanced options) with presets from the engine, and skins written as CSS custom properties, with six built in. The wheel's tracking (dead zone, sticky borders, Orbit's ring line, Bloom's rest-or-flick) and the skin parser are unit-tested on Linux; the drawing itself still needs a look on a Mac. Before that: Privacy check, Make subtitles (on-device speech recognition), Smart compression and an MCP server for AI agents. Before that, the extras: PDF page numbers, watermarks, passwords, shrinking and single-page rotation; trim, GIF, stills and loudness for media; batch rename; History with multi-step undo; drag-out; Convert Clipboard; and a recipe editor. The engine is built and tested on Linux, including the end-to-end, protocol and PDFium tests, and its licences are checked with `cargo deny`. The Mac app builds with the Command Line Tools. Text recognition, Remove background and searchable PDFs are new: the engine side is tested against a stand-in helper, and `veer-vision selftest` (run by CI and by `run.sh --check`) checks the real one on a Mac.
+## Roadmap
+
+- [ ] Run the newest pieces (Hide faces, Translate, document PDF layout, Share, Next…, ⌃⌥V) on a real Mac.
+- [ ] Publish the first release: a tag-triggered workflow around `make-dmg.sh`, with the notes in `docs/release-notes.md`.
+- [ ] Sign with a Developer ID and notarize, so the first open needs no workaround.
+- [ ] Settle on the final name before 1.0.
+- [ ] Native Shortcuts actions (App Intents), in a release built with Xcode.
+- [ ] PowerPoint files, password-protected ZIPs and other ZIP compression methods.
+
+## License
+
+There's no open-source licence yet. `Cargo.toml` marks the code `LicenseRef-Proprietary`, so all rights are reserved for now, even though the source is public.
+
+Every dependency is permissively licensed (MIT, Apache-2.0, BSD, Zlib, ISC), and `cargo deny check licenses` enforces it. See [THIRD_PARTY.md](THIRD_PARTY.md).
+
+Veer is clean-room work. No code, assets or text were taken from other apps, and no other app's source code was opened. Behaviour was specified from public material only: websites, store listings and reviews.
