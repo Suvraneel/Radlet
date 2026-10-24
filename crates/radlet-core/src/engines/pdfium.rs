@@ -280,7 +280,12 @@ pub fn render(
             let bytes = std::slice::from_raw_parts(buffer, stride as usize * h as usize);
             let mut rgb = RgbImage::new(w, h);
             for (y, row) in bytes.chunks_exact(stride as usize).enumerate() {
-                for (x, px) in row[..(w * 4) as usize].chunks_exact(4).enumerate() {
+                for (x, px) in row[..(w * 4) as usize]
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .enumerate()
+                {
                     // BGRx -> RGB
                     rgb.put_pixel(x as u32, y as u32, image::Rgb([px[2], px[1], px[0]]));
                 }
