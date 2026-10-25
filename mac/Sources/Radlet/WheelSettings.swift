@@ -221,6 +221,12 @@ struct WheelPreview: View {
 /// each row is its own line.
 struct WheelStyleChoices: View {
     @AppStorage("wheelStyle") private var style = WheelStyle.dial.rawValue
+    /// Marks the default, the Dial, as "(Recommended)" (the setup guide).
+    private let recommended: Bool
+
+    init(recommended: Bool = false) {
+        self.recommended = recommended
+    }
 
     private var chosen: WheelStyle { WheelStyle(rawValue: style) ?? .dial }
 
@@ -243,7 +249,8 @@ struct WheelStyleChoices: View {
     }
 
     private func row(_ s: WheelStyle) -> some View {
-        RadioRow(title: s.title, detail: s.summary, on: chosen == s) { style = s.rawValue }
+        RadioRow(title: recommended && s == .dial ? "\(s.title) (Recommended)" : s.title,
+                 detail: s.summary, on: chosen == s) { style = s.rawValue }
     }
 }
 

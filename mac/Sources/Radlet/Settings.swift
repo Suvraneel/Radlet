@@ -124,6 +124,21 @@ final class LoginItem: ObservableObject {
     @Published private(set) var error: String?
     private var syncing = false
 
+    /// Turns it on once, for a new install. Quietly: if macOS refuses (say,
+    /// Radlet is still running from the disk image), it just stays off and
+    /// the switch shows that.
+    func enableByDefault() {
+        guard !enabled else { return }
+        do {
+            try SMAppService.mainApp.register()
+        } catch {
+            Log.app("login item not added: \(Log.code(error))")
+        }
+        syncing = true
+        enabled = SMAppService.mainApp.status == .enabled
+        syncing = false
+    }
+
     private func apply(_ on: Bool) {
         do {
             if on {

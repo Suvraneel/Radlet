@@ -32,6 +32,8 @@ final class WelcomeController {
     func showIfFirstLaunch() {
         guard !UserDefaults.standard.bool(forKey: Self.shownKey) else { return }
         UserDefaults.standard.set(true, forKey: Self.shownKey)
+        // On unless the person turns it off in the guide (step 4).
+        LoginItem.shared.enableByDefault()
         show()
     }
 
@@ -323,7 +325,7 @@ private struct WheelPage: View {
             VStack(alignment: .leading, spacing: 12) {
                 PageTitle("Pick your wheel", "Change it any time in Settings → Wheel.")
                 VStack(alignment: .leading, spacing: 10) {
-                    WheelStyleChoices()
+                    WheelStyleChoices(recommended: true)
                 }
                 Picker("Skin", selection: $skins.selectedID) {
                     ForEach(skins.files) { f in Text(f.skin.name).tag(f.id) }
@@ -354,7 +356,7 @@ private struct ResultsPage: View {
         VStack(alignment: .leading, spacing: 12) {
             PageTitle("Where should results go?",
                       "Radlet never overwrites a file. If a name is taken, it adds a number, like “photo 2.jpg”.")
-            RadioRow(title: OutputChoice.besideSource.title,
+            RadioRow(title: "\(OutputChoice.besideSource.title) (Recommended)",
                      detail: "photo.heic becomes photo.jpg in the same folder, right where you were looking.",
                      on: choice == OutputChoice.besideSource.rawValue) { choice = OutputChoice.besideSource.rawValue }
             RadioRow(title: OutputChoice.downloads.title,
@@ -395,10 +397,10 @@ private struct ShortcutsPage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             PageTitle("Shortcuts and startup", "You can change all of these later in Settings.")
-            ToggleRow(isOn: $finderShortcut, title: "Open the wheel with \(FinderShortcut.keys)",
+            ToggleRow(isOn: $finderShortcut, title: "Open the wheel with \(FinderShortcut.keys) (Recommended)",
                       detail: "Select files in Finder and press \(FinderShortcut.keys): no drag needed.")
                 .onChange(of: finderShortcut) { _, on in FinderShortcut.shared.setEnabled(on) }
-            ToggleRow(isOn: $login.enabled, title: "Start Radlet when you log in",
+            ToggleRow(isOn: $login.enabled, title: "Start Radlet when you log in (Recommended)",
                       detail: "So the wheel is there whenever you drag files. Radlet lives in the menu bar.")
             if let error = login.error {
                 Text(error)
@@ -406,7 +408,7 @@ private struct ShortcutsPage: View {
                     .foregroundStyle(.red)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            ToggleRow(isOn: $haptics, title: "Haptic feedback",
+            ToggleRow(isOn: $haptics, title: "Haptic feedback (Recommended)",
                       detail: "A light tap on a Force Touch trackpad as you cross into a slot.")
             Text("You can also right-click files in Finder and choose Services → Convert with Radlet.")
                 .font(.caption)
@@ -550,6 +552,8 @@ private struct ToggleRow: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            // Full width, so every switch lines up at the right edge.
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .toggleStyle(.switch)
     }
