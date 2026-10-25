@@ -134,19 +134,7 @@ struct WheelSettings: View {
 
     private var styleSection: some View {
         Section("Style") {
-            ForEach(WheelStyle.allCases.filter { !$0.isAdvanced }) { styleRow($0) }
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Advanced")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Text("A second level of presets for each slot, such as a quality or a size limit. Slots stay in the same places in every style.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .accessibilityElement(children: .combine)
-            .accessibilityAddTraits(.isHeader)
-            ForEach(WheelStyle.allCases.filter(\.isAdvanced)) { styleRow($0) }
+            WheelStyleChoices()
             Picker("Slots", selection: $slots) {
                 ForEach(WheelSpec.slotCounts, id: \.self) { n in Text("\(n)").tag(n) }
             }
@@ -174,31 +162,6 @@ struct WheelSettings: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
-    }
-
-    /// One style, picked with a single click: a radio button, its name and
-    /// what it does.
-    private func styleRow(_ s: WheelStyle) -> some View {
-        let on = chosen == s
-        return Button {
-            style = s.rawValue
-        } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Image(systemName: on ? "largecircle.fill.circle" : "circle")
-                    .foregroundStyle(on ? Color.accentColor : Color.secondary)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(s.title)
-                    Text(s.summary)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 0)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(on ? .isSelected : [])
     }
 
     private var skinSection: some View {
@@ -238,8 +201,8 @@ struct WheelSettings: View {
     }
 }
 
-/// The wheel, shrunk to fit Settings.
-private struct WheelPreview: View {
+/// The wheel, shrunk to fit Settings and the setup guide.
+struct WheelPreview: View {
     @ObservedObject var model: WheelModel
 
     var body: some View {
@@ -250,5 +213,65 @@ private struct WheelPreview: View {
             .frame(width: side, height: side)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+    }
+}
+
+/// The three wheel styles as radio rows, Orbit and Bloom under an
+/// "Advanced" header. Used by Settings and the setup guide; inside a Form
+/// each row is its own line.
+struct WheelStyleChoices: View {
+    @AppStorage("wheelStyle") private var style = WheelStyle.dial.rawValue
+
+    private var chosen: WheelStyle { WheelStyle(rawValue: style) ?? .dial }
+
+    var body: some View {
+        Group {
+            ForEach(WheelStyle.allCases.filter { !$0.isAdvanced }) { row($0) }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Advanced")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text("A second level of presets for each slot, such as a quality or a size limit. Slots stay in the same places in every style.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            ForEach(WheelStyle.allCases.filter(\.isAdvanced)) { row($0) }
+        }
+    }
+
+    private func row(_ s: WheelStyle) -> some View {
+        RadioRow(title: s.title, detail: s.summary, on: chosen == s) { style = s.rawValue }
+    }
+}
+
+/// One choice of several, picked with a single click: a radio button, a
+/// name and a line on what it does.
+struct RadioRow: View {
+    let title: String
+    let detail: String
+    let on: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: on ? "largecircle.fill.circle" : "circle")
+                    .foregroundStyle(on ? Color.accentColor : Color.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 }

@@ -154,7 +154,7 @@ For audio and video, install FFmpeg. Images, PDFs and text work without it.
 brew install ffmpeg
 ```
 
-Radlet lives in the menu bar (a circle-in-a-circle icon), not the Dock, and opens a short welcome guide the first time. Start dragging files in Finder, then hold **Shift**. An app built on your own Mac opens without Gatekeeper's warning.
+Radlet lives in the menu bar (a circle-in-a-circle icon), not the Dock. The first time, a short setup guide lets you pick the wheel's style and skin, where results go and your shortcuts, checks for FFmpeg, and opens a folder of sample photos to practise on: its checklist ticks off as you convert, use a tool and press ⌃⌥V. It's in the menu bar later as **Setup and Tutorial…**. Start dragging files in Finder, then hold **Shift**. An app built on your own Mac opens without Gatekeeper's warning.
 
 ### The engine on its own (macOS or Linux)
 
