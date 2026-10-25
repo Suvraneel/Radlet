@@ -5,8 +5,17 @@ import Foundation
 /// Radlet's places: loadouts (then called recipes), skins and job history.
 /// Settings are copied by the app (see LegacySettings in the Radlet target).
 public enum LegacyFiles {
-    /// The bundle ID the earlier builds used, for their settings.
-    public static let oldBundleID = "com.usemonoma.veer"
+    /// Bundle IDs earlier builds used, newest first: Radlet before 0.1.0
+    /// (com.suvraneel.radlet since), then Veer. Their settings are copied
+    /// over in this order, and a copy still running is asked to quit.
+    public static let oldBundleIDs = ["com.usemonoma.radlet", "com.usemonoma.veer"]
+    /// Veer's, for the one-time "Veer is now Radlet" notice.
+    public static let veerBundleID = "com.usemonoma.veer"
+
+    /// Whether `bundleID` is one of the earlier builds'.
+    public static func isOldBuild(_ bundleID: String?) -> Bool {
+        bundleID.map(oldBundleIDs.contains) ?? false
+    }
 
     /// Each old item under Application Support and where it now lives.
     public static func moves(support: URL) -> [(from: URL, to: URL)] {

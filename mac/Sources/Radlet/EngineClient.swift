@@ -24,7 +24,7 @@ enum EngineError: LocalizedError {
 final class EngineClient: @unchecked Sendable {
     static let shared = EngineClient()
 
-    private let queue = DispatchQueue(label: "com.usemonoma.radlet.engine")
+    private let queue = DispatchQueue(label: "com.suvraneel.radlet.engine")
     private var process: Process?
     private var input: FileHandle?
     private var lines = LineBuffer()

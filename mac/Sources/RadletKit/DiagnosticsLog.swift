@@ -12,7 +12,7 @@ public final class DiagnosticsLog: @unchecked Sendable {
     public let fileURL: URL
     public var previousURL: URL { fileURL.deletingPathExtension().appendingPathExtension("1.log") }
 
-    private let queue = DispatchQueue(label: "com.usemonoma.radlet.log")
+    private let queue = DispatchQueue(label: "com.suvraneel.radlet.log")
     private let maxBytes: Int
     private let stamp: ISO8601DateFormatter = {
         let f = ISO8601DateFormatter()
