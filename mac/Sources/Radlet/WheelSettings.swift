@@ -87,17 +87,13 @@ final class SkinStore: ObservableObject {
 
 struct WheelSettings: View {
     @AppStorage("wheelStyle") private var style = WheelStyle.dial.rawValue
-    @AppStorage("advancedStyles") private var advanced = false
     @AppStorage("wheelSlots") private var slots = WheelSpec.defaultCount
     @AppStorage("haptics") private var haptics = true
     @AppStorage("bloomDwell") private var dwell = 0.24
     @ObservedObject private var skins = SkinStore.shared
     @StateObject private var preview = WheelPreviewModel()
 
-    private var chosen: WheelStyle {
-        let s = WheelStyle(rawValue: style) ?? .dial
-        return s.isAdvanced && !advanced ? .dial : s
-    }
+    private var chosen: WheelStyle { WheelStyle(rawValue: style) ?? .dial }
 
     private var count: Int { WheelSpec.slotCounts.contains(slots) ? slots : WheelSpec.defaultCount }
 
@@ -120,7 +116,6 @@ struct WheelSettings: View {
         }
         .onAppear {
             skins.refreshIfChanged()
-            if !advanced, (WheelStyle(rawValue: style) ?? .dial).isAdvanced { style = WheelStyle.dial.rawValue }
             if WheelStyle(rawValue: style) == nil { style = WheelStyle.dial.rawValue }
             if !WheelSpec.slotCounts.contains(slots) { slots = WheelSpec.defaultCount }
             refreshPreview()
@@ -128,10 +123,6 @@ struct WheelSettings: View {
         }
         .onDisappear { preview.stop() }
         .onChange(of: style) { _, _ in refreshPreview() }
-        .onChange(of: advanced) { _, on in
-            if !on, (WheelStyle(rawValue: style) ?? .dial).isAdvanced { style = WheelStyle.dial.rawValue }
-            refreshPreview()
-        }
         .onChange(of: slots) { _, _ in refreshPreview() }
         .onChange(of: skins.selectedID) { _, _ in refreshPreview() }
         .onChange(of: skins.files) { _, _ in refreshPreview() }
@@ -143,20 +134,7 @@ struct WheelSettings: View {
 
     private var styleSection: some View {
         Section("Style") {
-            Picker("Style", selection: $style) {
-                ForEach(WheelStyle.allCases.filter { advanced || !$0.isAdvanced }) { s in
-                    Text(s.title).tag(s.rawValue)
-                }
-            }
-            .pickerStyle(.radioGroup)
-            Text(chosen.summary)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Toggle("Advanced styles", isOn: $advanced)
-            Text("Orbit and Bloom give each slot a second level of presets, such as a quality or a size limit. Slots stay in the same places in every style.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            WheelStyleChoices()
             Picker("Slots", selection: $slots) {
                 ForEach(WheelSpec.slotCounts, id: \.self) { n in Text("\(n)").tag(n) }
             }
@@ -164,8 +142,8 @@ struct WheelSettings: View {
             Text("Eight puts every slot on a quick direction. The rest go behind “More…”.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            if chosen == .bloom {
-                LabeledContent("Open presets after") {
+            if chosen.isAdvanced {
+                LabeledContent(chosen == .bloom ? "Open presets after" : "Fold presets back after") {
                     HStack {
                         Slider(value: $dwell, in: 0.12...0.6)
                         Text("\(Int((dwell * 1000).rounded())) ms")
@@ -173,6 +151,11 @@ struct WheelSettings: View {
                             .frame(width: 52, alignment: .trailing)
                     }
                 }
+                Text(chosen == .bloom
+                     ? "How long to rest on a slot before its presets fan out. Open presets stay out until you rest on another slot."
+                     : "Pushing into a slot widens its ring to show every preset. It stays wide until you rest on another slot for this long.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Toggle("Haptic feedback", isOn: $haptics)
             Text("A light tap on a Force Touch trackpad each time you cross into a slot.")
@@ -218,8 +201,8 @@ struct WheelSettings: View {
     }
 }
 
-/// The wheel, shrunk to fit Settings.
-private struct WheelPreview: View {
+/// The wheel, shrunk to fit Settings and the setup guide.
+struct WheelPreview: View {
     @ObservedObject var model: WheelModel
 
     var body: some View {
@@ -230,5 +213,72 @@ private struct WheelPreview: View {
             .frame(width: side, height: side)
             .allowsHitTesting(false)
             .accessibilityHidden(true)
+    }
+}
+
+/// The three wheel styles as radio rows, Orbit and Bloom under an
+/// "Advanced" header. Used by Settings and the setup guide; inside a Form
+/// each row is its own line.
+struct WheelStyleChoices: View {
+    @AppStorage("wheelStyle") private var style = WheelStyle.dial.rawValue
+    /// Marks the default, the Dial, as "(Recommended)" (the setup guide).
+    private let recommended: Bool
+
+    init(recommended: Bool = false) {
+        self.recommended = recommended
+    }
+
+    private var chosen: WheelStyle { WheelStyle(rawValue: style) ?? .dial }
+
+    var body: some View {
+        Group {
+            ForEach(WheelStyle.allCases.filter { !$0.isAdvanced }) { row($0) }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Advanced")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text("A second level of presets for each slot, such as a quality or a size limit. Slots stay in the same places in every style.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            ForEach(WheelStyle.allCases.filter(\.isAdvanced)) { row($0) }
+        }
+    }
+
+    private func row(_ s: WheelStyle) -> some View {
+        RadioRow(title: recommended && s == .dial ? "\(s.title) (Recommended)" : s.title,
+                 detail: s.summary, on: chosen == s) { style = s.rawValue }
+    }
+}
+
+/// One choice of several, picked with a single click: a radio button, a
+/// name and a line on what it does.
+struct RadioRow: View {
+    let title: String
+    let detail: String
+    let on: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: on ? "largecircle.fill.circle" : "circle")
+                    .foregroundStyle(on ? Color.accentColor : Color.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 }

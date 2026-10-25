@@ -46,6 +46,6 @@ package final class WheelPreviewModel: ObservableObject {
         guard !tour.isEmpty else { return }
         let pick = tour[step % tour.count]
         step += 1
-        driver.select(pick, open: spec.style == .bloom && pick.preset != nil ? pick.slot : nil, feedback: false)
+        driver.select(pick, open: spec.style.isAdvanced && pick.preset != nil ? pick.slot : nil, feedback: false)
     }
 }

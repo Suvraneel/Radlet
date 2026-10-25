@@ -9,6 +9,4 @@ Radlet isn't notarized by Apple yet, so macOS blocks it the first time you open 
 
 For audio and video, install FFmpeg: `brew install ffmpeg`. Images, PDFs and text work without it.
 
-**Getting started:** Radlet lives in the menu bar. Start dragging files in Finder and hold **Shift** to convert, **Command** for tools or **Control** for your loadouts. No drag needed: select files in Finder and press **⌃⌥V**. The README has the full guide.
-
-**Coming from a Veer build?** Radlet carries your settings, loadouts (formerly recipes), skins and History over when it starts. Reinstall the command-line tool from **Settings → Advanced** (it's now `radlet`), turn **Start at login** back on, then delete `Veer.app`.
+**Getting started:** Radlet lives in the menu bar. The first time, a short setup guide lets you pick how the wheel looks, choose where results go and practise on some sample photos. After that, start dragging files in Finder and hold **Shift** to convert, **Command** for tools or **Control** for your loadouts. No drag needed: select files in Finder and press **⌃⌥V**. The README has the full guide.

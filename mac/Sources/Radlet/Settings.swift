@@ -39,12 +39,11 @@ enum Prefs {
     /// Skins you make or download: CSS files (see RadletKit/Skin.swift).
     static var skinsDir: URL { SkinLibrary.defaultDirectory }
 
-    /// Orbit and Bloom are opt-in.
-    static var advancedStyles: Bool { d.bool(forKey: "advancedStyles") }
-
+    /// The Dial unless another style is picked in Settings → Wheel. (Orbit
+    /// and Bloom used to sit behind an "Advanced styles" switch; turning it
+    /// off already reset this to the Dial, so its old key can be ignored.)
     static var wheelStyle: WheelStyle {
-        let style = WheelStyle(rawValue: d.string(forKey: "wheelStyle") ?? "") ?? .dial
-        return style.isAdvanced && !advancedStyles ? .dial : style
+        WheelStyle(rawValue: d.string(forKey: "wheelStyle") ?? "") ?? .dial
     }
 
     static var wheelSlots: Int {
@@ -124,6 +123,21 @@ final class LoginItem: ObservableObject {
     }
     @Published private(set) var error: String?
     private var syncing = false
+
+    /// Turns it on once, for a new install. Quietly: if macOS refuses (say,
+    /// Radlet is still running from the disk image), it just stays off and
+    /// the switch shows that.
+    func enableByDefault() {
+        guard !enabled else { return }
+        do {
+            try SMAppService.mainApp.register()
+        } catch {
+            Log.app("login item not added: \(Log.code(error))")
+        }
+        syncing = true
+        enabled = SMAppService.mainApp.status == .enabled
+        syncing = false
+    }
 
     private func apply(_ on: Bool) {
         do {

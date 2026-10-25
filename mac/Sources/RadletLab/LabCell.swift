@@ -154,7 +154,7 @@ final class LabCell: ObservableObject, Identifiable {
         // The flash, but no trackpad tap every second.
         let haptics = driver.haptics
         driver.haptics = false
-        driver.select(pick, open: spec.style == .bloom && pick.preset != nil ? pick.slot : nil)
+        driver.select(pick, open: spec.style.isAdvanced && pick.preset != nil ? pick.slot : nil)
         driver.haptics = haptics
     }
 

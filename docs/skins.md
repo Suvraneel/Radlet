@@ -12,10 +12,12 @@ Any skin works with any style.
 | Style | How it works | Best for |
 | --- | --- | --- |
 | **Dial** (default) | One ring of slots. Point at a slot and let go. | Everyone. Eight slots put every one on a quick direction. |
-| **Orbit** (advanced) | The Dial plus an outer ring. Behind each slot sit two of its presets, so pushing further out gets more specific: JPEG, then *Smart* or *Best*. | People who use the same presets all the time. |
-| **Bloom** (advanced) | The Dial. Rest on a slot (about a quarter of a second, adjustable) or flick past it, and up to four presets fan out. Flicking straight out picks the first. | Reaching more presets without a busier wheel. |
+| **Orbit** (advanced) | The Dial plus an outer ring. Behind each slot sit two of its presets, so pushing further out gets more specific: JPEG, then *Smart* or *Best*. Push into a slot with more and its ring widens over the neighbours to show up to four. | People who use the same presets all the time. |
+| **Bloom** (advanced) | The Dial. Rest on a slot (about a quarter of a second, adjustable) or flick past it, and up to four presets fan out, centred on the slot. Flicking straight out picks the first. | Reaching more presets without a busier wheel. |
 
-Turn on **Advanced styles** to choose Orbit or Bloom. Slots stay in the same places in every style, so switching never means relearning where things are.
+Pick a style in **Settings → Wheel**: Orbit and Bloom are listed under **Advanced**. Slots stay in the same places in every style, so switching never means relearning where things are.
+
+In both, a slot's presets stay out once they're showing, however far the pointer overshoots, until you rest on another slot of the inner ring or go back to the centre. Letting go past the ends of the presets does nothing.
 
 Some things work the same in every style:
 

@@ -24,7 +24,7 @@ enum EngineError: LocalizedError {
 final class EngineClient: @unchecked Sendable {
     static let shared = EngineClient()
 
-    private let queue = DispatchQueue(label: "com.usemonoma.radlet.engine")
+    private let queue = DispatchQueue(label: "com.suvraneel.radlet.engine")
     private var process: Process?
     private var input: FileHandle?
     private var lines = LineBuffer()
@@ -36,6 +36,9 @@ final class EngineClient: @unchecked Sendable {
     private var jobHandlers: [Int: (JobEvent) -> Void] = [:]
     /// Events that arrived before their job's handler was registered.
     private var earlyEvents: [Int: [JSONValue]] = [:]
+    /// Jobs asked for but not registered yet: the helper must not be
+    /// restarted under them.
+    private var runsStarting = 0
 
     private init() {}
 
@@ -67,13 +70,15 @@ final class EngineClient: @unchecked Sendable {
         p.standardInput = stdinPipe
         p.standardOutput = stdoutPipe
         p.standardError = FileHandle.standardError
+        let me = ObjectIdentifier(p)
         stdoutPipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
             let data = handle.availableData
             guard let self else { return }
             self.queue.async {
                 if data.isEmpty {
                     handle.readabilityHandler = nil
-                } else {
+                } else if self.process.map(ObjectIdentifier.init) == me {
+                    // A helper that was restarted away can't feed the new one.
                     self.consume(data)
                 }
             }
@@ -183,6 +188,28 @@ final class EngineClient: @unchecked Sendable {
         try await request("hello").decode(Hello.self)
     }
 
+    /// Asks again what this Mac can do. The helper looks for FFmpeg once,
+    /// when it starts, so an idle one is restarted first. While it's busy
+    /// it's left alone (`restarted` is false) and the answer may be stale.
+    func refreshedHello() async throws -> (hello: Hello, restarted: Bool) {
+        let restarted = await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            queue.async {
+                let idle = self.pending.isEmpty && self.jobHandlers.isEmpty && self.runsStarting == 0
+                guard idle, let p = self.process, p.isRunning else {
+                    cont.resume(returning: idle)
+                    return
+                }
+                // Forget it first, so its exit isn't treated as a crash.
+                self.process = nil
+                self.input = nil
+                p.terminate()
+                Log.engine("helper restarted to look for FFmpeg again")
+                cont.resume(returning: true)
+            }
+        }
+        return (try await hello(), restarted)
+    }
+
     func inspect(_ files: [URL], recipesDir: URL?) async throws -> InspectResult {
         var params: [String: JSONValue] = ["paths": .array(files.map { .string($0.path) })]
         if let recipesDir { params["recipes_dir"] = .string(recipesDir.path) }
@@ -193,17 +220,31 @@ final class EngineClient: @unchecked Sendable {
     /// ending with `.jobFinished`.
     func run(files: [URL], action: JSONValue, output: JSONValue, isolate: Bool,
              onEvent: @escaping @MainActor (JobEvent) -> Void) async throws -> Int {
-        let (result, generation) = try await requestWithGeneration("run", [
-            "paths": .array(files.map { .string($0.path) }),
-            "action": action,
-            "options": .object(["output": output]),
-            "isolate": .bool(isolate),
-        ])
-        guard let job = result["job"]?.int else { throw EngineError.helperStopped }
+        // Counted until registered below (the queue is serial, so this runs
+        // before the request is sent).
+        queue.async { self.runsStarting += 1 }
+        let response: (value: JSONValue, generation: Int)
+        do {
+            response = try await requestWithGeneration("run", [
+                "paths": .array(files.map { .string($0.path) }),
+                "action": action,
+                "options": .object(["output": output]),
+                "isolate": .bool(isolate),
+            ])
+        } catch {
+            queue.async { self.runsStarting -= 1 }
+            throw error
+        }
+        let generation = response.generation
+        guard let job = response.value["job"]?.int else {
+            queue.async { self.runsStarting -= 1 }
+            throw EngineError.helperStopped
+        }
         let mainHandler: (JobEvent) -> Void = { event in
             DispatchQueue.main.async { MainActor.assumeIsolated { onEvent(event) } }
         }
         queue.async {
+            self.runsStarting -= 1
             // The helper that accepted this job died before we got here: its
             // events are gone, so end the job now instead of waiting forever.
             guard self.helperGeneration == generation, self.process != nil else {

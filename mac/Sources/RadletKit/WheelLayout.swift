@@ -34,7 +34,7 @@ public enum WheelLayout {
     /// Presets for "More…": the first slots behind it, so Orbit and Bloom
     /// reach them without the menu. Their ids are the slots' own.
     public static func morePresets(_ overflow: [Slot]) -> [SlotVariant] {
-        overflow.prefix(WheelSpec.maxPetals).map {
+        overflow.prefix(WheelSpec.maxPresets).map {
             let short = $0.label.hasSuffix("…") ? String($0.label.dropLast()) : $0.label
             return SlotVariant(id: $0.id, label: short, hint: $0.label, action: $0.action)
         }

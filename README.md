@@ -5,14 +5,14 @@
 <h1>Radlet</h1>
 
 <p><strong>A weapon wheel for your files.</strong><br>
-Drag files, hold a key, flick to a tool. Convert, compress, crop, translate and dozens more, without leaving Finder. A free menu bar app for macOS that does all the work on your Mac.</p>
+Drag files, hold a key, flick to a tool. Convert, compress, crop, translate and dozens more, without leaving Finder. A free file converter and toolkit for macOS that lives in the menu bar and does all the work on your Mac.</p>
 
 <p>
   <a href="https://cdn.jsdelivr.net/gh/Suvraneel/radlet@main/.github/media/demo.mp4"><strong>▶ Watch the 20-second demo</strong></a> (with sound)
   &nbsp;·&nbsp;
   <a href="https://radlet.vercel.app"><strong>Website</strong></a>
   &nbsp;·&nbsp;
-  <a href="#run-it-locally"><strong>Run it locally</strong></a>
+  <a href="https://github.com/Suvraneel/radlet/releases/latest"><strong>Download</strong></a>
 </p>
 
 <p>
@@ -33,7 +33,7 @@ Doing anything to a file on a Mac usually means a detour: open Preview and expor
 - **Nothing leaves your Mac.** No network access, accounts or telemetry. Text recognition, background removal, face detection, subtitles and translation use Apple's on-device frameworks.
 - **Nothing gets overwritten.** Results land beside the originals under a free name, and every job can be undone from History.
 
-*Radlet* is a little radial: the Latin *radius* was the spoke of a wheel, and in German and Dutch *Rad* simply means wheel.
+**Why "Radlet"?** It's **rad**ial + **-let**. Radial, because it's a wheel (in German and Dutch, *Rad* even means wheel). *-let*, because it's a small one, as in *droplet* or *booklet*: it opens under your pointer and gets out of the way. More importantly, *rad* is slang for awesome. The wheel tries to live up to that.
 
 ## How it works
 
@@ -75,7 +75,7 @@ Radlet is two programs. The **Mac app** (Swift) spots the drag, draws the wheel 
 </p>
 
 - **Three wheels on one gesture.** **Shift** converts, **Command** opens tools, **Control** runs your loadouts. Drop on a slot to run it, or in the middle to cancel.
-- **Styles** (Settings → Wheel). **Dial**, one ring, is the default. Turn on **Advanced styles** for **Orbit**, which adds an outer ring of presets behind each slot (JPEG → Smart or Best, Compress → Email or Discord), and **Bloom**, where resting on a slot or flicking past it fans out its presets. The highlight glides between slots, borders are slightly sticky so it doesn't flicker, and a Force Touch trackpad taps as you cross into a slot.
+- **Styles** (Settings → Wheel). **Dial**, one ring, is the default. Under **Advanced** are **Orbit**, which adds an outer ring of presets behind each slot (JPEG → Smart or Best, Compress → Email or Discord) and widens it when you push into a slot with more, and **Bloom**, where resting on a slot or flicking past it fans out its presets. In both, presets stay out until you rest on another slot, so overshooting doesn't lose them. The highlight glides between slots, borders are slightly sticky so it doesn't flicker, and a Force Touch trackpad taps as you cross into a slot.
 - **Slots that stay put.** The wheel holds eight (or 6, 10 or 12), and anything more is under **More…**. The slots you use most stay on the wheel, but nothing moves around: the most useful go up, right, down and left, and stay there.
 - **Skins.** Glass (the plain system look and the default), Instrument, Tactical, Neon, Sunset and Porcelain, plus your own as small CSS files of custom properties (`--accent: #00FF9C;`), starting from any built-in with `--base`. Radlet picks up an edited skin the next time the wheel opens and lists any mistakes with line numbers. See [docs/skins.md](docs/skins.md).
 
@@ -131,9 +131,15 @@ Tools ending in "…" open a window first, with a live preview where it helps.
 | Protocols | JSON lines between app and engine (`radlet serve`), Model Context Protocol for AI agents (`radlet mcp`) |
 | Quality | 200+ Rust tests and 90+ Swift tests, `rustfmt`, `clippy -D warnings`, `cargo deny` licence checks, GitHub Actions on Linux and macOS |
 
+## Install
+
+Download the `.dmg` from the [latest release](https://github.com/Suvraneel/radlet/releases/latest), open it and drag **Radlet** into **Applications**. It runs on macOS 14 or later, on Apple silicon and Intel Macs. For audio and video, also install FFmpeg: `brew install ffmpeg`.
+
+Radlet isn't notarized by Apple yet, so macOS blocks it the first time you open it. On macOS 15 or later, open **System Settings → Privacy & Security** and click **Open Anyway**. On macOS 14, Control-click Radlet in Applications and choose **Open**.
+
 ## Run it locally
 
-There's no published release yet, so for now you build Radlet yourself. You need macOS 14 or later, Xcode or just the Command Line Tools (`xcode-select --install`), and [Rust](https://rustup.rs).
+To build Radlet yourself, you need macOS 14 or later, Xcode or just the Command Line Tools (`xcode-select --install`), and [Rust](https://rustup.rs).
 
 ```sh
 git clone https://github.com/Suvraneel/radlet.git
@@ -148,7 +154,7 @@ For audio and video, install FFmpeg. Images, PDFs and text work without it.
 brew install ffmpeg
 ```
 
-Radlet lives in the menu bar (a circle-in-a-circle icon), not the Dock, and opens a short welcome guide the first time. Start dragging files in Finder, then hold **Shift**. An app built on your own Mac opens without Gatekeeper's warning.
+Radlet lives in the menu bar (a circle-in-a-circle icon), not the Dock. The first time, a short setup guide lets you pick the wheel's style and skin, where results go and your shortcuts, checks for FFmpeg, and opens a folder of sample photos to practise on: its checklist ticks off as you convert, use a tool and press ⌃⌥V. It's in the menu bar later as **Setup and Tutorial…**. Start dragging files in Finder, then hold **Shift**. An app built on your own Mac opens without Gatekeeper's warning.
 
 ### The engine on its own (macOS or Linux)
 
@@ -183,9 +189,20 @@ The Swift tests cover the app's pure logic in `RadletKit`: wheel hit-testing for
 
 ### Sharing a build
 
-`mac/scripts/build-app.sh` makes `dist/Radlet.app` (ad-hoc signed). `mac/scripts/make-dmg.sh` packs `dist/Radlet-<version>.dmg`, a zip and their SHA-256 checksums. Set `UNIVERSAL=1` for Apple silicon and Intel, `VERSION=0.2.0` to stamp a version, and `SKIP_PDFIUM=1` to leave out PDF to image. The build downloads a pinned PDFium once into `target/pdfium`.
+`mac/scripts/build-app.sh` makes `dist/Radlet.app` (ad-hoc signed). `mac/scripts/make-dmg.sh` packs `dist/Radlet-<version>.dmg`, a zip and their SHA-256 checksums. The disk image opens on a styled window (drag Radlet onto Applications) laid out by [dmgbuild](https://github.com/dmgbuild/dmgbuild), which the script installs into `target/dmgbuild` the first time; without Python 3 or a network it makes a plain image instead. Its background is in `mac/dmg`, and the app icon is `mac/Resources/AppIcon.icns`. Set `UNIVERSAL=1` for Apple silicon and Intel, `VERSION=0.2.0` to stamp a version, and `SKIP_PDFIUM=1` to leave out PDF to image. The build downloads a pinned PDFium once into `target/pdfium`.
 
 These builds aren't notarized, so whoever opens one has to allow it once. [docs/release-notes.md](docs/release-notes.md) has the steps. `build-app.sh` already takes a `SIGN_IDENTITY` for a Developer ID certificate.
+
+### Publishing a release
+
+Releases come from version tags. Bump `version` in `Cargo.toml` (and run `cargo build`, so `Cargo.lock` follows), merge it, then tag that commit on `main`:
+
+```sh
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+[The release workflow](.github/workflows/release.yml) builds the app for Apple silicon and Intel, checks every binary and the bundled helpers, and publishes the `.dmg`, zip and checksums on the Releases page, with [docs/release-notes.md](docs/release-notes.md) above GitHub's list of what changed. It stops early if the tag doesn't match `Cargo.toml`. A tag with a hyphen, such as `v0.2.0-beta.1`, becomes a prerelease, and re-running the workflow replaces a release's files.
 
 ### Upgrading from a Veer build
 
@@ -362,7 +379,7 @@ JSON, one object per line. Every request gets exactly one reply with the same `i
 
 Version 0.1.0, working towards 1.0.
 
-- **No release yet.** There's no download on the Releases page and no release workflow, so you build from source (or share a DMG from `make-dmg.sh`). Builds are ad-hoc signed and not notarized.
+- **Releases come from tags.** Each `v*` tag builds a universal `.dmg` and publishes it on the Releases page. Builds are ad-hoc signed and not notarized, so the first open needs **Open Anyway**.
 - **What CI checks.** On Linux: formatting, clippy, every engine test (including the end-to-end, protocol, FFmpeg and PDFium tests) and the licence policy. On macOS: the engine tests again, the Swift tests, a live protocol contract against the freshly built engine, the app bundle build, and a smoke test of the bundled helpers, including `radlet-vision selftest`.
 - **Tested on a Mac.** The newest pieces (Hide faces, Translate, Share, Copy image, Next… and ⌃⌥V) have been run on a real Mac, on top of the Linux end-to-end tests.
 - **About the demo video.** The wheel frames are drawn by Radlet's own SwiftUI code, using slots the real engine returned for three HEIC photos. The Finder window, pointer and progress HUD were recreated for the video, and the photos are generated. Its title and end cards were re-lettered when Veer became Radlet.
@@ -393,9 +410,10 @@ Version 0.1.0, working towards 1.0.
 
 ## Roadmap
 
-- [ ] Publish the first release: a tag-triggered workflow around `make-dmg.sh`, with the notes in `docs/release-notes.md`.
+- [ ] Publish the first release: the workflow is ready, so this is pushing a `v0.1.0` tag.
 - [ ] Sign with a Developer ID and notarize, so the first open needs no workaround.
-- [ ] Rename the GitHub repository to `radlet`, and publish the landing page on Vercel and GitHub Pages.
+- [x] Rename the GitHub repository to `radlet`.
+- [ ] Publish the landing page on Vercel and GitHub Pages.
 - [ ] Native Shortcuts actions (App Intents), in a release built with Xcode.
 - [ ] PowerPoint files, password-protected ZIPs and other ZIP compression methods.
 

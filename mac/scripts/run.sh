@@ -37,7 +37,9 @@ quit_app() {
   wait_until_quit "$name" || { pkill -x "$name" 2> /dev/null || true; wait_until_quit "$name"; } \
     || { pkill -9 -x "$name" 2> /dev/null || true; wait_until_quit "$name" || true; }
 }
-quit_app Radlet com.usemonoma.radlet
+# Builds before 0.1.0 were com.usemonoma.radlet; with the same process name,
+# this quits them too.
+quit_app Radlet com.suvraneel.radlet
 # Radlet was called Veer: two copies would both open a wheel on every drag.
 quit_app Veer com.usemonoma.veer
 

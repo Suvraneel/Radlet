@@ -389,6 +389,15 @@ final class MigrationTests: XCTestCase {
         XCTAssertFalse(fm.fileExists(atPath: clean.appendingPathComponent("Veer").path))
     }
 
+    func testEarlierBuildsAreRecognised() {
+        XCTAssertEqual(LegacyFiles.oldBundleIDs.first, "com.usemonoma.radlet", "newest first")
+        XCTAssertTrue(LegacyFiles.oldBundleIDs.contains(LegacyFiles.veerBundleID))
+        XCTAssertTrue(LegacyFiles.isOldBuild("com.usemonoma.veer"))
+        XCTAssertTrue(LegacyFiles.isOldBuild("com.usemonoma.radlet"))
+        XCTAssertFalse(LegacyFiles.isOldBuild("com.suvraneel.radlet"), "not this build")
+        XCTAssertFalse(LegacyFiles.isOldBuild(nil))
+    }
+
     func testOnlyTheAppsOwnSettingsCarryOver() {
         XCTAssertTrue(LegacyFiles.carriesOver("wheelStyle"))
         XCTAssertTrue(LegacyFiles.carriesOver("watchRules"))

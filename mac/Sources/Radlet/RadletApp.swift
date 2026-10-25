@@ -68,7 +68,7 @@ private struct MenuContent: View {
         Button("Open Loadouts Folder") { state.openRecipesFolder() }
         Divider()
         Text(state.engineStatus)
-        Button("Welcome Guide…") { state.welcome.show() }
+        Button("Setup and Tutorial…") { state.welcome.show() }
         Menu("Troubleshooting") {
             Button("Copy Diagnostics") { Diagnostics.copy(engineStatus: state.engineStatus) }
             Button("Show Log File") { Diagnostics.revealLog() }
@@ -80,10 +80,11 @@ private struct MenuContent: View {
     }
 }
 
-/// Carries an earlier build's settings and files over. Radlet was called
-/// Veer, with the bundle ID com.usemonoma.veer. Settings are copied once;
-/// files are moved on every launch while the old folder is still there
-/// (moving never overwrites, so anything that couldn't move is tried again).
+/// Carries an earlier build's settings and files over: from Radlet before
+/// 0.1.0 (bundle ID com.usemonoma.radlet) and from Veer (com.usemonoma.veer).
+/// Settings are copied once; Veer's files are moved on every launch while
+/// its folder is still there (moving never overwrites, so anything that
+/// couldn't move is tried again).
 enum LegacySettings {
     private static let doneKey = "migratedFromVeer"
     private static let noticeKey = "veerNoticeShown"
@@ -93,18 +94,23 @@ enum LegacySettings {
         quitOldApp()
         let defaults = UserDefaults.standard
         var copied = 0
+        var fromVeer = 0
         if !defaults.bool(forKey: doneKey) {
             defaults.set(true, forKey: doneKey)
-            if let old = defaults.persistentDomain(forName: LegacyFiles.oldBundleID) {
+            // Newest first, so an older build only fills in what's missing.
+            for id in LegacyFiles.oldBundleIDs {
+                guard let old = defaults.persistentDomain(forName: id) else { continue }
                 for (key, value) in old where LegacyFiles.carriesOver(key) && defaults.object(forKey: key) == nil {
                     defaults.set(value, forKey: key)
                     copied += 1
+                    if id == LegacyFiles.veerBundleID { fromVeer += 1 }
                 }
             }
         }
         let moved = LegacyFiles.migrate(support: Prefs.applicationSupport)
-        if copied + moved > 0 { Log.app("carried over \(copied) settings and \(moved) files from Veer") }
-        if copied + moved > 0 && !defaults.bool(forKey: noticeKey) { needsNotice = true }
+        if copied + moved > 0 { Log.app("carried over \(copied) settings and \(moved) files from earlier builds") }
+        // The notice is about Veer; an earlier Radlet build needs none.
+        if fromVeer + moved > 0 && !defaults.bool(forKey: noticeKey) { needsNotice = true }
     }
 
     /// Something came over from Veer and the user hasn't been told yet.
@@ -126,13 +132,13 @@ enum LegacySettings {
         alert.runModal()
     }
 
-    /// An old Veer still running would open a second wheel on every drag
-    /// and keep writing to its own folders: ask it to quit.
+    /// An earlier build still running would open a second wheel on every
+    /// drag and keep writing to its own settings: ask it to quit.
     static func quitOldApp() {
-        let old = NSRunningApplication.runningApplications(withBundleIdentifier: LegacyFiles.oldBundleID)
+        let old = LegacyFiles.oldBundleIDs.flatMap { NSRunningApplication.runningApplications(withBundleIdentifier: $0) }
         guard !old.isEmpty else { return }
         old.forEach { $0.terminate() }
-        Log.app("asked an older Veer to quit")
+        Log.app("asked \(old.count) older build(s) to quit")
     }
 }
 
@@ -160,6 +166,8 @@ final class AppState: ObservableObject {
     /// True while results are dragged out of the HUD, so that drag doesn't
     /// open the wheel.
     private var draggingOut = false
+    /// The wheel on screen was opened by a Finder drag (not the menu or ⌃⌥V).
+    private var openedByDrag = false
 
     private init() {
         // Before anything reads history, loadouts, skins or settings.
@@ -185,7 +193,10 @@ final class AppState: ObservableObject {
         NSUpdateDynamicServices()
 
         wheel.recipesDir = { Prefs.loadoutsDir }
-        wheel.onRun = { [weak self] slot, files in self?.run(slot, files: files) }
+        wheel.onRun = { [weak self] slot, files in
+            self?.notePractice(slot)
+            self?.run(slot, files: files)
+        }
         tools.onApply = { [weak self] slot, files in self?.run(slot, files: files) }
         tools.onRenamed = { [weak self] renames in self?.renamed(renames) }
 
@@ -193,6 +204,7 @@ final class AppState: ObservableObject {
         drag.excludedApps = { Set(Prefs.excludedApps) }
         drag.onTrigger = { [weak self] mode, files, point in
             self?.clipboardFiles = nil
+            self?.openedByDrag = true
             self?.wheel.show(files: files, at: point, mode: mode, keyboard: false)
         }
         drag.onModeChange = { [weak self] mode in self?.wheel.setMode(mode) }
@@ -229,12 +241,12 @@ final class AppState: ObservableObject {
         Task { await checkEngine() }
         if showWelcome { welcome.showIfFirstLaunch() }
 
-        // Veer may open later (it's often a login item): it quits again.
+        // An earlier build may open later (it's often a login item): it quits again.
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didLaunchApplicationNotification, object: nil, queue: .main
         ) { note in
             let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-            if app?.bundleIdentifier == LegacyFiles.oldBundleID { LegacySettings.quitOldApp() }
+            if LegacyFiles.isOldBuild(app?.bundleIdentifier) { LegacySettings.quitOldApp() }
         }
         Task { LegacySettings.showNoticeIfNeeded() }
     }
@@ -270,7 +282,19 @@ final class AppState: ObservableObject {
         let mouse = NSEvent.mouseLocation
         let screen = (NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) } ?? NSScreen.main)?.visibleFrame ?? .zero
         clipboardFiles = nil
+        openedByDrag = false
         wheel.show(files: files, at: NSPoint(x: screen.midX, y: screen.midY), mode: mode, keyboard: true)
+    }
+
+    /// The tutorial's checklist: a convert or a tool chosen from a wheel
+    /// that a Finder drag opened.
+    private func notePractice(_ slot: Slot) {
+        guard openedByDrag else { return }
+        switch slot.group {
+        case "convert": Practice.post(.convert)
+        case "recipe": break
+        default: Practice.post(.tools)
+        }
     }
 
     /// ⌃⌥V and the menu: the wheel for the files selected in Finder.
@@ -282,6 +306,7 @@ final class AppState: ObservableObject {
         switch result {
         case .success(let files):
             Log.app("Finder selection: \(describeFiles(files))")
+            Practice.post(.shortcut)
             showWheel(for: files, mode: .convert)
         case .failure(let problem):
             notify("Finder selection", detail: problem.message)
