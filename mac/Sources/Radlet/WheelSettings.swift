@@ -87,17 +87,13 @@ final class SkinStore: ObservableObject {
 
 struct WheelSettings: View {
     @AppStorage("wheelStyle") private var style = WheelStyle.dial.rawValue
-    @AppStorage("advancedStyles") private var advanced = false
     @AppStorage("wheelSlots") private var slots = WheelSpec.defaultCount
     @AppStorage("haptics") private var haptics = true
     @AppStorage("bloomDwell") private var dwell = 0.24
     @ObservedObject private var skins = SkinStore.shared
     @StateObject private var preview = WheelPreviewModel()
 
-    private var chosen: WheelStyle {
-        let s = WheelStyle(rawValue: style) ?? .dial
-        return s.isAdvanced && !advanced ? .dial : s
-    }
+    private var chosen: WheelStyle { WheelStyle(rawValue: style) ?? .dial }
 
     private var count: Int { WheelSpec.slotCounts.contains(slots) ? slots : WheelSpec.defaultCount }
 
@@ -120,7 +116,6 @@ struct WheelSettings: View {
         }
         .onAppear {
             skins.refreshIfChanged()
-            if !advanced, (WheelStyle(rawValue: style) ?? .dial).isAdvanced { style = WheelStyle.dial.rawValue }
             if WheelStyle(rawValue: style) == nil { style = WheelStyle.dial.rawValue }
             if !WheelSpec.slotCounts.contains(slots) { slots = WheelSpec.defaultCount }
             refreshPreview()
@@ -128,10 +123,6 @@ struct WheelSettings: View {
         }
         .onDisappear { preview.stop() }
         .onChange(of: style) { _, _ in refreshPreview() }
-        .onChange(of: advanced) { _, on in
-            if !on, (WheelStyle(rawValue: style) ?? .dial).isAdvanced { style = WheelStyle.dial.rawValue }
-            refreshPreview()
-        }
         .onChange(of: slots) { _, _ in refreshPreview() }
         .onChange(of: skins.selectedID) { _, _ in refreshPreview() }
         .onChange(of: skins.files) { _, _ in refreshPreview() }
@@ -143,20 +134,19 @@ struct WheelSettings: View {
 
     private var styleSection: some View {
         Section("Style") {
-            Picker("Style", selection: $style) {
-                ForEach(WheelStyle.allCases.filter { advanced || !$0.isAdvanced }) { s in
-                    Text(s.title).tag(s.rawValue)
-                }
+            ForEach(WheelStyle.allCases.filter { !$0.isAdvanced }) { styleRow($0) }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Advanced")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Text("A second level of presets for each slot, such as a quality or a size limit. Slots stay in the same places in every style.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .pickerStyle(.radioGroup)
-            Text(chosen.summary)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Toggle("Advanced styles", isOn: $advanced)
-            Text("Orbit and Bloom give each slot a second level of presets, such as a quality or a size limit. Slots stay in the same places in every style.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            ForEach(WheelStyle.allCases.filter(\.isAdvanced)) { styleRow($0) }
             Picker("Slots", selection: $slots) {
                 ForEach(WheelSpec.slotCounts, id: \.self) { n in Text("\(n)").tag(n) }
             }
@@ -184,6 +174,31 @@ struct WheelSettings: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+    }
+
+    /// One style, picked with a single click: a radio button, its name and
+    /// what it does.
+    private func styleRow(_ s: WheelStyle) -> some View {
+        let on = chosen == s
+        return Button {
+            style = s.rawValue
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: on ? "largecircle.fill.circle" : "circle")
+                    .foregroundStyle(on ? Color.accentColor : Color.secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(s.title)
+                    Text(s.summary)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 
     private var skinSection: some View {

@@ -39,12 +39,11 @@ enum Prefs {
     /// Skins you make or download: CSS files (see RadletKit/Skin.swift).
     static var skinsDir: URL { SkinLibrary.defaultDirectory }
 
-    /// Orbit and Bloom are opt-in.
-    static var advancedStyles: Bool { d.bool(forKey: "advancedStyles") }
-
+    /// The Dial unless another style is picked in Settings → Wheel. (Orbit
+    /// and Bloom used to sit behind an "Advanced styles" switch; turning it
+    /// off already reset this to the Dial, so its old key can be ignored.)
     static var wheelStyle: WheelStyle {
-        let style = WheelStyle(rawValue: d.string(forKey: "wheelStyle") ?? "") ?? .dial
-        return style.isAdvanced && !advancedStyles ? .dial : style
+        WheelStyle(rawValue: d.string(forKey: "wheelStyle") ?? "") ?? .dial
     }
 
     static var wheelSlots: Int {
