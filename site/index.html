@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Radlet: file converter and tools for Mac, on a weapon wheel</title>
 <meta name="description" content="Convert, compress, crop and translate files without leaving Finder: drag, hold a key, flick to a tool. A free Mac app, and nothing leaves your Mac.">
-<meta name="theme-color" content="#060608">
+<meta name="theme-color" content="#08080a">
+<meta name="google-site-verification" content="lFuAlxIzNjNCzH2daO6as-dCMNLj5oDFcJx9T2gXDTg">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Radlet">
 <meta property="og:title" content="Radlet: a weapon wheel for your files">
@@ -26,8 +27,10 @@
   "description": "A weapon wheel for your files: convert, compress, crop, translate and dozens more without leaving Finder. Everything runs on your Mac.",
   "applicationCategory": "UtilitiesApplication",
   "operatingSystem": "macOS 14 or later",
+  "softwareVersion": "0.1.0",
   "url": "https://radlet.vercel.app/",
-  "downloadUrl": "https://github.com/Suvraneel/radlet/releases/latest",
+  "downloadUrl": "https://github.com/Suvraneel/Radlet/releases/download/v0.1.0/Radlet-0.1.0.dmg",
+  "fileSize": "25MB",
   "image": "https://radlet.vercel.app/og.jpg",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
   "author": { "@type": "Person", "name": "Suvraneel Bhuin", "url": "https://github.com/Suvraneel" }
@@ -36,24 +39,24 @@
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://api.github.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #060608;
-  --text: #ededf2;
-  --muted: #a1a1ad;
+  --bg: #08080a;
+  --text: #ededf0;
+  --muted: #a0a0aa;
   --dim: #85858f;
   --hair: rgba(255, 255, 255, 0.07);
   --hair-2: rgba(255, 255, 255, 0.12);
-  --glass: rgba(255, 255, 255, 0.035);
-  --accent: #3d8bff;
-  --accent-ink: #e9f2ff;
-  --violet: #7a5cff;
-  --copper: #c4693a;
+  --panel: rgba(255, 255, 255, 0.025);
+  /* The picked slot in the app icon. */
+  --accent: #4d8dff;
+  --accent-soft: #a9c8ff;
+  --ok: #7fd99a;
   --ease: cubic-bezier(0.32, 0.72, 0, 1);
-  --spring: cubic-bezier(0.34, 1.4, 0.64, 1);
-  --radius: 28px;
-  --max: 1180px;
+  --spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --max: 1200px;
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
@@ -66,239 +69,378 @@ body {
 }
 a { color: inherit; text-decoration: none; }
 img, video, svg { display: block; max-width: 100%; }
-::selection { background: rgba(61, 139, 255, 0.35); }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+::selection { background: rgba(77, 141, 255, 0.35); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
 
-/* The video's own palette: copper top left, indigo right, violet below. */
+/* One cool light from above, and film grain over everything. */
 .atmos { position: fixed; inset: 0; z-index: 0; pointer-events: none;
-  background:
-    radial-gradient(48vw 42vw at 8% -6%, rgba(196, 105, 58, 0.22), transparent 62%),
-    radial-gradient(52vw 46vw at 96% 4%, rgba(47, 92, 220, 0.20), transparent 64%),
-    radial-gradient(60vw 50vw at 50% 110%, rgba(122, 92, 255, 0.16), transparent 66%);
-}
-.grain { position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0.035;
+  background: radial-gradient(90vw 60vh at 50% -18%, rgba(77, 141, 255, 0.10), transparent 70%); }
+.grain { position: fixed; inset: 0; z-index: 40; pointer-events: none; opacity: 0.035;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 main, footer { position: relative; z-index: 2; }
-.wrap { max-width: var(--max); margin: 0 auto; padding: 0 28px; }
+.wrap { max-width: var(--max); margin: 0 auto; padding: 0 32px; }
 
-/* ---------- navigation: a floating glass pill ---------- */
-.nav { position: fixed; z-index: 20; top: 18px; left: 50%; transform: translateX(-50%);
-  display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 16px; border-radius: 999px;
-  background: rgba(14, 14, 18, 0.62); backdrop-filter: blur(22px) saturate(1.4); -webkit-backdrop-filter: blur(22px) saturate(1.4);
-  box-shadow: inset 0 0 0 1px var(--hair), 0 20px 50px -30px rgba(0, 0, 0, 0.9);
-}
-.brand { display: flex; align-items: center; gap: 9px; font-weight: 600; letter-spacing: -0.01em; margin-right: 10px; }
-.brand svg { width: 20px; height: 20px; }
-.nav .links { display: flex; gap: 2px; }
-.nav .links a { padding: 8px 13px; border-radius: 999px; font-size: 14px; color: var(--muted); transition: color .4s var(--ease), background .4s var(--ease); }
+/* ---------- navigation: a floating pill ---------- */
+.nav { position: fixed; z-index: 30; top: 16px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 4px; padding: 5px 5px 5px 14px; border-radius: 999px;
+  background: rgba(16, 16, 20, 0.55); backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  box-shadow: inset 0 0 0 1px var(--hair), 0 24px 48px -32px rgba(0, 0, 0, 0.9);
+  transition: background-color .6s var(--ease), box-shadow .6s var(--ease); }
+.nav.scrolled { background: rgba(16, 16, 20, 0.82); box-shadow: inset 0 0 0 1px var(--hair-2), 0 24px 48px -28px rgba(0, 0, 0, 0.95); }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 600; letter-spacing: -0.015em; margin-right: 12px; }
+.brand svg { width: 22px; height: 22px; }
+.nav .links { display: flex; gap: 2px; margin-right: 6px; }
+.nav .links a { padding: 8px 12px; border-radius: 999px; font-size: 14px; color: var(--muted); transition: color .5s var(--ease), background-color .5s var(--ease); }
 .nav .links a:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
-.menu-btn { display: none; width: 40px; height: 40px; border-radius: 999px; border: 0; background: rgba(255, 255, 255, 0.06); position: relative; cursor: pointer; }
-.menu-btn span { position: absolute; left: 12px; right: 12px; height: 1.5px; background: var(--text); border-radius: 2px; transition: transform .5s var(--ease), top .5s var(--ease); }
-.menu-btn span:first-child { top: 16px; }
-.menu-btn span:last-child { top: 23px; }
-.menu-open .menu-btn span:first-child { top: 19.5px; transform: rotate(45deg); }
-.menu-open .menu-btn span:last-child { top: 19.5px; transform: rotate(-45deg); }
-.overlay { position: fixed; inset: 0; z-index: 15; display: flex; flex-direction: column; justify-content: center; gap: 8px; padding: 0 32px;
-  background: rgba(6, 6, 8, 0.86); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px);
+.menu-btn { display: none; width: 38px; height: 38px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); position: relative; }
+.menu-btn span { position: absolute; left: 12px; right: 12px; height: 1.5px; background: var(--text); border-radius: 2px; transition: transform .55s var(--ease); }
+.menu-btn span:first-child { top: 15.5px; }
+.menu-btn span:last-child { top: 21.5px; }
+.menu-open .menu-btn span:first-child { transform: translateY(3px) rotate(45deg); }
+.menu-open .menu-btn span:last-child { transform: translateY(-3px) rotate(-45deg); }
+.overlay { position: fixed; inset: 0; z-index: 25; display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 0 28px;
+  background: rgba(8, 8, 10, 0.86); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px);
   opacity: 0; pointer-events: none; transition: opacity .5s var(--ease); }
-.overlay a { font-size: 38px; font-weight: 600; letter-spacing: -0.03em; opacity: 0; transform: translateY(28px); transition: opacity .6s var(--ease), transform .6s var(--ease); }
+.overlay a { font-size: 40px; font-weight: 600; letter-spacing: -0.035em; line-height: 1.25; opacity: 0; transform: translateY(32px); transition: opacity .7s var(--ease), transform .7s var(--ease); }
 .menu-open .overlay { opacity: 1; pointer-events: auto; }
 .menu-open .overlay a { opacity: 1; transform: none; }
-.menu-open .overlay a:nth-child(2) { transition-delay: .05s; }
-.menu-open .overlay a:nth-child(3) { transition-delay: .1s; }
-.menu-open .overlay a:nth-child(4) { transition-delay: .15s; }
-.menu-open .overlay a:nth-child(5) { transition-delay: .2s; }
-.menu-open .overlay a:nth-child(6) { transition-delay: .25s; }
+.overlay a:nth-child(2) { transition-delay: .05s; }
+.overlay a:nth-child(3) { transition-delay: .1s; }
+.overlay a:nth-child(4) { transition-delay: .15s; }
+.overlay a:nth-child(5) { transition-delay: .2s; }
+.overlay a:nth-child(6) { transition-delay: .25s; }
 
-/* ---------- buttons: pills with a nested icon ---------- */
-.btn { display: inline-flex; align-items: center; gap: 12px; padding: 7px 7px 7px 20px; border-radius: 999px; font-weight: 500; font-size: 15px;
-  transition: transform .5s var(--ease), background .5s var(--ease), box-shadow .5s var(--ease); cursor: pointer; border: 0; font-family: inherit; }
-.btn:active { transform: scale(0.98); }
-.btn .knob { width: 34px; height: 34px; border-radius: 999px; display: grid; place-items: center; transition: transform .5s var(--ease); }
+/* ---------- buttons ---------- */
+.btn { display: inline-flex; align-items: center; gap: 14px; height: 52px; padding: 0 6px 0 22px; border-radius: 999px; font-weight: 500; font-size: 15px; letter-spacing: -0.005em; white-space: nowrap;
+  transition: transform .6s var(--ease), background-color .6s var(--ease), box-shadow .6s var(--ease); }
+.btn:active { transform: scale(0.97); }
+.btn .knob { width: 40px; height: 40px; border-radius: 999px; display: grid; place-items: center; transition: transform .6s var(--spring); }
 .btn .knob svg { width: 15px; height: 15px; }
-.btn:hover .knob { transform: translate(2px, -1px) scale(1.05); }
-.btn-primary { background: var(--accent); color: #fff; box-shadow: 0 14px 40px -16px rgba(61, 139, 255, 0.75), inset 0 1px 0 rgba(255, 255, 255, 0.25); }
-.btn-primary .knob { background: rgba(0, 0, 0, 0.18); }
-.btn-primary:hover { background: #5a9cff; }
-.btn-ghost { background: rgba(255, 255, 255, 0.05); color: var(--text); box-shadow: inset 0 0 0 1px var(--hair-2); }
-.btn-ghost .knob { background: rgba(255, 255, 255, 0.07); }
-.btn-ghost:hover { background: rgba(255, 255, 255, 0.08); }
-.btn-small { padding: 5px 5px 5px 14px; font-size: 14px; gap: 9px; }
-.btn-small .knob { width: 28px; height: 28px; }
+.btn-primary { background: #f3f3f5; color: #0a0a0c;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(255, 255, 255, 0.08), 0 20px 44px -20px rgba(77, 141, 255, 0.7); }
+.btn-primary:hover { background: #fff; box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(255, 255, 255, 0.1), 0 24px 54px -18px rgba(77, 141, 255, 0.85); }
+.btn-primary .knob { background: #0a0a0c; color: #fff; }
+.btn-primary:hover .knob { transform: translateY(2px) scale(1.05); }
+.btn-small { height: 38px; padding: 0 4px 0 15px; font-size: 14px; gap: 10px; }
+.btn-small .knob { width: 30px; height: 30px; }
+.btn-small .knob svg { width: 13px; height: 13px; }
 
-/* ---------- shared pieces ---------- */
-.eyebrow { display: inline-flex; align-items: center; gap: 8px; padding: 6px 13px; border-radius: 999px; font-size: 11px; font-weight: 500;
-  text-transform: uppercase; letter-spacing: 0.16em; color: var(--muted); background: rgba(255, 255, 255, 0.04); box-shadow: inset 0 0 0 1px var(--hair); }
-.eyebrow i { width: 6px; height: 6px; border-radius: 99px; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
-.shell { padding: 6px; border-radius: var(--radius); background: rgba(255, 255, 255, 0.025); box-shadow: inset 0 0 0 1px var(--hair); }
-.core { border-radius: calc(var(--radius) - 6px); background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.012));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), 0 40px 90px -50px rgba(0, 0, 0, 0.9); overflow: hidden; position: relative; }
-section { padding: 120px 0; }
-h2 { font-size: clamp(34px, 4.8vw, 60px); line-height: 1.02; letter-spacing: -0.035em; font-weight: 600; }
-h3 { font-size: 21px; letter-spacing: -0.02em; font-weight: 600; line-height: 1.25; }
-.lead { font-size: clamp(17px, 1.6vw, 20px); color: var(--muted); max-width: 34em; }
-.sub { color: var(--muted); }
-kbd { font: 500 13px "Geist Mono", ui-monospace, monospace; padding: 3px 8px; border-radius: 8px; background: rgba(255, 255, 255, 0.07);
-  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.4), inset 0 0 0 1px var(--hair-2); color: var(--text); white-space: nowrap; }
+.tlink { display: inline-flex; align-items: center; gap: 12px; height: 52px; padding: 0 6px; font-weight: 500; font-size: 15px; color: var(--text); }
+.tlink .ring { width: 34px; height: 34px; border-radius: 999px; display: grid; place-items: center; box-shadow: inset 0 0 0 1px var(--hair-2);
+  transition: transform .6s var(--spring), background-color .6s var(--ease); }
+.tlink .ring svg { width: 12px; height: 12px; }
+.tlink:hover .ring { transform: scale(1.08); background: rgba(255, 255, 255, 0.07); }
+.tlink small { font: 500 12px "Geist Mono", ui-monospace, monospace; color: var(--dim); }
+.arrow-link { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); transition: color .5s var(--ease); }
+.arrow-link svg { width: 12px; height: 12px; transition: transform .6s var(--spring); }
+.arrow-link:hover { color: var(--text); }
+.arrow-link:hover svg { transform: translate(2px, -2px); }
+
+/* ---------- type and shared pieces ---------- */
+section { padding: 120px 0; position: relative; }
+section[id] { scroll-margin-top: 88px; }
+h2 { font-size: clamp(36px, 5vw, 64px); line-height: 1; letter-spacing: -0.04em; font-weight: 600; text-wrap: balance; }
+h3 { font-size: 19px; letter-spacing: -0.02em; font-weight: 600; line-height: 1.3; }
+.lead { font-size: clamp(17px, 1.5vw, 19px); color: var(--muted); max-width: 33em; text-wrap: pretty; }
+.label { display: flex; align-items: center; gap: 12px; margin-bottom: 26px; font: 500 12px "Geist Mono", ui-monospace, monospace; text-transform: uppercase; letter-spacing: 0.14em; color: var(--dim); }
+.label::before { content: ""; width: 20px; height: 1px; background: var(--accent); }
+kbd { font: 500 13px "Geist Mono", ui-monospace, monospace; padding: 2px 7px; border-radius: 7px; background: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.45), inset 0 0 0 1px var(--hair-2); color: var(--text); white-space: nowrap; }
 code, pre { font-family: "Geist Mono", ui-monospace, monospace; }
+p code { font-size: .9em; color: var(--text); }
+/* A machined tray holding a panel: used where something is meant to feel like hardware. */
+.shell { padding: 7px; border-radius: 30px; background: rgba(255, 255, 255, 0.025); box-shadow: inset 0 0 0 1px var(--hair); }
+.core { border-radius: 23px; background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), inset 0 0 0 1px rgba(255, 255, 255, 0.03), 0 50px 100px -60px rgba(0, 0, 0, 1); overflow: hidden; position: relative; }
+.panel { border-radius: 24px; background: var(--panel); box-shadow: inset 0 0 0 1px var(--hair), inset 0 1px 0 rgba(255, 255, 255, 0.05); position: relative; overflow: hidden; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* reveal on scroll */
-.reveal { opacity: 0; transform: translateY(40px); transition: opacity 1s var(--ease), transform 1s var(--ease); }
+.reveal { opacity: 0; transform: translateY(28px); transition: opacity 1.1s var(--ease), transform 1.1s var(--ease); transition-delay: calc(var(--d, 0) * 90ms); }
 .reveal.in { opacity: 1; transform: none; }
-.d1 { transition-delay: .08s; } .d2 { transition-delay: .16s; } .d3 { transition-delay: .24s; }
 
 /* ---------- hero ---------- */
-.hero { min-height: 100dvh; display: grid; align-items: center; padding: 130px 0 80px; }
-.hero-grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: 56px; align-items: center; }
-.hero h1 { font-size: clamp(48px, 7.4vw, 96px); line-height: 0.96; letter-spacing: -0.045em; font-weight: 700; margin: 26px 0 26px; }
-.hero h1 .soft { color: transparent; background: linear-gradient(100deg, #fff 10%, #a9c8ff 55%, #b9a6ff 90%); -webkit-background-clip: text; background-clip: text; }
-.hero .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 36px; }
-.hero .note { margin-top: 18px; font-size: 13px; color: var(--dim); }
+.hero { min-height: 100dvh; display: grid; align-items: center; padding: 136px 0 72px; overflow: hidden; }
+.hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: center; }
+.hero h1 { font-size: clamp(52px, 7.2vw, 104px); line-height: 0.94; letter-spacing: -0.05em; font-weight: 600; margin-bottom: 30px; text-wrap: balance; }
+.hero .lead { max-width: 30em; }
+.hero .cta { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin-top: 40px; }
+.meta { margin-top: 18px; font: 400 12.5px/1.7 "Geist Mono", ui-monospace, monospace; color: var(--dim); }
+.meta span + span::before { content: "·"; margin: 0 8px; color: rgba(255, 255, 255, 0.2); }
+.phone-only { display: none; }
+.is-phone .phone-only { display: block; }
+.is-phone .mac-only { display: none; }
 
 /* the playable wheel */
-.wheel-card .core { padding: 26px 26px 22px; }
-.modes { display: flex; gap: 6px; justify-content: center; margin-bottom: 14px; flex-wrap: wrap; }
-.mode { display: inline-flex; align-items: center; gap: 8px; padding: 7px 13px; border-radius: 999px; border: 0; cursor: pointer; font: 500 13px "Geist", sans-serif;
-  color: var(--muted); background: rgba(255, 255, 255, 0.04); box-shadow: inset 0 0 0 1px var(--hair); transition: all .45s var(--ease); }
-.mode b { font: 500 12px "Geist Mono", monospace; color: var(--dim); transition: color .45s var(--ease); }
-.mode[aria-pressed="true"] { color: #fff; background: rgba(61, 139, 255, 0.16); box-shadow: inset 0 0 0 1px rgba(61, 139, 255, 0.5); }
-.mode[aria-pressed="true"] b { color: #bcd6ff; }
-.wheel { width: 100%; max-width: 440px; margin: 0 auto; aspect-ratio: 1; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
-.wheel svg { width: 100%; height: 100%; overflow: visible; outline: none; }
-.wheel svg:focus-visible .ring { stroke: var(--accent); stroke-width: 2; }
-.wheel .ring { fill: rgba(255, 255, 255, 0.045); stroke: rgba(255, 255, 255, 0.10); stroke-width: 1; }
+.instrument { position: relative; }
+.instrument::before { content: ""; position: absolute; inset: -10% -14%; z-index: -1; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(77, 141, 255, 0.16), rgba(77, 141, 255, 0.04) 55%, transparent 75%); }
+.wheel { width: 100%; max-width: 500px; margin: 0 auto; aspect-ratio: 1; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+.wheel svg { width: 100%; height: 100%; overflow: visible; }
+.wheel svg:focus-visible { outline: none; }
+.wheel svg:focus-visible .ring { stroke: var(--accent); stroke-width: 1.5; }
+.wheel .bezel { fill: rgba(255, 255, 255, 0.018); stroke: rgba(255, 255, 255, 0.07); stroke-width: 1; }
+.wheel .tick { stroke: rgba(255, 255, 255, 0.13); stroke-width: 1; }
+.wheel .tick.major { stroke: rgba(255, 255, 255, 0.32); stroke-width: 1.4; }
+.wheel .ring { fill: rgba(255, 255, 255, 0.04); stroke: rgba(255, 255, 255, 0.09); stroke-width: 1; }
 .wheel .divider { stroke: rgba(255, 255, 255, 0.06); stroke-width: 1; }
-.wheel .hl { fill: var(--accent); transition: transform .42s var(--ease), opacity .3s var(--ease); transform-origin: 0 0; opacity: 0; }
+.wheel .hl { transition: transform .5s var(--ease), opacity .35s var(--ease); transform-origin: 0 0; opacity: 0; }
 .wheel .hl.on { opacity: 1; }
-.wheel .slot text { font: 500 11.5px "Geist", sans-serif; fill: #c9c9d4; text-anchor: middle; transition: fill .3s var(--ease); pointer-events: none; }
-.wheel .slot .ico { fill: none; stroke: #c9c9d4; stroke-width: 1.25; stroke-linecap: round; stroke-linejoin: round; transition: stroke .3s var(--ease); pointer-events: none; }
+.wheel .hl-arc { fill: none; stroke: var(--accent-soft); stroke-width: 2.5; stroke-linecap: round; }
+.wheel .slot text { font: 500 12px "Geist", sans-serif; fill: #c4c4cf; text-anchor: middle; transition: fill .3s var(--ease); pointer-events: none; }
+.wheel .slot .ico { fill: none; stroke: #b4b4c0; stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; transition: stroke .3s var(--ease); pointer-events: none; }
 .wheel .slot.on text { fill: #fff; }
 .wheel .slot.on .ico { stroke: #fff; }
 .wheel .slot .hit { fill: transparent; cursor: pointer; }
-.wheel .hub { fill: #17171d; stroke: rgba(255, 255, 255, 0.14); stroke-width: 1; }
-.wheel .hub-title { font: 600 13px "Geist", sans-serif; fill: #fff; text-anchor: middle; }
+.wheel .hub { fill: #0e0f14; stroke: rgba(255, 255, 255, 0.1); stroke-width: 1; }
+.wheel .hub-ring { fill: none; stroke: rgba(255, 255, 255, 0.85); stroke-width: 2; }
+.wheel .hub-title { font: 600 13px "Geist", sans-serif; fill: #fff; text-anchor: middle; letter-spacing: -0.01em; }
 .wheel .hub-sub { font: 400 10.5px "Geist", sans-serif; fill: var(--muted); text-anchor: middle; }
 .wheel .done { opacity: 0; transition: opacity .3s var(--ease); }
 .wheel .done.on { opacity: 1; }
-.wheel-hint { text-align: center; font-size: 13px; color: var(--dim); margin-top: 6px; min-height: 42px; }
-.wheel-hint.result { color: var(--text); }
-.wheel-hint .ok { color: #7fd99a; }
-@keyframes pop { 0% { transform: scale(.9); } 60% { transform: scale(1.04); } 100% { transform: scale(1); } }
-.popping { animation: pop .5s var(--spring); transform-origin: 50% 50%; }
+.wheel .dyn { transform-origin: 0 0; }
+@keyframes pop { 0% { transform: scale(.93); opacity: .4; } 60% { transform: scale(1.015); opacity: 1; } 100% { transform: scale(1); } }
+.wheel .dyn.popping { animation: pop .55s var(--spring); }
 
-section[id] { scroll-margin-top: 96px; }
+.seg { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); width: min(100%, 360px); margin: 6px auto 0; padding: 4px; border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035); box-shadow: inset 0 0 0 1px var(--hair); }
+.seg-thumb { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px) / 3); border-radius: 999px;
+  background: rgba(255, 255, 255, 0.09); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 6px 16px -8px rgba(0, 0, 0, 0.8);
+  transform: translateX(calc(100% * var(--i, 0))); transition: transform .55s var(--spring); }
+.mode { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 36px; border-radius: 999px; font-size: 13.5px; font-weight: 500;
+  color: var(--muted); transition: color .45s var(--ease); }
+.mode b { font: 500 12px "Geist Mono", monospace; color: var(--dim); transition: color .45s var(--ease); }
+.mode[aria-pressed="true"] { color: #fff; }
+.mode[aria-pressed="true"] b { color: var(--accent-soft); }
+.wheel-hint { text-align: center; font-size: 13px; color: var(--dim); margin: 16px auto 0; min-height: 42px; max-width: 30em; text-wrap: balance; }
+.wheel-hint.result { color: var(--text); }
+.wheel-hint .ok { color: var(--ok); }
 
 /* ---------- demo video ---------- */
+#demo { padding-top: 24px; }
 .video .core { aspect-ratio: 16 / 9; }
 .video video { width: 100%; height: 100%; object-fit: cover; }
 .vctl { position: absolute; right: 16px; bottom: 16px; display: flex; gap: 8px; }
-.caption { text-align: center; margin-top: 18px; font-size: 13px; color: var(--dim); }
+.vbtn { width: 40px; height: 40px; border-radius: 999px; display: grid; place-items: center; background: rgba(12, 12, 16, 0.72); color: #fff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14); transition: transform .5s var(--spring), background-color .5s var(--ease); }
+.vbtn:hover { background: rgba(28, 28, 34, 0.86); transform: scale(1.06); }
+.vbtn:active { transform: scale(0.95); }
+.vbtn svg { width: 15px; height: 15px; }
+.caption { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-top: 18px; padding: 0 8px; font-size: 13px; color: var(--dim); }
+.caption b { font: 500 12px "Geist Mono", monospace; color: var(--muted); font-weight: 500; }
 
 /* ---------- three keys ---------- */
-.keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 56px; }
-.key .core { padding: 28px; height: 100%; }
-.key .cap { display: inline-flex; align-items: center; justify-content: center; min-width: 74px; height: 50px; padding: 0 16px; border-radius: 14px;
-  font: 500 15px "Geist Mono", monospace; background: linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.03));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 -2px 0 rgba(0, 0, 0, 0.45), 0 10px 26px -14px rgba(0, 0, 0, 0.9); margin-bottom: 22px; }
-.key p { color: var(--muted); margin-top: 8px; font-size: 15px; }
-.nodrag { margin-top: 26px; text-align: center; color: var(--muted); font-size: 15px; }
+.split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr); gap: 72px; align-items: center; }
+.split .lead { margin-top: 26px; }
+.board .core { padding: 10px; }
+.keyrow { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 26px; align-items: center; padding: 22px 22px 22px 18px; border-radius: 18px; transition: background-color .5s var(--ease); }
+.keyrow + .keyrow { box-shadow: 0 -1px 0 var(--hair); border-top-left-radius: 0; border-top-right-radius: 0; }
+.keyrow.down { background: rgba(77, 141, 255, 0.06); }
+.keyrow p { color: var(--muted); font-size: 15px; margin-top: 4px; }
+/* Keycaps, sized roughly as they are on a Mac keyboard. */
+.cap { position: relative; display: block; width: var(--w); height: 66px; border-radius: 11px;
+  background: linear-gradient(180deg, #24242a, #1a1a1f);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), inset 0 -3px 0 rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(0, 0, 0, 0.6), 0 12px 22px -12px rgba(0, 0, 0, 0.9);
+  transition: transform .18s var(--ease), box-shadow .18s var(--ease), background .18s var(--ease); }
+.cap .g { position: absolute; top: 8px; right: 11px; font-size: 15px; color: #e4e4ea; }
+.cap .w { position: absolute; bottom: 8px; right: 11px; font-size: 11px; color: #a3a3ad; letter-spacing: 0.01em; }
+.keyrow.down .cap, .keyrow:active .cap { transform: translateY(2px); background: linear-gradient(180deg, #212127, #18181d);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), inset 0 -1px 0 rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(0, 0, 0, 0.6), 0 0 0 4px rgba(77, 141, 255, 0.25), 0 4px 10px -6px rgba(0, 0, 0, 0.9); }
+.keyrow.down .cap .g { color: var(--accent-soft); }
+.aside { margin-top: 34px; padding-top: 22px; box-shadow: inset 0 1px 0 var(--hair); color: var(--muted); font-size: 15px; max-width: 30em; }
 
-/* ---------- bento ---------- */
-.bento { display: grid; grid-template-columns: repeat(12, 1fr); gap: 16px; margin-top: 60px; }
-.tile .core { padding: 30px; height: 100%; display: flex; flex-direction: column; gap: 10px; }
-.tile p { color: var(--muted); font-size: 15px; }
+/* ---------- features ---------- */
+.head { max-width: 900px; }
+.bento { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 14px; margin-top: 64px; }
+.bento > .panel { padding: 32px; display: flex; flex-direction: column; }
+.bento p { color: var(--muted); font-size: 15px; margin-top: 8px; max-width: 34em; }
 .t-a { grid-column: span 7; grid-row: span 2; }
-.t-b { grid-column: span 5; }
-.t-c { grid-column: span 5; }
-.t-d { grid-column: span 4; }
-.t-e { grid-column: span 4; }
-.t-f { grid-column: span 4; }
-.t-g { grid-column: span 6; }
-.t-h { grid-column: span 6; }
-.ico-line { width: 30px; height: 30px; stroke: #cfd6ff; stroke-width: 1.25; fill: none; stroke-linecap: round; stroke-linejoin: round; margin-bottom: 8px; }
-.chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: auto; padding-top: 18px; }
-.chips span { font: 500 12.5px "Geist Mono", monospace; padding: 6px 11px; border-radius: 999px; background: rgba(255, 255, 255, 0.045); box-shadow: inset 0 0 0 1px var(--hair); color: #d4d4de; }
-.chips span.hot { color: #d9e8ff; background: rgba(61, 139, 255, 0.13); box-shadow: inset 0 0 0 1px rgba(61, 139, 255, 0.35); }
-.meter { margin-top: auto; padding-top: 18px; display: grid; gap: 9px; }
+.t-b, .t-c { grid-column: span 5; }
+.t-d { grid-column: span 7; }
+.t-e { grid-column: span 5; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 22px; }
+.chips span { font: 500 12px "Geist Mono", monospace; padding: 5px 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.035); box-shadow: inset 0 0 0 1px var(--hair); color: #c9c9d3; }
+.chips span.hot { color: #d6e5ff; background: rgba(77, 141, 255, 0.12); box-shadow: inset 0 0 0 1px rgba(77, 141, 255, 0.3); }
+.meter { margin-top: auto; padding-top: 26px; display: grid; gap: 10px; }
 .meter div { display: flex; justify-content: space-between; font: 500 12.5px "Geist Mono", monospace; color: var(--muted); }
-.meter .bar { height: 6px; border-radius: 99px; background: rgba(255, 255, 255, 0.06); overflow: hidden; display: block; }
-.meter .bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), #8fb8ff); transform-origin: left; transform: scaleX(0); transition: transform 1.6s var(--ease); }
+.meter div b { color: var(--text); font-weight: 500; }
+.meter .bar { height: 4px; border-radius: 99px; background: rgba(255, 255, 255, 0.06); overflow: hidden; display: block; }
+.meter .bar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--accent-soft)); transform-origin: left; transform: scaleX(0); transition: transform 1.8s var(--ease) .2s; }
 .in .meter .bar i { transform: scaleX(var(--w)); }
-.skins-img { margin-top: auto; padding-top: 18px; }
-.rows { display: grid; gap: 8px; margin-top: 18px; }
-.rows div { display: flex; align-items: center; gap: 10px; font: 500 13px "Geist Mono", ui-monospace, monospace; padding: 11px 14px; border-radius: 13px;
-  background: rgba(255, 255, 255, 0.03); box-shadow: inset 0 0 0 1px var(--hair); color: #cfcfda; }
+.rows { display: grid; gap: 6px; margin-top: 26px; }
+.rows div { display: flex; align-items: center; gap: 10px; font: 500 12.5px "Geist Mono", ui-monospace, monospace; padding: 11px 14px; border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025); box-shadow: inset 0 0 0 1px var(--hair); color: #c9c9d4; min-width: 0; }
 .rows .arrow { color: var(--dim); }
-.rows .to { color: #bcd6ff; }
-.rows .tag { margin-left: auto; font-size: 12px; }
-.rows .ok { color: #7fd99a; }
-.rows .bad { color: #ff8a80; }
-.rows div.failed { background: rgba(255, 90, 80, 0.06); box-shadow: inset 0 0 0 1px rgba(255, 120, 110, 0.18); }
-.skins-img img { border-radius: 14px; box-shadow: inset 0 0 0 1px var(--hair); width: 100%; }
+.rows .to { color: var(--accent-soft); }
+.rows .tag { margin-left: auto; font-size: 12px; flex: none; }
+.rows .ok { color: var(--ok); }
+.rows .bad { color: #ff8f86; }
+.rows div.failed { background: rgba(255, 90, 80, 0.05); box-shadow: inset 0 0 0 1px rgba(255, 120, 110, 0.18); }
+.skins-img { margin-top: auto; padding-top: 26px; }
+.skins-img img { width: 100%; border-radius: 14px; box-shadow: 0 0 0 1px var(--hair); }
+/* A small copy of the app's progress window. */
+.hud { margin-top: auto; padding-top: 26px; }
+.hud .top, .hud .foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; font: 500 12px "Geist Mono", monospace; color: var(--muted); }
+.hud .top b { color: var(--text); font-weight: 500; }
+.hud .track { display: block; height: 3px; margin: 12px 0 4px; border-radius: 99px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }
+.hud .track i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-soft)); transform-origin: left; transform: scaleX(0); transition: transform 1.8s var(--ease) .2s; }
+.in .hud .track i { transform: scaleX(1); }
+.hud .rows { margin-top: 12px; }
+.hud .foot { margin-top: 14px; }
+.hud .foot span:last-child { color: var(--text); padding: 4px 10px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--hair-2); }
+.specs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 64px; margin-top: 72px; }
+.specs .label { grid-column: 1 / -1; margin-bottom: 8px; }
+.spec { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 20px; padding: 22px 0; box-shadow: inset 0 1px 0 var(--hair); }
+.spec h3 { font-size: 16px; }
+.spec p { color: var(--muted); font-size: 15px; }
 
 /* ---------- loadouts + agents ---------- */
-.split { display: grid; grid-template-columns: 1fr 1.1fr; gap: 56px; align-items: center; }
-.split > *, .hero-grid > *, .bento > *, .keys > * { min-width: 0; }
-.code .core { padding: 0; }
-.code .bar { display: flex; align-items: center; gap: 7px; padding: 14px 18px; box-shadow: inset 0 -1px 0 var(--hair); }
-.code .bar i { width: 10px; height: 10px; border-radius: 99px; background: rgba(255, 255, 255, 0.12); }
-.code .bar span { margin-left: 10px; font: 500 12px "Geist Mono", monospace; color: var(--dim); }
-.code pre { padding: 22px 24px 26px; font-size: 13.5px; line-height: 1.75; color: #d7d7e2; overflow-x: auto; }
-.code .k { color: #8fb8ff; } .code .s { color: #b9e3a6; } .code .c { color: var(--dim); } .code .n { color: #f0b37e; } .code .p { color: #b9a6ff; }
-.points { display: grid; gap: 14px; margin-top: 30px; }
-.points div { display: flex; gap: 12px; color: var(--muted); font-size: 15px; }
-.points svg { flex: none; width: 20px; height: 20px; stroke: var(--accent); stroke-width: 1.5; fill: none; margin-top: 2px; }
+.notes { list-style: none; margin-top: 34px; max-width: 30em; }
+.notes li { padding: 14px 0; box-shadow: inset 0 1px 0 var(--hair); color: var(--muted); font-size: 15px; }
+.notes li:last-child { box-shadow: inset 0 1px 0 var(--hair), inset 0 -1px 0 var(--hair); }
+.code { border-radius: 22px; background: #0c0c0f; box-shadow: inset 0 0 0 1px var(--hair-2), inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 50px 100px -60px rgba(0, 0, 0, 1); overflow: hidden; }
+.code .bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px; box-shadow: inset 0 -1px 0 var(--hair); font: 500 12px "Geist Mono", monospace; color: var(--muted); }
+.code .bar small { font: inherit; color: var(--dim); padding: 3px 8px; border-radius: 6px; box-shadow: inset 0 0 0 1px var(--hair); }
+.code pre { padding: 24px 24px 28px; font-size: 13.5px; line-height: 1.8; color: #d4d4de; overflow-x: auto; }
+.code .k { color: #8fb8ff; } .code .s { color: #b6dca4; } .code .c { color: #75757f; } .code .n { color: #efb27d; } .code .p { color: var(--accent); }
+#agents .split { grid-template-columns: minmax(0, 1.12fr) minmax(0, 1fr); }
 
-/* ---------- name + final ---------- */
-.name .core { padding: 56px; text-align: center; }
-.name blockquote { font-size: clamp(22px, 2.6vw, 32px); letter-spacing: -0.02em; line-height: 1.3; max-width: 30em; margin: 18px auto 0; }
-.name blockquote em { font-style: normal; color: #a9c8ff; }
-.name .etym { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 6px 14px; margin: 20px auto 0;
-  font-size: clamp(28px, 3.6vw, 46px); font-weight: 600; letter-spacing: -0.03em; }
-.name .etym b { color: #a9c8ff; font-weight: 600; }
-.name .etym .op { color: var(--dim); font-weight: 400; }
-.name .defs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 32px; max-width: 44em; margin: 26px auto 0; text-align: left; }
-.name .defs p { color: var(--muted); font-size: 15px; }
-.name .defs b { color: var(--text); font-weight: 600; }
-.name .defs em { font-style: italic; }
-.name .tail { color: var(--dim); font-size: 15px; margin-top: 10px; }
-.faq { max-width: 780px; margin-top: 34px; display: grid; gap: 10px; }
-.faq details { border-radius: 16px; background: rgba(255, 255, 255, 0.03); box-shadow: inset 0 0 0 1px var(--hair); padding: 18px 22px; }
-.faq summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; gap: 16px; font-weight: 600; font-size: 17px; }
+/* ---------- questions ---------- */
+.faq-grid { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: 72px; align-items: start; }
+.faq-grid .sticky { position: sticky; top: 120px; }
+.faq details { box-shadow: inset 0 -1px 0 var(--hair); }
+.faq details:first-child { box-shadow: inset 0 1px 0 var(--hair), inset 0 -1px 0 var(--hair); }
+.faq summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 24px; padding: 24px 0; font-weight: 500; font-size: 18px; letter-spacing: -0.015em; }
 .faq summary::-webkit-details-marker { display: none; }
-.faq summary::after { content: "+"; color: var(--dim); font-weight: 400; transition: transform .35s var(--ease); }
-.faq details[open] summary::after { transform: rotate(45deg); }
-.faq summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; border-radius: 6px; }
-.faq details p { color: var(--muted); margin-top: 10px; font-size: 15px; }
-.faq details a { color: var(--text); text-decoration: underline; text-decoration-color: rgba(255, 255, 255, 0.35); text-underline-offset: 3px; }
-.final { text-align: center; }
-.final h2 { max-width: 14em; margin: 22px auto 0; }
-.final .cta { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-top: 36px; }
-footer { padding: 40px 0 56px; color: var(--dim); font-size: 13px; }
-footer .row { display: flex; justify-content: space-between; gap: 20px; flex-wrap: wrap; padding-top: 28px; box-shadow: inset 0 1px 0 var(--hair); }
+.pm { position: relative; flex: none; width: 30px; height: 30px; border-radius: 999px; box-shadow: inset 0 0 0 1px var(--hair-2); transition: background-color .5s var(--ease), transform .6s var(--ease); }
+.pm::before, .pm::after { content: ""; position: absolute; left: 50%; top: 50%; width: 11px; height: 1.5px; margin: -0.75px 0 0 -5.5px; background: var(--text); border-radius: 2px; transition: transform .6s var(--ease); }
+.pm::after { transform: rotate(90deg); }
+.faq details[open] .pm { background: rgba(255, 255, 255, 0.06); }
+.faq details[open] .pm::after { transform: rotate(0deg); }
+.faq summary:hover .pm { background: rgba(255, 255, 255, 0.06); }
+.faq .a { padding: 0 54px 26px 0; color: var(--muted); font-size: 15.5px; }
+.faq details[open] .a { animation: rise .7s var(--ease); }
+@keyframes rise { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+.faq .a a { color: var(--text); text-decoration: underline; text-decoration-color: rgba(255, 255, 255, 0.3); text-underline-offset: 3px; }
+
+/* ---------- the name ---------- */
+.name { text-align: center; }
+.name .label { justify-content: center; }
+.name .label::after { content: ""; width: 20px; height: 1px; background: var(--accent); }
+.etym { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 4px 0.32em; font-size: clamp(44px, 7vw, 96px); font-weight: 600; letter-spacing: -0.05em; line-height: 1; }
+.etym b { color: var(--accent-soft); font-weight: 600; }
+.etym .op { color: rgba(255, 255, 255, 0.22); font-weight: 400; }
+.defs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 820px; margin: 56px auto 0; text-align: left; box-shadow: inset 0 1px 0 var(--hair), inset 0 -1px 0 var(--hair); }
+.defs p { color: var(--muted); font-size: 15.5px; padding: 26px 32px; }
+.defs p + p { box-shadow: inset 1px 0 0 var(--hair); }
+.defs b { color: var(--text); font-weight: 600; }
+.name blockquote { font-size: clamp(24px, 3vw, 38px); font-weight: 500; letter-spacing: -0.03em; line-height: 1.2; margin: 56px auto 0; max-width: 20em; text-wrap: balance; }
+.name blockquote em { font-style: normal; color: var(--accent-soft); }
+.name .tail { color: var(--dim); font-size: 15px; margin-top: 12px; }
+
+/* ---------- final call: the app icon's wheel, drawn huge and faint ---------- */
+.final { text-align: center; padding: 200px 0 184px; }
+.dial-wrap { position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+  -webkit-mask-image: linear-gradient(transparent, #000 22%, #000 70%, transparent); mask-image: linear-gradient(transparent, #000 22%, #000 70%, transparent); }
+.dial { position: absolute; left: 50%; top: 50%; width: min(960px, 170vw); aspect-ratio: 1; transform: translate(-50%, -50%); pointer-events: none;
+  -webkit-mask-image: radial-gradient(closest-side, #000 55%, transparent 100%); mask-image: radial-gradient(closest-side, #000 55%, transparent 100%); opacity: .85; }
+.dial i { position: absolute; inset: 0; border-radius: 50%; }
+.dial .ticks { background: repeating-conic-gradient(rgba(255, 255, 255, 0.16) 0 0.3deg, transparent 0.3deg 3deg);
+  -webkit-mask-image: radial-gradient(closest-side, transparent 90%, #000 90.4%, #000 94%, transparent 94.4%); mask-image: radial-gradient(closest-side, transparent 90%, #000 90.4%, #000 94%, transparent 94.4%); }
+.dial .slots { background: repeating-conic-gradient(from 22.5deg, rgba(255, 255, 255, 0.08) 0 0.35deg, transparent 0.35deg 45deg), rgba(255, 255, 255, 0.018);
+  -webkit-mask-image: radial-gradient(closest-side, transparent 34%, #000 34.3%, #000 86%, transparent 86.3%); mask-image: radial-gradient(closest-side, transparent 34%, #000 34.3%, #000 86%, transparent 86.3%); }
+.dial .pick { background: conic-gradient(from 22.5deg, rgba(77, 141, 255, 0.24) 0 45deg, transparent 45deg);
+  -webkit-mask-image: radial-gradient(closest-side, transparent 34.3%, #000 50%, #000 86%, transparent 86.3%); mask-image: radial-gradient(closest-side, transparent 34.3%, #000 50%, #000 86%, transparent 86.3%); }
+.dial .hubline { inset: 31%; box-shadow: inset 0 0 0 1.5px rgba(255, 255, 255, 0.09); }
+.final .wrap { position: relative; }
+.final h2 { max-width: 12em; margin: 0 auto; font-size: clamp(40px, 6vw, 80px); }
+.final .label { justify-content: center; }
+.final .label::after { content: ""; width: 20px; height: 1px; background: var(--accent); }
+.final .cta { display: flex; justify-content: center; align-items: center; flex-wrap: wrap; gap: 10px 22px; margin-top: 44px; }
+.final .meta { text-align: center; }
+
+footer { padding: 0 0 56px; color: var(--dim); font-size: 13px; }
+footer .row { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; padding-top: 28px; box-shadow: inset 0 1px 0 var(--hair); }
+footer .left { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+footer .left svg { width: 18px; height: 18px; }
+footer nav { display: flex; gap: 22px; }
+footer a { transition: color .4s var(--ease); }
 footer a:hover { color: var(--text); }
-.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- download sheet ---------- */
+.get { margin: auto; width: min(620px, calc(100% - 32px)); max-height: calc(100dvh - 32px); padding: 0; border: 0; background: transparent; color: var(--text); overflow: visible;
+  opacity: 0; transform: translateY(16px) scale(0.98);
+  transition: opacity .45s var(--ease), transform .7s var(--ease), overlay .45s allow-discrete, display .45s allow-discrete; }
+.get[open] { opacity: 1; transform: none; }
+@starting-style { .get[open] { opacity: 0; transform: translateY(16px) scale(0.98); } }
+.get::backdrop { background: rgba(4, 4, 6, 0); transition: background-color .45s var(--ease), overlay .45s allow-discrete, display .45s allow-discrete; }
+.get[open]::backdrop { background: rgba(4, 4, 6, 0.66); }
+@starting-style { .get[open]::backdrop { background: rgba(4, 4, 6, 0); } }
+.get .shell { background: rgba(30, 30, 36, 0.5); }
+.get .core { padding: 34px 34px 28px; background: linear-gradient(180deg, #16161b, #101014); max-height: calc(100dvh - 46px); overflow-y: auto; }
+.get .x { position: absolute; top: 18px; right: 18px; width: 34px; height: 34px; border-radius: 999px; display: grid; place-items: center; box-shadow: inset 0 0 0 1px var(--hair-2); transition: background-color .4s var(--ease), transform .5s var(--spring); }
+.get .x:hover { background: rgba(255, 255, 255, 0.07); transform: rotate(90deg); }
+.get .x svg { width: 12px; height: 12px; }
+.get h2 { font-size: 28px; letter-spacing: -0.03em; line-height: 1.1; padding-right: 40px; }
+.get .file { margin-top: 10px; font: 500 12.5px "Geist Mono", monospace; color: var(--dim); }
+.get .tick-badge { width: 44px; height: 44px; border-radius: 999px; display: grid; place-items: center; margin-bottom: 22px; background: rgba(127, 217, 154, 0.1); box-shadow: inset 0 0 0 1px rgba(127, 217, 154, 0.3); color: var(--ok); }
+.get .tick-badge svg { width: 18px; height: 18px; }
+.get .tick-badge path { stroke-dasharray: 24; stroke-dashoffset: 24; }
+.get[open] .tick-badge path { animation: draw .7s var(--ease) .25s forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+.steps { list-style: none; counter-reset: s; margin-top: 26px; }
+.steps li { counter-increment: s; position: relative; padding: 16px 0 16px 46px; box-shadow: inset 0 1px 0 var(--hair); color: var(--muted); font-size: 15px; }
+.steps li::before { content: counter(s); position: absolute; left: 0; top: 15px; width: 28px; height: 28px; border-radius: 999px; display: grid; place-items: center;
+  font: 500 12px "Geist Mono", monospace; color: var(--text); box-shadow: inset 0 0 0 1px var(--hair-2); }
+.steps b { color: var(--text); font-weight: 600; }
+.steps .os { display: block; margin-top: 6px; font-size: 14px; }
+.get .foot { display: flex; justify-content: space-between; gap: 10px 20px; flex-wrap: wrap; margin-top: 8px; padding-top: 18px; box-shadow: inset 0 1px 0 var(--hair); font-size: 13.5px; color: var(--dim); }
+.get .foot a, .get .foot button { color: var(--text); text-decoration: underline; text-decoration-color: rgba(255, 255, 255, 0.3); text-underline-offset: 3px; }
+.get .phone { display: none; }
+.get.for-phone .mac { display: none; }
+.get.for-phone .phone { display: block; }
+.get .phone p { color: var(--muted); margin-top: 12px; }
+.get .phone .btn { margin-top: 26px; }
 
 /* ---------- small screens ---------- */
-@media (max-width: 900px) {
-  .hero-grid, .split { grid-template-columns: 1fr; gap: 44px; }
-  .keys { grid-template-columns: 1fr; }
-  .bento { grid-template-columns: 1fr; }
-  .bento > * { grid-column: span 1 !important; grid-row: auto !important; }
-  section { padding: 88px 0; }
-  .name .core { padding: 36px 22px; }
-  .name .defs { grid-template-columns: 1fr; }
+@media (max-width: 1020px) {
+  .hero-grid, .split, #agents .split, .faq-grid { grid-template-columns: minmax(0, 1fr); gap: 56px; }
+  #agents .split > .code { order: 2; }
+  .faq-grid .sticky { position: static; }
+  .bento { grid-template-columns: minmax(0, 1fr); }
+  .bento > * { grid-column: auto !important; grid-row: auto !important; }
+  .specs { grid-template-columns: minmax(0, 1fr); }
+  section { padding: 96px 0; }
+  .hero .text { max-width: 640px; }
 }
 @media (max-width: 760px) {
-  .eyebrow { font-size: 10px; letter-spacing: 0.08em; padding: 6px 11px; }
   .wrap { padding: 0 16px; }
-  .nav { left: 16px; right: 16px; transform: none; justify-content: space-between; }
-  .nav .links, .nav .gh { display: none; }
-  .menu-btn { display: block; }
-  .hero { padding-top: 112px; }
-  .tile .core, .key .core { padding: 24px; }
-  .vctl { right: 10px; bottom: 10px; transform: scale(0.82); transform-origin: right bottom; }
-  .rows div { font-size: 12px; padding: 10px 12px; }
+  .nav { left: 12px; right: 12px; top: 12px; transform: none; justify-content: space-between; padding-left: 14px; }
+  .nav .links { display: none; }
+  .brand { margin-right: auto; }
+  .menu-btn { display: block; margin-left: 4px; }
+  .hero { padding: 112px 0 40px; min-height: auto; }
+  .hero h1 { margin-bottom: 22px; }
+  .hero .cta { margin-top: 32px; }
+  .bento > .panel { padding: 24px; }
+  .skins-img { margin: auto -24px -24px; }
+  .keyrow { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 20px 16px; }
+  .cap { height: 58px; }
+  .spec { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .defs { grid-template-columns: minmax(0, 1fr); }
+  .defs p { padding: 22px 4px; }
+  .defs p + p { box-shadow: inset 0 1px 0 var(--hair); }
+  .faq .a { padding-right: 0; }
+  .vctl { right: 10px; bottom: 10px; gap: 6px; }
+  .vbtn { width: 34px; height: 34px; }
+  .rows div { font-size: 11.5px; padding: 10px 12px; }
+  .get .core { padding: 28px 22px 22px; }
+  .final { padding: 136px 0 120px; }
+  section { padding: 88px 0; }
+  footer .left { flex-wrap: nowrap; align-items: flex-start; }
+  footer .left svg { flex: none; margin-top: 1px; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; scroll-behavior: auto !important; }
@@ -310,19 +452,29 @@ footer a:hover { color: var(--text); }
 <div class="atmos"></div>
 <div class="grain"></div>
 
+<!-- The app icon's wheel, small. -->
+<svg width="0" height="0" style="position: absolute" aria-hidden="true">
+  <symbol id="mark" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="14" fill="#41455a"/>
+    <path d="M21.36 3.07A14 14 0 0 1 28.93 10.64L22.01 13.51A6.5 6.5 0 0 0 18.49 10Z" fill="#5b9bff"/>
+    <path d="M21.36 3.07 10.64 28.93M28.93 10.64 3.07 21.36M28.93 21.36 3.07 10.64M21.36 28.93 10.64 3.07" stroke="#08080a" stroke-width="1.2"/>
+    <circle cx="16" cy="16" r="6.6" fill="#08080a"/>
+    <circle cx="16" cy="16" r="4.1" fill="#08080a" stroke="#fff" stroke-width="1.9"/>
+  </symbol>
+  <symbol id="down" viewBox="0 0 16 16"><path d="M8 2.5v9M4 7.8 8 11.8l4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="out" viewBox="0 0 16 16"><path d="M5 11 11 5M6 5h5v5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
 <nav class="nav" aria-label="Main">
-  <a class="brand" href="#top" aria-label="Radlet home">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="12" r="4.2"/></svg>
-    Radlet
-  </a>
+  <a class="brand" href="#top" aria-label="Radlet home"><svg aria-hidden="true"><use href="#mark"/></svg>Radlet</a>
   <div class="links">
-    <a href="#demo">Demo</a>
     <a href="#features">Features</a>
     <a href="#loadouts">Loadouts</a>
     <a href="#agents">CLI &amp; agents</a>
     <a href="#faq">FAQ</a>
+    <a href="https://github.com/Suvraneel/radlet">GitHub</a>
   </div>
-  <a class="btn btn-ghost btn-small gh" href="https://github.com/Suvraneel/radlet">GitHub<span class="knob"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 11 11 5M6 5h5v5"/></svg></span></a>
+  <a class="btn btn-primary btn-small" data-download href="https://github.com/Suvraneel/Radlet/releases/download/v0.1.0/Radlet-0.1.0.dmg">Download<span class="knob"><svg aria-hidden="true"><use href="#down"/></svg></span></a>
   <button class="menu-btn" aria-label="Menu" aria-expanded="false" aria-controls="menu"><span></span><span></span></button>
 </nav>
 <div class="overlay" id="menu" inert>
@@ -338,36 +490,35 @@ footer a:hover { color: var(--text); }
   <!-- Hero -->
   <section class="hero">
     <div class="wrap hero-grid">
-      <div>
-        <span class="eyebrow reveal"><i></i>Free · macOS 14+ · Nothing leaves your Mac</span>
-        <h1 class="reveal d1">A weapon wheel <span class="soft">for your files.</span></h1>
-        <p class="lead reveal d2">A free file converter and toolkit for your Mac. Drag files in Finder, hold a key, flick to a tool: convert, compress, crop, translate and dozens more, right where your files already are.</p>
-        <div class="cta reveal d3">
-          <a class="btn btn-primary" href="https://github.com/Suvraneel/radlet/releases/latest">Get Radlet<span class="knob"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3v8M4.5 7.5 8 11l3.5-3.5M3 13h10"/></svg></span></a>
-          <a class="btn btn-ghost" href="#demo">Watch the demo<span class="knob"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 3.8v8.4L12 8z"/></svg></span></a>
+      <div class="text">
+        <h1 class="reveal">A weapon wheel for your files.</h1>
+        <p class="lead reveal" style="--d: 1">A free file converter and toolkit for your Mac. Drag files in Finder, hold a key, flick to a tool: convert, compress, crop, translate and dozens more, right where your files already are.</p>
+        <div class="cta reveal" style="--d: 2">
+          <a class="btn btn-primary" data-download href="https://github.com/Suvraneel/Radlet/releases/download/v0.1.0/Radlet-0.1.0.dmg">Download for Mac<span class="knob"><svg aria-hidden="true"><use href="#down"/></svg></span></a>
+          <a class="tlink" href="#demo"><span class="ring"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3.5 2.2v7.6L10 6z" fill="currentColor"/></svg></span>Watch the demo <small>0:20</small></a>
         </div>
-        <p class="note reveal d3">Free for Apple silicon and Intel Macs. Not notarized yet, so the first open takes one extra click.</p>
+        <p class="meta mac-only reveal" style="--d: 3"><span>Version <span data-version>0.1.0</span></span><span data-size>25 MB</span><span>Apple silicon and Intel</span><span>macOS 14+</span></p>
+        <p class="meta phone-only reveal" style="--d: 3">Radlet runs on Macs with macOS 14 or later.</p>
       </div>
 
-      <div class="shell wheel-card reveal d2">
-        <div class="core">
-          <div class="modes" role="group" aria-label="Wheel">
-            <button class="mode" data-mode="convert" aria-pressed="true"><b>⇧</b>Convert</button>
-            <button class="mode" data-mode="tools" aria-pressed="false"><b>⌘</b>Tools</button>
-            <button class="mode" data-mode="loadouts" aria-pressed="false"><b>⌃</b>Loadouts</button>
-          </div>
-          <div class="wheel">
-            <svg id="wheel" viewBox="-200 -200 400 400" role="listbox" tabindex="0" aria-label="Try the wheel: use the arrow keys, then Return"></svg>
-          </div>
-          <p class="wheel-hint" id="hint">Point at a slot and click. Press <kbd>Shift</kbd>, <kbd>⌘</kbd> or <kbd>Control</kbd> to switch wheels.</p>
-          <p class="sr" aria-live="polite" id="live"></p>
+      <div class="instrument reveal" style="--d: 2">
+        <div class="wheel">
+          <svg id="wheel" viewBox="-206 -206 412 412" role="listbox" tabindex="0" aria-label="Try the wheel: use the arrow keys, then Return"></svg>
         </div>
+        <div class="seg" role="group" aria-label="Wheel">
+          <span class="seg-thumb" aria-hidden="true"></span>
+          <button class="mode" data-mode="convert" aria-pressed="true"><b>⇧</b>Convert</button>
+          <button class="mode" data-mode="tools" aria-pressed="false"><b>⌘</b>Tools</button>
+          <button class="mode" data-mode="loadouts" aria-pressed="false"><b>⌃</b>Loadouts</button>
+        </div>
+        <p class="wheel-hint" id="hint">Point at a slot and click. Tap <kbd>Shift</kbd>, <kbd>⌘</kbd> or <kbd>Control</kbd> to switch wheels.</p>
+        <p class="sr" aria-live="polite" id="live"></p>
       </div>
     </div>
   </section>
 
   <!-- Demo -->
-  <section id="demo" style="padding-top: 20px">
+  <section id="demo">
     <div class="wrap">
       <div class="shell video reveal">
         <div class="core">
@@ -376,37 +527,41 @@ footer a:hover { color: var(--text); }
             <source src="https://cdn.jsdelivr.net/gh/Suvraneel/radlet@main/.github/media/demo.mp4" type="video/mp4">
           </video>
           <div class="vctl">
-          <button class="btn btn-ghost btn-small" id="play">Pause<span class="knob"><svg viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 3.5h2.4v9H4.5zM9.1 3.5h2.4v9H9.1z"/></svg></span></button>
-          <button class="btn btn-ghost btn-small" id="sound" aria-pressed="false">Sound on<span class="knob"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 6.2h2.2L8.5 3.5v9L5.2 9.8H3z"/><path d="M10.8 5.6a3.4 3.4 0 0 1 0 4.8M12.6 3.9a5.8 5.8 0 0 1 0 8.2"/></svg></span></button>
+            <button class="vbtn" id="play" aria-label="Pause"><svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4.5 3.5h2.4v9H4.5zM9.1 3.5h2.4v9H9.1z"/></svg></button>
+            <button class="vbtn" id="sound" aria-label="Turn sound on" aria-pressed="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 6.2h2.2L8 3.5v9L4.7 9.8H2.5z"/><path d="M10.6 6.1l3.6 3.8M14.2 6.1l-3.6 3.8"/></svg></button>
           </div>
         </div>
       </div>
-      <p class="caption">20 seconds. The wheel is drawn by Radlet's own code, with slots the real engine returned.</p>
+      <p class="caption"><span>The wheel is drawn by Radlet's own code, with slots the real engine returned.</span><b>20 seconds, with sound</b></p>
     </div>
   </section>
 
   <!-- Three keys -->
   <section>
-    <div class="wrap">
-      <span class="eyebrow reveal"><i></i>One gesture, three wheels</span>
-      <h2 class="reveal d1" style="margin-top: 22px; max-width: 13em">Keep dragging. Pick a key.</h2>
-      <div class="keys">
-        <div class="shell key reveal"><div class="core"><span class="cap">⇧ Shift</span><h3>Convert</h3><p>JPEG, PNG, WebP, PDF, Word, Excel, MP4, MP3 and more. Results land next to the originals.</p></div></div>
-        <div class="shell key reveal d1"><div class="core"><span class="cap">⌘ Command</span><h3>Tools</h3><p>Crop, compress, redact, hide faces, translate, make icons, read QR codes, share.</p></div></div>
-        <div class="shell key reveal d2"><div class="core"><span class="cap">⌃ Control</span><h3>Loadouts</h3><p>Your saved sets of steps, like “Web-ready image”, one flick away.</p></div></div>
+    <div class="wrap split">
+      <div>
+        <p class="label reveal">Three wheels</p>
+        <h2 class="reveal" style="--d: 1">Keep dragging. Pick a key.</h2>
+        <p class="lead reveal" style="--d: 2">Start a drag in Finder and hold a key. The wheel opens under the pointer: flick toward a slot and let go, or drop in the middle to cancel.</p>
+        <p class="aside reveal" style="--d: 3">No drag needed: select files and press <kbd>⌃⌥V</kbd> in Finder, or right-click and choose Services.</p>
       </div>
-      <p class="nodrag reveal">No drag needed: select files and press <kbd>⌃⌥V</kbd> in Finder, or right-click and choose Services.</p>
+      <div class="shell board reveal" style="--d: 1"><div class="core">
+        <div class="keyrow" data-key="Shift"><span class="cap" style="--w: 180px" aria-hidden="true"><span class="g">⇧</span><span class="w">shift</span></span><div><h3>Convert</h3><p>JPEG, PNG, WebP, PDF, Word, Excel, MP4, MP3 and more. Results land next to the originals.</p></div></div>
+        <div class="keyrow" data-key="Meta"><span class="cap" style="--w: 124px" aria-hidden="true"><span class="g">⌘</span><span class="w">command</span></span><div><h3>Tools</h3><p>Crop, compress, redact, hide faces, translate, make icons, read QR codes, share.</p></div></div>
+        <div class="keyrow" data-key="Control"><span class="cap" style="--w: 96px" aria-hidden="true"><span class="g">⌃</span><span class="w">control</span></span><div><h3>Loadouts</h3><p>Your saved sets of steps, like “Web-ready image”, one flick away.</p></div></div>
+      </div></div>
     </div>
   </section>
 
   <!-- Features -->
   <section id="features">
     <div class="wrap">
-      <span class="eyebrow reveal"><i></i>What's on the wheel</span>
-      <h2 class="reveal d1" style="margin-top: 22px; max-width: 14em">Dozens of tools. Zero windows to open.</h2>
+      <div class="head">
+        <p class="label reveal">On the wheel</p>
+        <h2 class="reveal" style="--d: 1">Everything you'd open another app for.</h2>
+      </div>
       <div class="bento">
-        <div class="shell tile t-a reveal"><div class="core">
-          <svg class="ico-line" viewBox="0 0 32 32"><circle cx="16" cy="16" r="12"/><path d="M16 4v6M16 22v6M4 16h6M22 16h6"/></svg>
+        <div class="panel t-a reveal">
           <h3>Convert almost anything</h3>
           <p>Images, PDFs, documents, spreadsheets, audio, video, subtitles, SVGs, icons and archives. Documents keep their headings, lists, tables and links. Drop a whole folder for “Images to JPEG” or “Documents to PDF”.</p>
           <div class="rows" aria-hidden="true">
@@ -418,53 +573,51 @@ footer a:hover { color: var(--text); }
           <div class="chips">
             <span class="hot">HEIC → JPEG</span><span>PNG</span><span>WebP</span><span>AVIF</span><span class="hot">Markdown → Word</span><span>PDF</span><span>RTF</span><span class="hot">CSV → Excel</span><span>JSON</span><span>MP4</span><span>MOV</span><span>MP3</span><span>FLAC</span><span>SRT</span><span>SVG</span><span>ICNS</span><span>ZIP</span>
           </div>
-        </div></div>
-        <div class="shell tile t-b reveal d1"><div class="core">
-          <svg class="ico-line" viewBox="0 0 32 32"><path d="M6 11h20M6 21h20M11 6l-5 5 5 5M21 16l5 5-5 5"/></svg>
+        </div>
+        <div class="panel t-b reveal" style="--d: 1">
           <h3>Smart compression</h3>
           <p>Finds the smallest JPEG or WebP that still looks the same, by measuring it. Or aim for a size: email, Discord, WhatsApp.</p>
           <div class="meter">
-            <div><span>Original</span><span>4.8 MB</span></div><span class="bar"><i style="--w: 1"></i></span>
-            <div><span>Smart</span><span>1.1 MB</span></div><span class="bar"><i style="--w: .23"></i></span>
+            <div><span>Original</span><b>4.8 MB</b></div><span class="bar"><i style="--w: 1"></i></span>
+            <div><span>Smart</span><b>1.1 MB</b></div><span class="bar"><i style="--w: .23"></i></span>
           </div>
-        </div></div>
-        <div class="shell tile t-c reveal d2"><div class="core">
-          <svg class="ico-line" viewBox="0 0 32 32"><rect x="6" y="6" width="20" height="20" rx="6"/><circle cx="13" cy="14" r="1.2"/><circle cx="19" cy="14" r="1.2"/><path d="M12.5 19.5c2 1.6 5 1.6 7 0"/></svg>
-          <h3>On-device intelligence</h3>
+        </div>
+        <div class="panel t-c reveal" style="--d: 2">
+          <h3>Text, faces and backgrounds, on device</h3>
           <p>Copy text from pictures, remove backgrounds, hide faces, make subtitles and translate documents, with Apple's own frameworks.</p>
-        </div></div>
-        <div class="shell tile t-d reveal"><div class="core">
-          <svg class="ico-line" viewBox="0 0 32 32"><path d="M16 4l10 4v7c0 6.5-4.3 11-10 13-5.7-2-10-6.5-10-13V8z"/><path d="M12 16l3 3 5-6"/></svg>
-          <h3>Privacy check</h3>
-          <p>See the GPS, camera serial and hidden edits a file carries before you share it, then strip them.</p>
-        </div></div>
-        <div class="shell tile t-e reveal d1"><div class="core">
-          <svg class="ico-line" viewBox="0 0 32 32"><path d="M7 25V7h12l6 6v12z"/><path d="M19 7v6h6M11 18h10M11 22h6"/></svg>
-          <h3>A PDF toolkit</h3>
-          <p>Split, reorder, rotate, number pages, watermark, lock with a password, or make scans searchable.</p>
-        </div></div>
-        <div class="shell tile t-f reveal d2"><div class="core">
-          <svg class="ico-line" viewBox="0 0 32 32"><path d="M20 6a10 10 0 1 1-9.4 6.6"/><path d="M6 6v7h7"/></svg>
-          <h3>Never overwrites</h3>
-          <p>New files appear beside the originals under a free name. Every job can be undone from History.</p>
-        </div></div>
-        <div class="shell tile t-g reveal"><div class="core">
-          <svg class="ico-line" viewBox="0 0 32 32"><circle cx="16" cy="16" r="11"/><path d="M16 5v22M5 16h22" opacity=".5"/><path d="M16 5a11 11 0 0 1 11 11H16z" fill="rgba(61,139,255,.35)"/></svg>
-          <h3>Skins and styles</h3>
-          <p>Six built-in skins, or write your own as a few lines of CSS. Pick Orbit or Bloom for a second level of presets.</p>
+        </div>
+        <div class="panel t-d reveal">
+          <h3>Six skins, or your own</h3>
+          <p>Glass, Instrument, Tactical, Neon, Sunset and Porcelain, or write your own in a few lines of CSS. Pick Orbit or Bloom for a second ring of presets.</p>
           <div class="skins-img"><img src="media/skins.png" alt="The wheel in six skins: Glass, Instrument, Tactical, Neon, Sunset and Porcelain" loading="lazy" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/gh/Suvraneel/radlet@main/docs/images/skins.png'"></div>
-        </div></div>
-        <div class="shell tile t-h reveal d1"><div class="core">
-          <svg class="ico-line" viewBox="0 0 32 32"><rect x="5" y="7" width="22" height="18" rx="4"/><path d="M10 13l3 3-3 3M16 19h6"/></svg>
-          <h3>Built to be trusted</h3>
-          <p>Each file runs in its own process, so one damaged file can't freeze the rest. No network access, no accounts, no telemetry.</p>
-          <div class="rows" aria-hidden="true">
-            <div>scan-01.png<span class="tag ok">✓ done</span></div>
-            <div class="failed">scan-02.png<span class="tag bad">✕ damaged: failed on its own</span></div>
-            <div>scan-03.png<span class="tag ok">✓ done</span></div>
+        </div>
+        <div class="panel t-e reveal" style="--d: 1">
+          <h3>One damaged file fails alone</h3>
+          <p>Each file runs in its own process, so a crash or hang can't take the batch with it. No network access, no accounts, no telemetry.</p>
+          <div class="hud" aria-hidden="true">
+            <div class="top"><b>Compress · 6 scans</b><span>6 of 6</span></div>
+            <span class="track"><i></i></span>
+            <div class="rows">
+              <div>scan-01.png<span class="tag ok">✓ 1.2 MB</span></div>
+              <div class="failed">scan-02.png<span class="tag bad">✕ damaged</span></div>
+              <div>scan-03.png<span class="tag ok">✓ 0.9 MB</span></div>
+              <div>scan-04.png<span class="tag ok">✓ 1.4 MB</span></div>
+              <div>scan-05.png<span class="tag ok">✓ 1.1 MB</span></div>
+              <div>scan-06.png<span class="tag ok">✓ 0.8 MB</span></div>
+            </div>
+            <div class="foot"><span>5 done, 1 failed on its own</span><span>Undo</span></div>
           </div>
-          <div class="chips"><span>Local only</span><span>Crash-isolated</span><span>Undo</span><span>Permissive licences</span></div>
-        </div></div>
+        </div>
+      </div>
+
+      <div class="specs">
+        <p class="label reveal">Also on the wheel</p>
+        <div class="spec reveal"><h3>Privacy check</h3><p>See the GPS, camera serial and hidden edits a file carries before you share it, then strip them.</p></div>
+        <div class="spec reveal" style="--d: 1"><h3>PDF toolkit</h3><p>Split, reorder, rotate, number pages, watermark, lock with a password, or make scans searchable.</p></div>
+        <div class="spec reveal"><h3>Audio and video</h3><p>Trim, make GIFs, save stills, even out the volume and make subtitles, with FFmpeg installed.</p></div>
+        <div class="spec reveal" style="--d: 1"><h3>Never overwrites</h3><p>New files appear beside the originals under a free name. Every job can be undone from History.</p></div>
+        <div class="spec reveal"><h3>Watch folders</h3><p>Files added to a folder are converted, compressed or run through a loadout as they arrive.</p></div>
+        <div class="spec reveal" style="--d: 1"><h3>Everyday</h3><p>Rename with a pattern, copy a path, open in Terminal, or share by AirDrop, Mail and Messages.</p></div>
       </div>
     </div>
   </section>
@@ -473,17 +626,17 @@ footer a:hover { color: var(--text); }
   <section id="loadouts">
     <div class="wrap split">
       <div>
-        <span class="eyebrow reveal"><i></i>Loadouts</span>
-        <h2 class="reveal d1" style="margin-top: 22px">Your loadout, one flick away.</h2>
-        <p class="lead reveal d2" style="margin-top: 22px">Like a game loadout, but for files. Save any tool's settings as a loadout from its window, or chain steps in a small text file. Hold <kbd>Control</kbd> while dragging and they're on the wheel.</p>
-        <div class="points reveal d3">
-          <div><svg viewBox="0 0 20 20"><path d="M4 10.5l4 4 8-9"/></svg>One decode and one encode per chain, so steps never compress twice.</div>
-          <div><svg viewBox="0 0 20 20"><path d="M4 10.5l4 4 8-9"/></svg>Run them on watch folders: new files are handled as they arrive.</div>
-          <div><svg viewBox="0 0 20 20"><path d="M4 10.5l4 4 8-9"/></svg>Passwords never go into a loadout.</div>
-        </div>
+        <p class="label reveal">Loadouts</p>
+        <h2 class="reveal" style="--d: 1">Your loadout, one flick away.</h2>
+        <p class="lead reveal" style="--d: 2">Like a game loadout, but for files. Save any tool's settings as a loadout from its window, or chain steps in a small text file. Hold <kbd>Control</kbd> while dragging and they're on the wheel.</p>
+        <ul class="notes reveal" style="--d: 3">
+          <li>One decode and one encode per chain, so steps never compress twice.</li>
+          <li>Run them on watch folders: new files are handled as they arrive.</li>
+          <li>Passwords never go into a loadout.</li>
+        </ul>
       </div>
-      <div class="shell code reveal d2"><div class="core">
-        <div class="bar"><i></i><i></i><i></i><span>web-ready-image.toml</span></div>
+      <div class="code reveal" style="--d: 2">
+        <div class="bar"><span>web-ready-image.toml</span><small>Loadout</small></div>
 <pre><span class="k">name</span> = <span class="s">"Web-ready image"</span>
 <span class="k">description</span> = <span class="s">"Longest side 2048 px, WebP, no metadata"</span>
 
@@ -498,15 +651,15 @@ footer a:hover { color: var(--text); }
 
 <span class="p">[[steps]]</span>
 <span class="k">op</span> = <span class="s">"strip_metadata"</span></pre>
-      </div></div>
+      </div>
     </div>
   </section>
 
   <!-- CLI and agents -->
   <section id="agents">
     <div class="wrap split">
-      <div class="shell code reveal"><div class="core">
-        <div class="bar"><i></i><i></i><i></i><span>Terminal</span></div>
+      <div class="code reveal">
+        <div class="bar"><span>~/Pictures</span><small>zsh</small></div>
 <pre><span class="c"># the same engine as the wheel</span>
 <span class="p">$</span> radlet convert *.heic --to jpg
 <span class="p">$</span> radlet compress photo.jpg --target 2MB
@@ -515,88 +668,125 @@ footer a:hover { color: var(--text); }
 
 <span class="c"># let Claude and other AI apps use it, locally</span>
 <span class="p">$</span> claude mcp add radlet -- radlet mcp</pre>
-      </div></div>
+      </div>
       <div>
-        <span class="eyebrow reveal"><i></i>Command line &amp; AI agents</span>
-        <h2 class="reveal d1" style="margin-top: 22px">Same engine, everywhere you work.</h2>
-        <p class="lead reveal d2" style="margin-top: 22px">Almost every tool on the wheel is a <code>radlet</code> command, ready for scripts and Shortcuts. <code>radlet mcp</code> lets Claude and other AI apps convert, compress and clean your files on your own Mac.</p>
-        <div class="points reveal d3">
-          <div><svg viewBox="0 0 20 20"><path d="M4 10.5l4 4 8-9"/></svg>JSON output for scripts with <code>--json</code>.</div>
-          <div><svg viewBox="0 0 20 20"><path d="M4 10.5l4 4 8-9"/></svg>Password tools are never offered to agents.</div>
-        </div>
+        <p class="label reveal">Command line &amp; AI agents</p>
+        <h2 class="reveal" style="--d: 1">From the terminal, or from Claude.</h2>
+        <p class="lead reveal" style="--d: 2">Almost every tool on the wheel is a <code>radlet</code> command, ready for scripts and Shortcuts. <code>radlet mcp</code> lets Claude and other AI apps convert, compress and clean your files on your own Mac.</p>
+        <ul class="notes reveal" style="--d: 3">
+          <li>JSON output for scripts with <code>--json</code>.</li>
+          <li>Password tools are never offered to agents.</li>
+        </ul>
       </div>
     </div>
   </section>
 
   <!-- Questions -->
   <section id="faq">
-    <div class="wrap">
-      <span class="eyebrow reveal"><i></i>Questions</span>
-      <h2 class="reveal d1">Good to know.</h2>
-      <div class="faq reveal d2">
+    <div class="wrap faq-grid">
+      <div class="sticky">
+        <p class="label reveal">Questions</p>
+        <h2 class="reveal" style="--d: 1">Good to know.</h2>
+      </div>
+      <div class="faq reveal" style="--d: 1">
         <details>
-          <summary>Is Radlet free?</summary>
-          <p>Yes. Download it from <a href="https://github.com/Suvraneel/radlet/releases/latest">GitHub</a>. There's no account to make, no subscription and no ads.</p>
+          <summary>Is Radlet free?<i class="pm" aria-hidden="true"></i></summary>
+          <div class="a"><p>Yes. Download it here or from <a href="https://github.com/Suvraneel/radlet/releases/latest">GitHub</a>. There's no account to make, no subscription and no ads.</p></div>
         </details>
         <details>
-          <summary>Does it upload my files anywhere?</summary>
-          <p>No. Radlet has no network access. Converting, compressing, text recognition, background removal, face hiding and translation all run on your Mac, using Apple's own frameworks where they help.</p>
+          <summary>Does it upload my files anywhere?<i class="pm" aria-hidden="true"></i></summary>
+          <div class="a"><p>No. Radlet has no network access. Converting, compressing, text recognition, background removal, face hiding and translation all run on your Mac, using Apple's own frameworks where they help.</p></div>
         </details>
         <details>
-          <summary>Can it convert HEIC photos to JPG?</summary>
-          <p>Yes: drag the photos, hold <kbd>Shift</kbd> and drop on JPEG. The JPEGs appear next to the originals. It also turns PDFs into images, Word documents into PDFs, CSV into Excel, MOV into MP4 (with FFmpeg installed) and a lot more.</p>
+          <summary>Can it convert HEIC photos to JPG?<i class="pm" aria-hidden="true"></i></summary>
+          <div class="a"><p>Yes: drag the photos, hold <kbd>Shift</kbd> and drop on JPEG. The JPEGs appear next to the originals. It also turns PDFs into images, Word documents into PDFs, CSV into Excel, MOV into MP4 (with FFmpeg installed) and a lot more.</p></div>
         </details>
         <details>
-          <summary>Which Macs does it run on?</summary>
-          <p>macOS 14 Sonoma or later, on Apple silicon and Intel. Translating documents needs macOS 26.</p>
+          <summary>Which Macs does it run on?<i class="pm" aria-hidden="true"></i></summary>
+          <div class="a"><p>macOS 14 Sonoma or later, on Apple silicon and Intel. Translating documents needs macOS 26.</p></div>
         </details>
         <details>
-          <summary>Why does macOS warn me the first time I open it?</summary>
-          <p>Radlet isn't notarized by Apple yet. On macOS 15 or later, open System Settings → Privacy &amp; Security and click Open Anyway. On macOS 14, Control-click Radlet in Applications and choose Open. You only do this once.</p>
+          <summary>Why does macOS warn me the first time I open it?<i class="pm" aria-hidden="true"></i></summary>
+          <div class="a"><p>Radlet isn't notarized by Apple yet. On macOS 15 or later, open System Settings → Privacy &amp; Security and click Open Anyway. On macOS 14, Control-click Radlet in Applications and choose Open. You only do this once.</p></div>
         </details>
       </div>
     </div>
   </section>
 
   <!-- The name -->
-  <section style="padding-top: 40px">
+  <section class="name">
     <div class="wrap">
-      <div class="shell name reveal"><div class="core">
-        <span class="eyebrow"><i></i>Why “Radlet”</span>
-        <p class="etym" aria-label="Radial plus let makes Radlet"><span><b>Rad</b>ial</span><span class="op" aria-hidden="true">+</span><span>-let</span><span class="op" aria-hidden="true">=</span><span><b>Rad</b>let</span></p>
-        <div class="defs">
-          <p><b>Radial,</b> because it's a wheel. In German and Dutch, <em>Rad</em> even means wheel.</p>
-          <p><b>-let,</b> because it's a small one, as in <em>droplet</em> or <em>booklet</em>: it opens under your pointer and gets out of the way.</p>
-        </div>
-        <blockquote>More importantly, <em>rad</em> is slang for awesome.</blockquote>
-        <p class="tail">The wheel tries to live up to that.</p>
-      </div></div>
+      <p class="label reveal">Why “Radlet”</p>
+      <p class="etym reveal" style="--d: 1" aria-label="Radial plus let makes Radlet"><span><b>Rad</b>ial</span><span class="op" aria-hidden="true">+</span><span>-let</span><span class="op" aria-hidden="true">=</span><span><b>Rad</b>let</span></p>
+      <div class="defs reveal" style="--d: 2">
+        <p><b>Radial,</b> because it's a wheel. In German and Dutch, <em>Rad</em> even means wheel.</p>
+        <p><b>-let,</b> because it's a small one, as in <em>droplet</em> or <em>booklet</em>: it opens under your pointer and gets out of the way.</p>
+      </div>
+      <blockquote class="reveal">More importantly, <em>rad</em> is slang for awesome.</blockquote>
+      <p class="tail reveal" style="--d: 1">The wheel tries to live up to that.</p>
     </div>
   </section>
 
   <!-- Final call -->
   <section class="final">
+    <div class="dial-wrap" aria-hidden="true"><div class="dial"><i class="slots"></i><i class="pick"></i><i class="ticks"></i><i class="hubline"></i></div></div>
     <div class="wrap">
-      <span class="eyebrow reveal"><i></i>Free for macOS 14 and later</span>
-      <h2 class="reveal d1">Put every file tool on one wheel.</h2>
-      <div class="cta reveal d2">
-        <a class="btn btn-primary" href="https://github.com/Suvraneel/radlet/releases/latest">Get Radlet<span class="knob"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3v8M4.5 7.5 8 11l3.5-3.5M3 13h10"/></svg></span></a>
-        <a class="btn btn-ghost" href="https://github.com/Suvraneel/radlet">View the source<span class="knob"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 11 11 5M6 5h5v5"/></svg></span></a>
+      <p class="label reveal">Free for macOS 14 and later</p>
+      <h2 class="reveal" style="--d: 1">Put every file tool on one wheel.</h2>
+      <div class="cta reveal" style="--d: 2">
+        <a class="btn btn-primary" data-download href="https://github.com/Suvraneel/Radlet/releases/download/v0.1.0/Radlet-0.1.0.dmg">Download for Mac<span class="knob"><svg aria-hidden="true"><use href="#down"/></svg></span></a>
+        <a class="arrow-link" href="https://github.com/Suvraneel/radlet">View the source<svg aria-hidden="true"><use href="#out"/></svg></a>
       </div>
+      <p class="meta mac-only reveal" style="--d: 3"><span>Version <span data-version>0.1.0</span></span><span data-size>25 MB</span><span>Apple silicon and Intel</span></p>
     </div>
   </section>
 </main>
 
 <footer>
-  <div class="wrap row">
-    <span>© 2026 Suvraneel Bhuin. Radlet is clean-room work: no code or assets from other apps.</span>
-    <span><a href="https://github.com/Suvraneel/radlet">Source on GitHub</a></span>
-  </div>
+  <div class="wrap"><div class="row">
+    <div class="left"><svg aria-hidden="true"><use href="#mark"/></svg><span>© 2026 Suvraneel Bhuin. Radlet is clean-room work: no code or assets from other apps.</span></div>
+    <nav aria-label="Footer">
+      <a href="https://github.com/Suvraneel/radlet/releases/latest">Releases</a>
+      <a href="https://github.com/Suvraneel/radlet">Source</a>
+    </nav>
+  </div></div>
 </footer>
+
+<dialog class="get" id="get" aria-labelledby="get-title">
+  <div class="shell"><div class="core">
+    <button class="x" data-close aria-label="Close"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M2 2l8 8M10 2l-8 8"/></svg></button>
+    <div class="mac">
+      <span class="tick-badge" aria-hidden="true"><svg viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 9.5l3.5 3.5 7.5-8"/></svg></span>
+      <h2 id="get-title">Your download has started</h2>
+      <p class="file"><span data-file>Radlet-0.1.0.dmg</span> · <span data-size>25 MB</span></p>
+      <ol class="steps">
+        <li><b>Open the disk image</b> and drag Radlet into Applications.</li>
+        <li><b>Open Radlet.</b> macOS blocks it the first time, because it isn't notarized by Apple yet. Click Done.</li>
+        <li><b>Allow it once.</b>
+          <span class="os">macOS 15 or later: System Settings → Privacy &amp; Security → Open Anyway.</span>
+          <span class="os">macOS 14: Control-click Radlet in Applications and choose Open.</span></li>
+        <li><b>Hold Shift while dragging files in Finder.</b> For audio and video, also install FFmpeg: <code>brew install ffmpeg</code></li>
+      </ol>
+      <div class="foot">
+        <span>Didn't start? <a data-download href="https://github.com/Suvraneel/Radlet/releases/download/v0.1.0/Radlet-0.1.0.dmg">Download again</a></span>
+        <a href="https://github.com/Suvraneel/radlet/releases/latest">ZIP, checksums and release notes</a>
+      </div>
+    </div>
+    <div class="phone">
+      <h2>Radlet is a Mac app</h2>
+      <p>It runs on macOS 14 or later. Send this page to your Mac and download it there.</p>
+      <button class="btn btn-primary" id="send">Send to my Mac<span class="knob"><svg aria-hidden="true"><use href="#out"/></svg></span></button>
+      <div class="foot" style="margin-top: 26px">
+        <span>On a Mac already? <a data-download data-direct href="https://github.com/Suvraneel/Radlet/releases/download/v0.1.0/Radlet-0.1.0.dmg">Download anyway</a></span>
+      </div>
+    </div>
+  </div></div>
+</dialog>
 
 <script>
 (() => {
   // ---------- navigation ----------
+  const nav = document.querySelector('.nav');
   const menu = document.querySelector('.menu-btn');
   const overlay = document.querySelector('.overlay');
   const isOpen = () => document.body.classList.contains('menu-open');
@@ -609,21 +799,76 @@ footer a:hover { color: var(--text); }
   menu.addEventListener('click', () => setMenu(!isOpen()));
   overlay.querySelectorAll('a').forEach(a => a.addEventListener('click', () => setMenu(false)));
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && isOpen()) { setMenu(false); menu.focus(); } });
+  new IntersectionObserver(([e]) => nav.classList.toggle('scrolled', !e.isIntersecting))
+    .observe(document.querySelector('.hero h1'));
 
   // ---------- reveal on scroll ----------
   const io = new IntersectionObserver((entries) => {
     entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
-  }, { threshold: 0.14, rootMargin: '0px 0px -40px 0px' });
+  }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
   document.querySelectorAll('.reveal').forEach(el => io.observe(el));
 
-  // ---------- video sound ----------
+  // ---------- download ----------
+  // The links point at v0.1.0's disk image, so they work without JavaScript.
+  // When the page loads it asks GitHub for the newest release and points
+  // them there instead, so a new tag needs no change here.
+  const phone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+  document.documentElement.classList.toggle('is-phone', phone);
+  const showRelease = (r) => {
+    document.querySelectorAll('[data-download]').forEach(a => { a.href = r.url; });
+    document.querySelectorAll('[data-version]').forEach(s => { s.textContent = r.version; });
+    document.querySelectorAll('[data-size]').forEach(s => { s.textContent = `${Math.round(r.size / 1e6)} MB`; });
+    document.querySelectorAll('[data-file]').forEach(s => { s.textContent = r.name; });
+  };
+  let cached = null;
+  try { cached = JSON.parse(sessionStorage.getItem('radlet-release')); } catch (_) {}
+  if (cached && cached.url) showRelease(cached);
+  else fetch('https://api.github.com/repos/Suvraneel/Radlet/releases/latest', { headers: { Accept: 'application/vnd.github+json' } })
+    .then(res => res.ok ? res.json() : null)
+    .then(d => {
+      const dmg = d && (d.assets || []).find(a => /\.dmg$/i.test(a.name));
+      if (!dmg) return;
+      const r = { version: d.tag_name.replace(/^v/, ''), url: dmg.browser_download_url, name: dmg.name, size: dmg.size };
+      showRelease(r);
+      try { sessionStorage.setItem('radlet-release', JSON.stringify(r)); } catch (_) {}
+    })
+    .catch(() => {});
+
+  const get = document.getElementById('get');
+  const openGet = (forPhone) => {
+    get.classList.toggle('for-phone', forPhone);
+    if (!get.open) get.showModal();
+  };
+  document.querySelectorAll('[data-download]').forEach(a => a.addEventListener('click', (e) => {
+    if (get.open) return;
+    if (phone && !a.hasAttribute('data-direct')) { e.preventDefault(); if (isOpen()) setMenu(false); openGet(true); return; }
+    // Let the download start, then show how to open it.
+    setTimeout(() => openGet(false), 160);
+  }));
+  get.querySelector('[data-close]').addEventListener('click', () => get.close());
+  get.addEventListener('click', (e) => { if (e.target === get) get.close(); });
+  const send = document.getElementById('send');
+  send.addEventListener('click', async () => {
+    const url = location.href.split('#')[0];
+    try {
+      if (navigator.share) await navigator.share({ title: 'Radlet for Mac', url });
+      else { await navigator.clipboard.writeText(url); send.firstChild.textContent = 'Link copied'; }
+    } catch (_) {}
+  });
+
+  // ---------- video ----------
   const video = document.getElementById('video');
   const sound = document.getElementById('sound');
   const play = document.getElementById('play');
-  const playIcon = play.querySelector('path');
+  const icons = {
+    pause: '<path d="M4.5 3.5h2.4v9H4.5zM9.1 3.5h2.4v9H9.1z"/>',
+    play: '<path d="M5 3.2v9.6L12.6 8z"/>',
+    muted: '<path d="M2.5 6.2h2.2L8 3.5v9L4.7 9.8H2.5z"/><path d="M10.6 6.1l3.6 3.8M14.2 6.1l-3.6 3.8"/>',
+    loud: '<path d="M2.5 6.2h2.2L8 3.5v9L4.7 9.8H2.5z"/><path d="M10.6 5.6a3.4 3.4 0 0 1 0 4.8M12.4 3.9a5.8 5.8 0 0 1 0 8.2"/>',
+  };
   const showPlaying = () => {
-    play.firstChild.textContent = video.paused ? 'Play' : 'Pause';
-    playIcon.setAttribute('d', video.paused ? 'M5.5 3.8v8.4L12 8z' : 'M4.5 3.5h2.4v9H4.5zM9.1 3.5h2.4v9H9.1z');
+    play.setAttribute('aria-label', video.paused ? 'Play' : 'Pause');
+    play.querySelector('svg').innerHTML = video.paused ? icons.play : icons.pause;
   };
   // With reduced motion, the video waits to be played.
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) { video.removeAttribute('autoplay'); video.pause(); }
@@ -635,13 +880,14 @@ footer a:hover { color: var(--text); }
     video.muted = !video.muted;
     if (!video.muted) { video.currentTime = 0; video.play(); }
     sound.setAttribute('aria-pressed', String(!video.muted));
-    sound.firstChild.textContent = video.muted ? 'Sound on' : 'Sound off';
+    sound.setAttribute('aria-label', video.muted ? 'Turn sound on' : 'Turn sound off');
+    sound.querySelector('svg').innerHTML = video.muted ? icons.muted : icons.loud;
   });
 
   // ---------- the playable wheel ----------
   const NS = 'http://www.w3.org/2000/svg';
-  const R = 182, HUB = 60, LABEL_R = 124;
-  const icons = {
+  const R = 168, HUB = 58, LABEL_R = 115;
+  const glyphs = {
     image: 'M-8 -6h16v12h-16z M-8 3 -3 -2 1 2 4 -1 8 3',
     pdf: 'M-6 -8h8l4 4v12h-12z M2 -8v4h4 M-3 1h6 M-3 4h4',
     more: 'M-6 0h0.01 M0 0h0.01 M6 0h0.01',
@@ -667,11 +913,14 @@ footer a:hover { color: var(--text); }
       ['Web-ready image', 'stack'], ['Email-friendly photo', 'stack'], ['Thumbnail', 'stack'], ['Shrink scans', 'stack']],
       done: (l) => `${l}: every step ran, one encode per photo` },
   };
+  const order = Object.keys(modes);
   const svg = document.getElementById('wheel');
+  const seg = document.querySelector('.seg');
   const hint = document.getElementById('hint');
   const live = document.getElementById('live');
+  if (phone) hint.textContent = 'Tap a slot to try it.';
   const idle = hint.innerHTML;
-  let mode = 'convert', pick = -1, turn = 0, hlRot = 0, busy = false;
+  let mode = 'convert', pick = -1, hlRot = 0, busy = false;
 
   const el = (name, attrs, parent) => {
     const n = document.createElementNS(NS, name);
@@ -685,25 +934,47 @@ footer a:hover { color: var(--text); }
     const [x1, y1] = pt(R - 4, a), [x2, y2] = pt(R - 4, b), [x3, y3] = pt(HUB + 6, b), [x4, y4] = pt(HUB + 6, a);
     return `M${x1} ${y1}A${R - 4} ${R - 4} 0 ${large} 1 ${x2} ${y2}L${x3} ${y3}A${HUB + 6} ${HUB + 6} 0 ${large} 0 ${x4} ${y4}Z`;
   };
+  const arc = (r, span) => {
+    const [x1, y1] = pt(r, -span / 2 + 2), [x2, y2] = pt(r, span / 2 - 2);
+    return `M${x1} ${y1}A${r} ${r} 0 0 1 ${x2} ${y2}`;
+  };
+
+  // The bezel and its ticks don't change with the wheel, so they're drawn once.
+  const defs = el('defs', {}, svg);
+  const fill = el('radialGradient', { id: 'hl-fill', cx: 0, cy: 0, r: R, gradientUnits: 'userSpaceOnUse' }, defs);
+  el('stop', { offset: '0.35', 'stop-color': '#4d8dff', 'stop-opacity': '0.55' }, fill);
+  el('stop', { offset: '1', 'stop-color': '#5b9bff', 'stop-opacity': '1' }, fill);
+  const glow = el('filter', { id: 'hl-glow', x: '-50%', y: '-50%', width: '200%', height: '200%' }, defs);
+  el('feGaussianBlur', { stdDeviation: 14 }, glow);
+  el('circle', { class: 'bezel', r: 202 }, svg);
+  for (let deg = 0; deg < 360; deg += 3) {
+    const major = deg % 45 === 0;
+    const [x1, y1] = pt(major ? 178 : 181, deg), [x2, y2] = pt(major ? 194 : 188, deg);
+    el('line', { class: major ? 'tick major' : 'tick', x1, y1, x2, y2 }, svg);
+  }
+  const dyn = el('g', { class: 'dyn' }, svg);
 
   function draw() {
-    svg.textContent = '';
+    dyn.textContent = '';
     const m = modes[mode], n = m.slots.length, span = 360 / n;
-    el('circle', { class: 'ring', r: R }, svg);
+    el('circle', { class: 'ring', r: R }, dyn);
     for (let i = 0; i < n; i++) {
       const [x1, y1] = pt(HUB + 4, i * span + span / 2), [x2, y2] = pt(R - 2, i * span + span / 2);
-      el('line', { class: 'divider', x1, y1, x2, y2 }, svg);
+      el('line', { class: 'divider', x1, y1, x2, y2 }, dyn);
     }
-    const hl = el('path', { class: 'hl', d: wedge(span), id: 'hl' }, svg);
+    const hl = el('g', { class: 'hl', id: 'hl' }, dyn);
+    el('path', { d: wedge(span), fill: '#4d8dff', opacity: 0.5, filter: 'url(#hl-glow)' }, hl);
+    el('path', { d: wedge(span), fill: 'url(#hl-fill)' }, hl);
+    el('path', { class: 'hl-arc', d: arc(185, span) }, hl);
     hl.style.transform = `rotate(${hlRot}deg)`;
     m.slots.forEach(([label, icon], i) => {
-      const g = el('g', { class: 'slot', role: 'option', id: `slot-${i}`, 'aria-label': label, 'aria-selected': 'false', 'data-i': i }, svg);
+      const g = el('g', { class: 'slot', role: 'option', id: `slot-${i}`, 'aria-label': label, 'aria-selected': 'false', 'data-i': i }, dyn);
       const hit = el('path', { class: 'hit', d: wedge(span) }, g);
       hit.style.transform = `rotate(${i * span}deg)`;
       const [cx, cy] = pt(LABEL_R, i * span);
       const words = label.split(' ');
       const twoLines = n <= 4 && words.length > 1;
-      el('path', { class: 'ico', d: icons[icon], transform: `translate(${cx} ${cy - (twoLines ? 19 : 12)})` }, g);
+      el('path', { class: 'ico', d: glyphs[icon], transform: `translate(${cx} ${cy - (twoLines ? 19 : 12)})` }, g);
       if (twoLines) {
         const t = el('text', { x: cx, y: cy + 6 }, g); t.textContent = words.slice(0, -1).join(' ');
         const t2 = el('text', { x: cx, y: cy + 20 }, g); t2.textContent = words[words.length - 1];
@@ -711,19 +982,20 @@ footer a:hover { color: var(--text); }
         const t = el('text', { x: cx, y: cy + 12 }, g); t.textContent = label;
       }
     });
-    el('circle', { class: 'hub', r: HUB }, svg);
-    const hubT = el('text', { class: 'hub-title', y: -2, id: 'hubT' }, svg); hubT.textContent = '3 photos';
-    const hubS = el('text', { class: 'hub-sub', y: 15, id: 'hubS' }, svg); hubS.textContent = m.title;
-    const done = el('g', { class: 'done', id: 'done' }, svg);
-    el('circle', { r: HUB - 1, fill: '#1f6f3f' }, done);
-    el('path', { d: 'M-13 1l9 9 17-19', fill: 'none', stroke: '#fff', 'stroke-width': 3.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, done);
-    setPick(-1, true);
+    el('circle', { class: 'hub', r: HUB }, dyn);
+    el('circle', { class: 'hub-ring', r: HUB - 7 }, dyn);
+    const hubT = el('text', { class: 'hub-title', y: -1, id: 'hubT' }, dyn); hubT.textContent = '3 photos';
+    const hubS = el('text', { class: 'hub-sub', y: 15, id: 'hubS' }, dyn); hubS.textContent = m.title;
+    const done = el('g', { class: 'done', id: 'done' }, dyn);
+    el('circle', { r: HUB - 7, fill: '#178a52' }, done);
+    el('path', { d: 'M-12 1l8 8 16-17', fill: 'none', stroke: '#fff', 'stroke-width': 3.2, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, done);
+    setPick(-1);
   }
 
-  function setPick(i, quiet) {
+  function setPick(i) {
     const m = modes[mode], n = m.slots.length, span = 360 / n;
     const hl = document.getElementById('hl');
-    svg.querySelectorAll('.slot').forEach(s => {
+    dyn.querySelectorAll('.slot').forEach(s => {
       const on = Number(s.dataset.i) === i;
       s.classList.toggle('on', on);
       s.setAttribute('aria-selected', String(on));
@@ -735,7 +1007,7 @@ footer a:hover { color: var(--text); }
       document.getElementById('hubS').textContent = m.title;
     } else {
       // Glide the short way round.
-      let target = i * span, delta = ((target - hlRot) % 360 + 540) % 360 - 180;
+      const target = i * span, delta = ((target - hlRot) % 360 + 540) % 360 - 180;
       if (pick < 0) { hl.style.transition = 'none'; hlRot = target; hl.style.transform = `rotate(${hlRot}deg)`; hl.getBoundingClientRect(); hl.style.transition = ''; }
       else { hlRot += delta; hl.style.transform = `rotate(${hlRot}deg)`; }
       hl.classList.add('on');
@@ -747,7 +1019,7 @@ footer a:hover { color: var(--text); }
 
   function slotAt(evt) {
     const r = svg.getBoundingClientRect();
-    const x = (evt.clientX - r.left) / r.width * 400 - 200, y = (evt.clientY - r.top) / r.height * 400 - 200;
+    const x = (evt.clientX - r.left) / r.width * 412 - 206, y = (evt.clientY - r.top) / r.height * 412 - 206;
     const d = Math.hypot(x, y);
     if (d < HUB || d > R + 24) return -1;
     const n = modes[mode].slots.length, span = 360 / n;
@@ -760,12 +1032,11 @@ footer a:hover { color: var(--text); }
     busy = true;
     const label = modes[mode].slots[i][0];
     const msg = label === 'More…' ? 'Everything that doesn\'t fit waits behind More…' : modes[mode].done(label);
-    const done = document.getElementById('done');
-    done.classList.add('on');
+    document.getElementById('done').classList.add('on');
     hint.classList.add('result');
     hint.innerHTML = `<span class="ok">✓</span> ${msg}`;
     live.textContent = msg;
-    setTimeout(() => { done.classList.remove('on'); busy = false; setPick(-1, true); }, 1300);
+    setTimeout(() => { document.getElementById('done').classList.remove('on'); busy = false; setPick(-1); }, 1300);
     setTimeout(() => { if (!busy) { hint.classList.remove('result'); hint.innerHTML = idle; } }, 4200);
   }
 
@@ -773,34 +1044,41 @@ footer a:hover { color: var(--text); }
     if (next === mode || busy) return;
     mode = next; pick = -1; hlRot = 0;
     document.querySelectorAll('.mode').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
+    seg.style.setProperty('--i', order.indexOf(mode));
     draw();
-    svg.classList.remove('popping'); void svg.getBoundingClientRect(); svg.classList.add('popping');
+    dyn.classList.remove('popping'); void dyn.getBoundingClientRect(); dyn.classList.add('popping');
   }
 
   svg.addEventListener('pointermove', (e) => { if (!busy && e.pointerType !== 'touch') { const i = slotAt(e); if (i !== pick) setPick(i); } });
-  svg.addEventListener('pointerleave', () => { if (!busy) setPick(-1, true); });
+  svg.addEventListener('pointerleave', () => { if (!busy) setPick(-1); });
   svg.addEventListener('click', (e) => { const i = slotAt(e); if (i >= 0) { setPick(i); run(i); } });
   svg.addEventListener('keydown', (e) => {
     const n = modes[mode].slots.length;
     if (['ArrowRight', 'ArrowDown'].includes(e.key)) { e.preventDefault(); setPick(((pick < 0 ? -1 : pick) + 1) % n); }
     else if (['ArrowLeft', 'ArrowUp'].includes(e.key)) { e.preventDefault(); setPick(pick < 0 ? n - 1 : (pick - 1 + n) % n); }
     else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); run(pick); }
-    else if (e.key === 'Escape') { setPick(-1, true); }
+    else if (e.key === 'Escape') { setPick(-1); }
   });
   document.querySelectorAll('.mode').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+
   // Tapping a modifier switches wheels, as holding one does in the app.
   // Shortcuts such as ⌘C don't count: another key cancels the switch.
+  // The keycaps further down press in while the key is held.
   const modKeys = { Shift: 'convert', Meta: 'tools', Control: 'loadouts' };
+  const caps = {};
+  document.querySelectorAll('.keyrow').forEach(k => { caps[k.dataset.key] = k; });
   let tapped = null;
   window.addEventListener('keydown', (e) => {
+    if (caps[e.key]) caps[e.key].classList.add('down');
     if (e.repeat && e.key === tapped) return;
     tapped = modKeys[e.key] && !tapped ? e.key : null;
   });
   window.addEventListener('keyup', (e) => {
+    if (caps[e.key]) caps[e.key].classList.remove('down');
     if (e.key === tapped) setMode(modKeys[e.key]);
     tapped = null;
   });
-  window.addEventListener('blur', () => { tapped = null; });
+  window.addEventListener('blur', () => { tapped = null; Object.values(caps).forEach(k => k.classList.remove('down')); });
   draw();
 })();
 </script>
