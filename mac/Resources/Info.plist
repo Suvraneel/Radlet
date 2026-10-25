@@ -29,7 +29,7 @@
     <key>NSAppleEventsUsageDescription</key>
     <string>Radlet reads which files are selected in Finder when you press its shortcut, to open the wheel for them. It doesn't change anything in Finder.</string>
     <key>NSHumanReadableCopyright</key>
-    <string>© 2026 Usemonoma</string>
+    <string>© 2026 Suvraneel Bhuin</string>
     <!-- Finder right-click → Services. NSMessage names a method on ServiceProvider. -->
     <key>NSServices</key>
     <array>
