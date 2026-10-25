@@ -36,7 +36,9 @@ package final class WheelDriver {
     /// The pointer is at (`dx`, `dy`) from the centre, y down.
     package func pointer(dx: Double, dy: Double) {
         let changed = tracker.move(dx: dx, dy: dy, at: WheelDriver.now)
-        if changed { mouseOwnsPick = tracker.pick != nil }
+        // Open presets count too: after an overshoot nothing is picked, but
+        // leaving the wheel should still fold them away.
+        if changed { mouseOwnsPick = tracker.pick != nil || tracker.focus != nil }
         if model.spec.style == .orbit {
             let p = min(max((tracker.distance - (model.spec.presetInner - 56)) / 56, 0), 1)
             let stepped = (p * 10).rounded() / 10
@@ -47,7 +49,8 @@ package final class WheelDriver {
     }
 
     package func pointerLeft() {
-        guard tracker.pick != nil || model.pick != nil || model.proximity != 0 else { return }
+        guard tracker.pick != nil || model.pick != nil || tracker.focus != nil || model.focus != nil
+                || model.proximity != 0 else { return }
         tracker.reset()
         dwellWork?.cancel()
         model.proximity = 0
@@ -62,7 +65,7 @@ package final class WheelDriver {
     }
 
     /// Picks a slot or preset directly: the arrow keys, or a preview.
-    /// `open` opens that slot's petals (Bloom). Without `feedback` there's
+    /// `open` puts that slot's presets all out (Orbit and Bloom). Without `feedback` there's
     /// no flash or tap.
     package func select(_ pick: WheelPick?, open: Int? = nil, feedback: Bool = true) {
         mouseOwnsPick = false
@@ -79,7 +82,7 @@ package final class WheelDriver {
         dwellWork?.cancel()
         tracker.reset()
         model.pick = nil
-        model.bloom = nil
+        model.focus = nil
     }
 
     /// Copies the tracker's state into the model. A highlight glides from
@@ -109,8 +112,8 @@ package final class WheelDriver {
             model.ringGlides = old != nil
             model.presetGlides = outerGlides
             model.pick = new
-            model.bloom = tracker.bloom
-            if let b = tracker.bloom { model.lastBloom = b }
+            model.focus = tracker.focus
+            if let f = tracker.focus { model.lastFocus = f }
             model.ringAngle = ring
             model.presetAngle = outer
             model.presetWidth = width
@@ -127,15 +130,16 @@ package final class WheelDriver {
         }
     }
 
-    /// Bloom: opens the presets once the pointer has rested long enough,
-    /// even if it doesn't move again.
+    /// Opens Bloom's presets, or folds away open ones, once the pointer has
+    /// rested long enough, even if it doesn't move again.
     private func scheduleDwell() {
         dwellWork?.cancel()
         guard let deadline = tracker.dwellDeadline else { return }
         let work = DispatchWorkItem { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, self.tracker.tick(at: WheelDriver.now) else { return }
-                self.sync(feedback: true)
+                // A tap when presets fan out; folding away is quiet.
+                self.sync(feedback: self.tracker.focus != nil)
             }
         }
         dwellWork = work

@@ -69,6 +69,9 @@ struct WheelStory: Identifiable {
                    note: "Preset labels brighten as the pointer heads out.", state: .near(WheelPick(slot: 0))),
         WheelStory(id: "orbit.preset", style: .orbit, title: "Preset picked",
                    note: "Out on the second ring, the slot's preset is picked.", state: .picked(WheelPick(slot: 0, preset: 1))),
+        WheelStory(id: "orbit.wide", style: .orbit, title: "Ring widened",
+                   note: "Pushed into a slot, its ring widens over the neighbours to show every preset.",
+                   state: .petals(WheelPick(slot: 0, preset: 2))),
         WheelStory(id: "orbit.long", style: .orbit, title: "Long labels",
                    note: "Tool names and their presets.", state: .picked(WheelPick(slot: 0, preset: 0)), samples: .tools),
 
@@ -80,6 +83,9 @@ struct WheelStory: Identifiable {
                    note: "The slot's presets fan out as petals.", state: .petals(WheelPick(slot: 0))),
         WheelStory(id: "bloom.petal", style: .bloom, title: "Petal picked",
                    note: "Letting go here runs the preset.", state: .petals(WheelPick(slot: 0, preset: 1))),
+        WheelStory(id: "bloom.four", style: .bloom, title: "Four presets",
+                   note: "An even fan, centred on the slot; the first preset is nearest straight out.",
+                   state: .petals(WheelPick(slot: 0, preset: 3)), samples: .tools),
         WheelStory(id: "bloom.long", style: .bloom, title: "Long labels",
                    note: "Tool names and their presets.", state: .petals(WheelPick(slot: 0, preset: 0)), samples: .tools),
     ]

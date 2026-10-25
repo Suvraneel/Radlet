@@ -164,8 +164,8 @@ struct WheelSettings: View {
             Text("Eight puts every slot on a quick direction. The rest go behind “More…”.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            if chosen == .bloom {
-                LabeledContent("Open presets after") {
+            if chosen.isAdvanced {
+                LabeledContent(chosen == .bloom ? "Open presets after" : "Fold presets back after") {
                     HStack {
                         Slider(value: $dwell, in: 0.12...0.6)
                         Text("\(Int((dwell * 1000).rounded())) ms")
@@ -173,6 +173,11 @@ struct WheelSettings: View {
                             .frame(width: 52, alignment: .trailing)
                     }
                 }
+                Text(chosen == .bloom
+                     ? "How long to rest on a slot before its presets fan out. Open presets stay out until you rest on another slot."
+                     : "Pushing into a slot widens its ring to show every preset. It stays wide until you rest on another slot for this long.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Toggle("Haptic feedback", isOn: $haptics)
             Text("A light tap on a Force Touch trackpad each time you cross into a slot.")

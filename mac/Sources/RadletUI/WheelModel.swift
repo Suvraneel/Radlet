@@ -12,9 +12,10 @@ package final class WheelModel: ObservableObject {
     @Published package private(set) var spec = WheelSpec(style: .dial, count: 0)
     @Published package private(set) var look: WheelLook
     @Published package var pick: WheelPick?
-    /// Bloom: the slot whose presets are out, and the last one that was.
-    @Published package var bloom: Int?
-    @Published package var lastBloom = 0
+    /// The slot whose presets are all out (Bloom's fan, Orbit's widened
+    /// ring), and the last one that was.
+    @Published package var focus: Int?
+    @Published package var lastFocus = 0
     /// Where the highlights point, in degrees; they may wind past 360 so
     /// they always glide the short way.
     @Published package var ringAngle = 0.0
@@ -73,8 +74,8 @@ package final class WheelModel: ObservableObject {
         overflow = laid.overflow
         spec = WheelSpec(style: style, count: positions.count)
         pick = nil
-        bloom = nil
-        lastBloom = 0
+        focus = nil
+        lastFocus = 0
         proximity = 0
         lastID = UserDefaults.standard.string(forKey: WheelModel.lastKey(mode))
         if loading {
@@ -108,10 +109,16 @@ package final class WheelModel: ObservableObject {
         return slot.id == WheelLayout.moreID ? WheelLayout.morePresets(overflow) : slot.variants
     }
 
-    /// The presets this style shows for a position.
+    /// The presets this style can show for a position (Orbit draws the
+    /// first two until its ring widens: see `orbitCells`).
     package func shownPresets(at i: Int) -> [SlotVariant] {
         let all = presets(at: i)
         return Array(all.prefix(spec.shownPresets(all.count)))
+    }
+
+    /// Orbit: the preset cells drawn now.
+    package var orbitCells: [OrbitCell] {
+        spec.orbitCells(presets: (0..<spec.count).map { presets(at: $0).count }, focus: focus)
     }
 
     package var hoveredBase: Slot? {

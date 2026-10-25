@@ -227,12 +227,12 @@ struct SpokesShape: Shape {
 }
 
 /// The disc: shadow, ground, bezel, ticks, slot fills and dividers, plus
-/// Orbit's outer ring. Everything that doesn't move with the pointer.
+/// Orbit's outer ring (which widens behind a slot the pointer pushes into).
 struct WheelBase: View {
     let spec: WheelSpec
     let look: WheelLook
-    /// Presets shown per position (Orbit's outer ring).
-    let presets: [Int]
+    /// Orbit's preset cells.
+    let orbitCells: [OrbitCell]
 
     var body: some View {
         let skin = look.skin
@@ -273,45 +273,43 @@ struct WheelBase: View {
                 SpokesShape(angles: borders, inner: spec.hub, outer: spec.ringOuter).stroke(look.divider, lineWidth: 1)
             }
             if spec.style == .orbit {
-                OrbitBand(spec: spec, look: look, presets: presets)
+                OrbitBand(spec: spec, look: look, cells: orbitCells)
             }
         }
         .frame(width: spec.size, height: spec.size)
     }
 }
 
-/// Orbit's outer ring: a groove, then one or two cells behind each slot.
+/// Orbit's outer ring: a groove, then the preset cells (two behind each
+/// slot, more behind a widened one).
 private struct OrbitBand: View {
     let spec: WheelSpec
     let look: WheelLook
-    let presets: [Int]
+    let cells: [OrbitCell]
 
     var body: some View {
         let sides = look.sides(spec)
         let gap = look.skin.segmentGap / 2
-        let cells: [(start: Double, end: Double)] = (0..<spec.count).flatMap { i -> [(start: Double, end: Double)] in
-            let n = i < presets.count ? presets[i] : 0
-            let a = spec.angle(of: i), h = spec.span / 2
-            switch n {
-            case 0: return []
-            case 1: return [(a - h + gap, a + h - gap)]
-            default: return [(a - h + gap, a - gap / 2), (a + gap / 2, a + h - gap)]
-            }
-        }
-        ZStack {
+        let half = spec.span / 2
+        // Odd multiples of half a slot are slot borders: a full gap there,
+        // half a gap between a slot's own cells, as on the inner ring.
+        func border(_ edge: Double) -> Bool { Int((edge / half).rounded()) % 2 != 0 }
+        func inset(_ edge: Double, _ toward: Double) -> Double { edge + toward * (border(edge) ? gap : gap / 2) }
+        let splits = cells.flatMap { [$0.start, $0.end] }.filter { !border($0) }
+        return ZStack {
             RingShape(inner: spec.ringOuter, outer: spec.presetInner, sides: sides)
                 .fill(Color.black.opacity(0.28), style: FillStyle(eoFill: true))
-            ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
-                SectorShape(inner: spec.presetInner, outer: spec.presetOuter, start: cell.start, end: cell.end,
-                            facetSpan: look.facetSpan(spec))
+            ForEach(cells, id: \.self) { cell in
+                SectorShape(inner: spec.presetInner, outer: spec.presetOuter,
+                            start: inset(cell.start, 1), end: inset(cell.end, -1), facetSpan: look.facetSpan(spec))
                     .fill(look.segment)
+                    .transition(.opacity)
             }
             if spec.count > 1 && look.skin.segmentGap < 0.5 {
                 SpokesShape(angles: (0..<spec.count).map { spec.angle(of: $0) - spec.span / 2 },
                             inner: spec.presetInner, outer: spec.presetOuter)
                     .stroke(look.divider, lineWidth: 1)
-                SpokesShape(angles: (0..<spec.count).filter { $0 < presets.count && presets[$0] > 1 }.map { spec.angle(of: $0) },
-                            inner: spec.presetInner, outer: spec.presetOuter)
+                SpokesShape(angles: splits, inner: spec.presetInner, outer: spec.presetOuter)
                     .stroke(look.divider.opacity(0.5), lineWidth: 1)
             }
         }
@@ -514,7 +512,7 @@ package struct WheelView: View {
         let spec = model.spec
         let look = model.look
         ZStack {
-            WheelBase(spec: spec, look: look, presets: (0..<spec.count).map { model.shownPresets(at: $0).count })
+            WheelBase(spec: spec, look: look, orbitCells: spec.style == .orbit ? model.orbitCells : [])
             highlights(spec, look)
             hub(spec, look)
             ringLabels(spec, look)
@@ -619,9 +617,11 @@ package struct WheelView: View {
             let parent = model.pick?.slot == i
             let push: Double = (hot ? 5 : 0) + (model.shown || look.reduceMotion ? 0 : -10)
             let opacity: Double = {
+                // An open fan reaches over the neighbours: dim the rest of
+                // the ring so its petals don't read as theirs.
+                if spec.style == .bloom, let f = model.focus { return i == f || hot ? 1 : 0.35 }
                 guard let p = model.pick else { return 1 }
                 if spec.style == .orbit && p.preset != nil { return parent ? 0.9 : 0.35 }
-                if spec.style == .bloom && p.preset != nil { return parent ? 1 : 0.35 }
                 // Dimmed, but still easy to read on see-through skins.
                 return hot ? 1 : 0.72
             }()
@@ -642,39 +642,41 @@ package struct WheelView: View {
     private func presetLabels(_ spec: WheelSpec, _ look: WheelLook) -> some View {
         let width = min(2 * spec.presetRadius * sin(spec.span / 4 * .pi / 180) - 6, 84)
         let near = 0.28 + 0.6 * model.proximity
-        return ForEach(Array(model.positions.enumerated()), id: \.offset) { i, _ in
-            let presets = model.shownPresets(at: i)
-            ForEach(Array(presets.enumerated()), id: \.offset) { v, preset in
-                let hot = model.pick == WheelPick(slot: i, preset: v)
-                let opacity: Double = {
-                    guard model.shown else { return 0 }
-                    guard let p = model.pick, p.preset != nil else { return near }
-                    if hot { return 1 }
-                    return p.slot == i ? 0.85 : 0.45
-                }()
-                let angle = spec.presetAngle(slot: i, preset: v, shown: presets.count)
-                let fs = look.facetSpan(spec)
-                let radius = (facet(spec.presetInner, angle, span: fs) + facet(spec.presetOuter, angle, span: fs)) / 2
-                PresetLabel(text: preset.label, look: look, color: hot ? look.hotText : look.text,
-                            width: presets.count == 1 ? width * 1.8 : width)
-                    .scaleEffect(hot ? 1.08 : 1)
-                    .opacity(opacity)
-                    .animation(look.spring, value: hot)
-                    .animation(.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.12), value: model.proximity)
-                    .position(spec.point(radius: radius, angle: angle))
-            }
+        let fs = look.facetSpan(spec)
+        return ForEach(model.orbitCells, id: \.self) { cell in
+            let presets = model.shownPresets(at: cell.slot)
+            let hot = model.pick == WheelPick(slot: cell.slot, preset: cell.preset)
+            let opacity: Double = {
+                guard model.shown else { return 0 }
+                // Out on a widened ring past its ends, other cells can't be picked.
+                if let f = model.focus, model.pick == nil, model.proximity >= 1, cell.slot != f { return 0.35 }
+                guard let p = model.pick, p.preset != nil else { return near }
+                if hot { return 1 }
+                return p.slot == cell.slot ? 0.85 : 0.45
+            }()
+            let radius = (facet(spec.presetInner, cell.middle, span: fs) + facet(spec.presetOuter, cell.middle, span: fs)) / 2
+            // A lone preset spans its slot, unless a widened ring covers half of it.
+            let whole = cell.end - cell.start > spec.span * 0.75
+            PresetLabel(text: presets.indices.contains(cell.preset) ? presets[cell.preset].label : "", look: look,
+                        color: hot ? look.hotText : look.text, width: whole ? width * 1.8 : width)
+                .scaleEffect(hot ? 1.08 : 1)
+                .opacity(opacity)
+                .animation(look.spring, value: hot)
+                .animation(.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.12), value: model.proximity)
+                .position(spec.point(radius: radius, angle: cell.middle))
+                .transition(.opacity)
         }
     }
 
     private func petals(_ spec: WheelSpec, _ look: WheelLook) -> some View {
-        let slot = model.bloom ?? model.lastBloom
+        let slot = model.focus ?? model.lastFocus
         let presets = slot < spec.count ? model.shownPresets(at: slot) : []
-        let open = model.bloom != nil && model.shown
+        let open = model.focus != nil && model.shown
         return ZStack {
             StemShape(angle: spec.angle(of: slot), inner: spec.ringOuter + 6, outer: spec.petalRadius - 24)
                 .stroke(look.accent.opacity(0.7), lineWidth: 1)
                 .opacity(open && model.pick?.slot == slot ? 1 : 0)
-            ForEach(0..<WheelSpec.maxPetals, id: \.self) { k in
+            ForEach(0..<WheelSpec.maxPresets, id: \.self) { k in
                 let has = k < presets.count
                 let shownHere = open && has
                 let hot = model.pick == WheelPick(slot: slot, preset: k)
@@ -686,8 +688,9 @@ package struct WheelView: View {
                 Petal(text: has ? presets[k].label : "", look: look, hot: hot, flash: model.flash)
                     .scaleEffect(scale)
                     .opacity(shownHere ? 1 : 0)
-                    .position(spec.point(radius: radius, angle: spec.petalAngle(slot: slot, petal: has ? k : 0)))
-                    .animation(look.spring.delay(shownHere && !still ? Double(k) * 0.03 : 0), value: model.bloom)
+                    .position(spec.point(radius: radius,
+                                         angle: spec.petalAngle(slot: slot, petal: has ? k : 0, of: max(presets.count, 1))))
+                    .animation(look.spring.delay(shownHere && !still ? Double(k) * 0.03 : 0), value: model.focus)
             }
         }
         .frame(width: spec.size, height: spec.size)
