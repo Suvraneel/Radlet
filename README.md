@@ -5,7 +5,7 @@
 <h1>Radlet</h1>
 
 <p><strong>A weapon wheel for your files.</strong><br>
-Drag files, hold a key, flick to a tool. Convert, compress, crop, translate and dozens more, without leaving Finder. A free menu bar app for macOS that does all the work on your Mac.</p>
+Drag files, hold a key, flick to a tool. Convert, compress, crop, translate and dozens more, without leaving Finder. A free file converter and toolkit for macOS that lives in the menu bar and does all the work on your Mac.</p>
 
 <p>
   <a href="https://cdn.jsdelivr.net/gh/Suvraneel/radlet@main/.github/media/demo.mp4"><strong>▶ Watch the 20-second demo</strong></a> (with sound)
@@ -33,7 +33,7 @@ Doing anything to a file on a Mac usually means a detour: open Preview and expor
 - **Nothing leaves your Mac.** No network access, accounts or telemetry. Text recognition, background removal, face detection, subtitles and translation use Apple's on-device frameworks.
 - **Nothing gets overwritten.** Results land beside the originals under a free name, and every job can be undone from History.
 
-*Radlet* is a little radial: the Latin *radius* was the spoke of a wheel, and in German and Dutch *Rad* simply means wheel.
+**Why "Radlet"?** It's **rad**ial + **-let**. Radial, because it's a wheel (in German and Dutch, *Rad* even means wheel). *-let*, because it's a small one, as in *droplet* or *booklet*: it opens under your pointer and gets out of the way. More importantly, *rad* is slang for awesome. The wheel tries to live up to that.
 
 ## How it works
 
@@ -412,7 +412,8 @@ Version 0.1.0, working towards 1.0.
 
 - [ ] Publish the first release: the workflow is ready, so this is pushing a `v0.1.0` tag.
 - [ ] Sign with a Developer ID and notarize, so the first open needs no workaround.
-- [ ] Rename the GitHub repository to `radlet`, and publish the landing page on Vercel and GitHub Pages.
+- [x] Rename the GitHub repository to `radlet`.
+- [ ] Publish the landing page on Vercel and GitHub Pages.
 - [ ] Native Shortcuts actions (App Intents), in a release built with Xcode.
 - [ ] PowerPoint files, password-protected ZIPs and other ZIP compression methods.
 
