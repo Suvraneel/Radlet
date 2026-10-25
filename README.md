@@ -189,7 +189,7 @@ The Swift tests cover the app's pure logic in `RadletKit`: wheel hit-testing for
 
 ### Sharing a build
 
-`mac/scripts/build-app.sh` makes `dist/Radlet.app` (ad-hoc signed). `mac/scripts/make-dmg.sh` packs `dist/Radlet-<version>.dmg`, a zip and their SHA-256 checksums. Set `UNIVERSAL=1` for Apple silicon and Intel, `VERSION=0.2.0` to stamp a version, and `SKIP_PDFIUM=1` to leave out PDF to image. The build downloads a pinned PDFium once into `target/pdfium`.
+`mac/scripts/build-app.sh` makes `dist/Radlet.app` (ad-hoc signed). `mac/scripts/make-dmg.sh` packs `dist/Radlet-<version>.dmg`, a zip and their SHA-256 checksums. The disk image opens on a styled window (drag Radlet onto Applications) laid out by [dmgbuild](https://github.com/dmgbuild/dmgbuild), which the script installs into `target/dmgbuild` the first time; without Python 3 or a network it makes a plain image instead. Its background is in `mac/dmg`, and the app icon is `mac/Resources/AppIcon.icns`. Set `UNIVERSAL=1` for Apple silicon and Intel, `VERSION=0.2.0` to stamp a version, and `SKIP_PDFIUM=1` to leave out PDF to image. The build downloads a pinned PDFium once into `target/pdfium`.
 
 These builds aren't notarized, so whoever opens one has to allow it once. [docs/release-notes.md](docs/release-notes.md) has the steps. `build-app.sh` already takes a `SIGN_IDENTITY` for a Developer ID certificate.
 

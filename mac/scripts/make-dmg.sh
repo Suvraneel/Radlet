@@ -27,14 +27,30 @@ fi
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP/Contents/Info.plist")"
 NAME="Radlet-$VERSION"
 
-# The disk image shows the app next to a link to Applications.
-STAGE="$(mktemp -d)"
-trap 'rm -rf "$STAGE"' EXIT
-ditto "$APP" "$STAGE/Radlet.app"
-ln -s /Applications "$STAGE/Applications"
-
 rm -f "dist/$NAME.dmg" "dist/$NAME.zip" "dist/$NAME.sha256"
-hdiutil create -volname "Radlet $VERSION" -srcfolder "$STAGE" -format UDZO -ov "dist/$NAME.dmg"
+
+# The styled window (background with an arrow, icon places, Radlet's icon on
+# the disk) comes from dmgbuild (MIT), kept in its own Python environment
+# under target/. Without Python 3 or a network the image is plain instead.
+DMGBUILD="${DMGBUILD:-}"
+if [[ -z "$DMGBUILD" ]]; then
+  VENV=target/dmgbuild
+  if [[ ! -x "$VENV/bin/dmgbuild" ]] && command -v python3 > /dev/null; then
+    python3 -m venv "$VENV" > /dev/null 2>&1 && "$VENV/bin/pip" install --quiet "dmgbuild==1.6.7" > /dev/null 2>&1 || true
+  fi
+  if [[ -x "$VENV/bin/dmgbuild" ]]; then DMGBUILD="$VENV/bin/dmgbuild"; fi
+fi
+
+if [[ -n "$DMGBUILD" ]]; then
+  "$DMGBUILD" -s mac/dmg/settings.py -D app="$APP" -D dir="$ROOT/mac/dmg" "Radlet $VERSION" "dist/$NAME.dmg"
+else
+  echo "dmgbuild isn't available, so the disk image has no styled window." >&2
+  STAGE="$(mktemp -d)"
+  trap 'rm -rf "$STAGE"' EXIT
+  ditto "$APP" "$STAGE/Radlet.app"
+  ln -s /Applications "$STAGE/Applications"
+  hdiutil create -volname "Radlet $VERSION" -srcfolder "$STAGE" -format UDZO -ov "dist/$NAME.dmg"
+fi
 ditto -c -k --keepParent "$APP" "dist/$NAME.zip"
 (cd dist && shasum -a 256 "$NAME.dmg" "$NAME.zip" > "$NAME.sha256")
 

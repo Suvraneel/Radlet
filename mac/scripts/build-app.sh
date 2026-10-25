@@ -64,6 +64,7 @@ cp "$BIN_DIR/Radlet" "$APP/Contents/MacOS/Radlet"
 cp "$HELPER" "$APP/Contents/Helpers/radlet"
 cp "$BIN_DIR/radlet-vision" "$APP/Contents/Helpers/radlet-vision"
 cp THIRD_PARTY.md "$APP/Contents/Resources/Licenses/"
+cp mac/Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
 if [[ "${SKIP_PDFIUM:-0}" != "1" ]]; then
   libs=()
