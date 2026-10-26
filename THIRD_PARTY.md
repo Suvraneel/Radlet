@@ -37,6 +37,8 @@ A shipped app should include these notices in an About → Acknowledgements scre
 
 - **PDFium** (BSD-3-Clause), the PDF renderer from Chromium, used for PDF to image. The app bundles a prebuilt copy from the [pdfium-binaries](https://github.com/bblanchon/pdfium-binaries) project (packaging under MIT) and loads it at run time; it isn't linked into the helper. PDFium includes further permissively licensed libraries: FreeType, HarfBuzz, ICU, Abseil, libjpeg-turbo, libpng, zlib, OpenJPEG, Little CMS, Highway and a few smaller ones. `build-app.sh` copies every licence file from the PDFium download into `Radlet.app/Contents/Resources/Licenses/PDFium/`.
 
+- **Sparkle** (MIT), the update framework, installs new releases from Radlet's appcast after checking their EdDSA signature. The app bundles `Sparkle.framework` (from Sparkle's Swift package, pinned in `mac/Package.swift`) without its XPC services, which only sandboxed apps need. Sparkle includes bsdiff and SUSignatureVerifier (BSD-2-Clause), sais-lite (MIT) and ed25519 (zlib), as listed in its licence file. `build-app.sh` copies Sparkle's licence into `Radlet.app/Contents/Resources/Licenses/Sparkle.txt`.
+
 ## External programs
 
 - **FFmpeg / FFprobe.** Optional. Radlet runs them as separate programs and doesn't link them. If a release bundles them, it must be an **LGPL** build (no `--enable-gpl` or `--enable-nonfree`), shipped with its licence and a link to its source.

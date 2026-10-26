@@ -196,6 +196,7 @@ private struct GeneralSettings: View {
     @AppStorage("finderShortcut") private var finderShortcut = true
     @ObservedObject private var login = LoginItem.shared
     @StateObject private var excluded = ExcludedApps()
+    @ObservedObject private var updates = Updates.shared
 
     var body: some View {
         Form {
@@ -212,6 +213,19 @@ private struct GeneralSettings: View {
                 Toggle("Start Radlet when I log in", isOn: $login.enabled)
                 if let error = login.error {
                     Text(error).font(.caption).foregroundStyle(.red)
+                }
+            }
+            if updates.isAvailable {
+                Section("Updates") {
+                    Toggle("Check for updates automatically", isOn: Binding(
+                        get: { updates.checksAutomatically },
+                        set: { updates.checksAutomatically = $0 }
+                    ))
+                    Text("Once a day. Radlet asks before installing anything, and checks each update's signature first.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Check Now") { updates.checkForUpdates() }
+                        .disabled(!updates.canCheck)
                 }
             }
             Section("Turn the wheel off in these apps") {

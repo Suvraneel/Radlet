@@ -2,10 +2,12 @@
 
 **Install:** download the `.dmg` below, open it and drag **Radlet** into **Applications**. Radlet runs on macOS 14 or later, on Apple silicon and Intel Macs.
 
+<!-- not-notarized -->
 Radlet isn't notarized by Apple yet, so macOS blocks it the first time you open it:
 
 - **macOS 15 or later:** click **Done**, then open **System Settings → Privacy & Security**, find "Radlet was blocked to protect your Mac", click **Open Anyway** and confirm with Touch ID or your password.
 - **macOS 14:** Control-click Radlet in Applications, choose **Open**, then click **Open** again.
+<!-- /not-notarized -->
 
 For audio and video, install FFmpeg: `brew install ffmpeg`. Images, PDFs and text work without it.
 

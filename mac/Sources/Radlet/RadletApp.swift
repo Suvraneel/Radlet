@@ -50,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 private struct MenuContent: View {
     @ObservedObject var state: AppState
+    @ObservedObject private var updates = Updates.shared
 
     var body: some View {
         Button("Convert Files…") { state.pickFiles(mode: .convert) }
@@ -69,6 +70,10 @@ private struct MenuContent: View {
         Divider()
         Text(state.engineStatus)
         Button("Setup and Tutorial…") { state.welcome.show() }
+        if updates.isAvailable {
+            Button("Check for Updates…") { updates.checkForUpdates() }
+                .disabled(!updates.canCheck)
+        }
         Menu("Troubleshooting") {
             Button("Copy Diagnostics") { Diagnostics.copy(engineStatus: state.engineStatus) }
             Button("Show Log File") { Diagnostics.revealLog() }
@@ -187,6 +192,7 @@ final class AppState: ObservableObject {
         Log.app("launched \(info["CFBundleShortVersionString"] as? String ?? "dev") on "
                 + ProcessInfo.processInfo.operatingSystemVersionString)
         try? FileManager.default.createDirectory(at: Prefs.loadoutsDir, withIntermediateDirectories: true)
+        Updates.shared.start()
 
         // Finder right-click → Services.
         NSApp.servicesProvider = services

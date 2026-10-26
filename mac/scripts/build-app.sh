@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds dist/Radlet.app: the Swift shell, the Rust `radlet` helper, the
-# `radlet-vision` helper (text recognition, background removal) and the
-# PDFium library (for PDF-to-image).
+# `radlet-vision` helper (text recognition, background removal), the
+# PDFium library (for PDF-to-image) and Sparkle (for updates).
 #
 #   mac/scripts/build-app.sh                 # this Mac's architecture, ad-hoc signed
 #   UNIVERSAL=1 mac/scripts/build-app.sh     # Apple silicon + Intel
@@ -82,6 +82,24 @@ if [[ "${SKIP_PDFIUM:-0}" != "1" ]]; then
   cp "target/pdfium/${PDFIUM_ARCHES[0]}/LICENSE" "$APP/Contents/Resources/Licenses/PDFium/pdfium-binaries.txt"
 fi
 
+# Sparkle (MIT), for updates: SwiftPM unpacks its framework under
+# mac/.build/artifacts. Radlet isn't sandboxed, so Sparkle's XPC services
+# aren't needed (Sparkle's documentation says they can go).
+SPARKLE="$(find mac/.build/artifacts -maxdepth 6 -type d -path '*Sparkle.xcframework/macos-*/Sparkle.framework' | head -1)"
+if [[ -z "$SPARKLE" ]]; then
+  echo "Sparkle.framework wasn't found under mac/.build/artifacts." >&2
+  exit 1
+fi
+mkdir -p "$APP/Contents/Frameworks"
+ditto "$SPARKLE" "$APP/Contents/Frameworks/Sparkle.framework"
+rm -rf "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices" \
+  "$APP/Contents/Frameworks/Sparkle.framework/XPCServices"
+RPATHS="$(otool -l "$APP/Contents/MacOS/Radlet")"
+if ! grep -q '@executable_path/../Frameworks' <<< "$RPATHS"; then
+  install_name_tool -add_rpath @executable_path/../Frameworks "$APP/Contents/MacOS/Radlet"
+fi
+cp mac/Resources/Licenses/Sparkle.txt "$APP/Contents/Resources/Licenses/Sparkle.txt"
+
 if [[ -n "${FFMPEG_DIR:-}" ]]; then
   # Must be an LGPL build, dynamically linked. See THIRD_PARTY.md.
   cp "$FFMPEG_DIR/ffmpeg" "$FFMPEG_DIR/ffprobe" "$APP/Contents/Helpers/"
@@ -97,10 +115,14 @@ else
   # notarisation requires. Everything is signed by the same team.
   SIGN_FLAGS=(--options runtime --timestamp)
 fi
-# The compilers already gave each binary a basic signature: replacing it is expected.
-codesign --force "${SIGN_FLAGS[@]}" --sign "$IDENTITY" "$APP/Contents/Helpers/"* 2>&1 \
-  | sed '/: replacing existing signature$/d'
-codesign --force "${SIGN_FLAGS[@]}" --entitlements mac/Resources/Radlet.entitlements --sign "$IDENTITY" "$APP" 2>&1 \
-  | sed '/: replacing existing signature$/d'
-codesign --verify --strict "$APP"
+# The compilers already gave each binary a basic signature, and Sparkle came
+# signed by its authors: replacing those is expected. Inside out: Sparkle's
+# helpers, then the framework, then the app.
+sign() { codesign --force "${SIGN_FLAGS[@]}" --sign "$IDENTITY" "$@" 2>&1 | sed '/: replacing existing signature$/d'; }
+sign "$APP/Contents/Helpers/"*
+FRAMEWORK="$APP/Contents/Frameworks/Sparkle.framework"
+sign "$FRAMEWORK/Versions/B/Autoupdate" "$FRAMEWORK/Versions/B/Updater.app"
+sign "$FRAMEWORK"
+sign --entitlements mac/Resources/Radlet.entitlements "$APP"
+codesign --verify --deep --strict "$APP"
 echo "Built $APP"

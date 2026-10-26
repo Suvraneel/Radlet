@@ -6,15 +6,23 @@
 // RadletKit holds the app's pure logic (protocol models, line framing, wheel
 // geometry, job progress, diagnostics log) so it can be unit-tested.
 // RadletUI draws and drives the wheel; the app and the Wheel Lab share it.
+// Sparkle (MIT) installs updates; it's pinned so every build is the same.
 import PackageDescription
 
 let package = Package(
     name: "Radlet",
     platforms: [.macOS(.v14)],
+    dependencies: [
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.1"),
+    ],
     targets: [
         .target(name: "RadletKit", path: "Sources/RadletKit"),
         .target(name: "RadletUI", dependencies: ["RadletKit"], path: "Sources/RadletUI"),
-        .executableTarget(name: "Radlet", dependencies: ["RadletKit", "RadletUI"], path: "Sources/Radlet"),
+        .executableTarget(
+            name: "Radlet",
+            dependencies: ["RadletKit", "RadletUI", .product(name: "Sparkle", package: "Sparkle")],
+            path: "Sources/Radlet"
+        ),
         // A storybook for the wheel: every style and state, drawn by the
         // app's own code, with a live skin editor. `swift run RadletLab`.
         .executableTarget(name: "RadletLab", dependencies: ["RadletKit", "RadletUI"], path: "Sources/RadletLab"),

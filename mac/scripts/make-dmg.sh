@@ -10,6 +10,7 @@
 #   SKIP_BUILD=1 mac/scripts/make-dmg.sh     pack the dist/Radlet.app already built
 #
 # Other build-app.sh options (SIGN_IDENTITY, FFMPEG_DIR, ...) pass through.
+# With a SIGN_IDENTITY the disk image is signed too, ready for notarize.sh.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -50,6 +51,9 @@ else
   ditto "$APP" "$STAGE/Radlet.app"
   ln -s /Applications "$STAGE/Applications"
   hdiutil create -volname "Radlet $VERSION" -srcfolder "$STAGE" -format UDZO -ov "dist/$NAME.dmg"
+fi
+if [[ -n "${SIGN_IDENTITY:-}" && "${SIGN_IDENTITY}" != "-" ]]; then
+  codesign --force --timestamp --sign "$SIGN_IDENTITY" "dist/$NAME.dmg"
 fi
 ditto -c -k --keepParent "$APP" "dist/$NAME.zip"
 (cd dist && shasum -a 256 "$NAME.dmg" "$NAME.zip" > "$NAME.sha256")

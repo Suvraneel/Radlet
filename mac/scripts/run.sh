@@ -19,7 +19,7 @@ fi
 
 # Copy first, so a failed copy never leaves you without the app.
 rm -rf /Applications/Radlet.app.new
-cp -R dist/Radlet.app /Applications/Radlet.app.new
+ditto dist/Radlet.app /Applications/Radlet.app.new
 
 # Quit a running copy: politely, then firmly.
 wait_until_quit() {

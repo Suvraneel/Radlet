@@ -28,6 +28,15 @@
     <string>Radlet turns speech in your videos and recordings into subtitles. Recognition runs on this Mac; nothing is sent anywhere.</string>
     <key>NSAppleEventsUsageDescription</key>
     <string>Radlet reads which files are selected in Finder when you press its shortcut, to open the wheel for them. It doesn't change anything in Finder.</string>
+    <!-- Updates (Sparkle): every release attaches an appcast.xml, and
+         releases/latest always serves the newest one. The public key is
+         written by mac/scripts/setup-updates.sh; without it there's no updater. -->
+    <key>SUFeedURL</key>
+    <string>https://github.com/Suvraneel/Radlet/releases/latest/download/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string></string>
+    <key>SUEnableAutomaticChecks</key>
+    <true/>
     <key>NSHumanReadableCopyright</key>
     <string>© 2026 Suvraneel Bhuin</string>
     <!-- Finder right-click → Services. NSMessage names a method on ServiceProvider. -->

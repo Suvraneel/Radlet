@@ -2,15 +2,17 @@ name: Release
 
 # Publishes Radlet on the Releases page when a version tag is pushed:
 #
-#   git tag v0.1.0 && git push origin v0.1.0
+#   git tag v0.2.0 && git push origin v0.2.0
 #
 # The tag must match the version in Cargo.toml. A tag with a hyphen, such as
 # v0.2.0-beta.1, is published as a prerelease. Re-running the workflow for a
 # tag that already has a release replaces its files and keeps its text.
 #
-# Builds are ad-hoc signed and not notarized (docs/release-notes.md tells
-# people how to open them). build-app.sh already takes SIGN_IDENTITY; signing
-# and notarization go here once there's a Developer ID certificate.
+# Optional repository secrets turn on more (README → Publishing a release):
+#   MACOS_CERTIFICATE_P12, MACOS_CERTIFICATE_PASSWORD   Developer ID signing
+#   NOTARY_KEY_P8, NOTARY_KEY_ID, NOTARY_ISSUER_ID      notarization
+#   SPARKLE_ED_PRIVATE_KEY                              signed in-app updates
+# Without them the build is ad-hoc signed, not notarized, and has no appcast.
 on:
   push:
     tags: ["v*"]
@@ -26,7 +28,7 @@ jobs:
   release:
     name: Build and publish
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -44,31 +46,152 @@ jobs:
           fi
           echo "VERSION=$version" >> "$GITHUB_ENV"
 
+      - name: Load the Developer ID certificate
+        env:
+          CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          if [[ -z "$CERTIFICATE_P12" ]]; then
+            echo "::notice::There's no MACOS_CERTIFICATE_P12 secret, so this build is ad-hoc signed and not notarized."
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password="$(uuidgen)"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          printf '%s' "$CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain" > /dev/null
+          existing="$(security list-keychains -d user | tr -d '"' | xargs)"
+          # shellcheck disable=SC2086
+          security list-keychains -d user -s "$keychain" $existing
+          identity="$(security find-identity -v -p codesigning "$keychain" \
+            | sed -nE 's/.*"(Developer ID Application: [^"]+)".*/\1/p' | head -1)"
+          if [[ -z "$identity" ]]; then
+            echo "::error::The certificate in MACOS_CERTIFICATE_P12 has no Developer ID Application identity."
+            exit 1
+          fi
+          echo "SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+          echo "Signing as $identity"
+
       - name: Build the app for Apple silicon and Intel, and pack it
         run: UNIVERSAL=1 mac/scripts/make-dmg.sh
+
+      - name: Notarize and staple
+        if: env.SIGN_IDENTITY != ''
+        env:
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          if [[ -z "$NOTARY_KEY_P8" || -z "$NOTARY_KEY_ID" || -z "$NOTARY_ISSUER_ID" ]]; then
+            echo "::error::The build is Developer ID signed, but NOTARY_KEY_P8, NOTARY_KEY_ID or NOTARY_ISSUER_ID is missing."
+            exit 1
+          fi
+          export NOTARY_KEY_FILE="$RUNNER_TEMP/notary.p8"
+          printf '%s\n' "$NOTARY_KEY_P8" > "$NOTARY_KEY_FILE"
+          trap 'rm -f "$NOTARY_KEY_FILE"' EXIT
+          mac/scripts/notarize.sh
+          echo "NOTARIZED=1" >> "$GITHUB_ENV"
 
       - name: Check what's inside
         run: |
           app=dist/Radlet.app/Contents
-          for binary in "$app/MacOS/Radlet" "$app/Helpers/radlet" "$app/Helpers/radlet-vision" "$app/Helpers/libpdfium.dylib"; do
+          for binary in "$app/MacOS/Radlet" "$app/Helpers/radlet" "$app/Helpers/radlet-vision" \
+            "$app/Helpers/libpdfium.dylib" "$app/Frameworks/Sparkle.framework/Sparkle"; do
             lipo "$binary" -verify_arch arm64 x86_64
           done
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$app/Info.plist")" = "$VERSION"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Info.plist")" = "$VERSION"
           echo '{"id":1,"method":"hello"}' | "$app/Helpers/radlet" serve | grep '"vision":true'
           "$app/Helpers/radlet-vision" selftest
+          codesign --verify --deep --strict dist/Radlet.app
+          # What people install is the copy inside the disk image.
+          mount="$(mktemp -d)"
+          hdiutil attach -nobrowse -readonly -mountpoint "$mount" "dist/Radlet-$VERSION.dmg" > /dev/null
+          codesign --verify --deep --strict "$mount/Radlet.app"
+          hdiutil detach "$mount" > /dev/null
           ls -l dist/Radlet-"$VERSION".*
+
+      - name: Sign the update for installed copies
+        env:
+          SPARKLE_ED_PRIVATE_KEY: ${{ secrets.SPARKLE_ED_PRIVATE_KEY }}
+        run: |
+          public_key="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' dist/Radlet.app/Contents/Info.plist 2> /dev/null || true)"
+          if [[ -z "$SPARKLE_ED_PRIVATE_KEY" || -z "$public_key" ]]; then
+            echo "::warning::No SPARKLE_ED_PRIVATE_KEY secret or SUPublicEDKey, so installed copies won't be offered this release. Run mac/scripts/setup-updates.sh once to set both up."
+            exit 0
+          fi
+          # Sparkle also ships an old DSA script of the same name, in bin/old_dsa_scripts.
+          sign_update="$(find mac/.build/artifacts -maxdepth 4 -type f -path '*/Sparkle/bin/sign_update' | head -1)"
+          if [[ ! -x "$sign_update" ]]; then
+            echo "::error::Sparkle's sign_update wasn't found under mac/.build/artifacts."
+            exit 1
+          fi
+          zip="dist/Radlet-$VERSION.zip"
+          attributes="$(printf '%s' "$SPARKLE_ED_PRIVATE_KEY" | "$sign_update" --ed-key-file - "$zip")"
+          signature="$(sed -nE 's/.*sparkle:edSignature="([^"]+)".*/\1/p' <<< "$attributes")"
+          length="$(sed -nE 's/.*length="([0-9]+)".*/\1/p' <<< "$attributes")"
+          if [[ -z "$signature" || -z "$length" ]]; then
+            echo "::error::sign_update printed no signature."
+            exit 1
+          fi
+          swift mac/scripts/verify-update-signature.swift "$public_key" "$signature" "$zip"
+          repo="https://github.com/$GITHUB_REPOSITORY"
+          {
+            echo '<?xml version="1.0" encoding="utf-8"?>'
+            echo '<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">'
+            echo '  <channel>'
+            echo '    <title>Radlet</title>'
+            echo "    <link>$repo</link>"
+            echo '    <item>'
+            echo "      <title>Radlet $VERSION</title>"
+            echo "      <pubDate>$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')</pubDate>"
+            echo "      <sparkle:version>$VERSION</sparkle:version>"
+            echo "      <sparkle:shortVersionString>$VERSION</sparkle:shortVersionString>"
+            echo '      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>'
+            echo "      <sparkle:fullReleaseNotesLink>$repo/releases/tag/$GITHUB_REF_NAME</sparkle:fullReleaseNotesLink>"
+            echo "      <description><![CDATA[<p>Radlet $VERSION is ready. <a href=\"$repo/releases/tag/$GITHUB_REF_NAME\">See what's new</a>.</p>]]></description>"
+            echo "      <enclosure url=\"$repo/releases/download/$GITHUB_REF_NAME/Radlet-$VERSION.zip\" length=\"$length\" type=\"application/octet-stream\" sparkle:edSignature=\"$signature\"/>"
+            echo '    </item>'
+            echo '  </channel>'
+            echo '</rss>'
+          } > dist/appcast.xml
+          xmllint --noout dist/appcast.xml
+          cat dist/appcast.xml
 
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           files=("dist/Radlet-$VERSION.dmg" "dist/Radlet-$VERSION.zip" "dist/Radlet-$VERSION.sha256")
+          if [[ -f dist/appcast.xml ]]; then files+=(dist/appcast.xml); fi
           if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber
+            # Deleting and re-pushing a tag turns its release into a draft:
+            # publish it again, or nobody can download it.
+            if [[ "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)" == "true" ]]; then
+              gh release edit "$GITHUB_REF_NAME" --draft=false
+            fi
           else
+            notes="$RUNNER_TEMP/notes.md"
+            if [[ "${NOTARIZED:-0}" == "1" ]]; then
+              # Notarized: no "Open Anyway" steps needed.
+              sed '/<!-- not-notarized -->/,/<!-- \/not-notarized -->/d' docs/release-notes.md > "$notes"
+            else
+              sed '/<!-- \/\{0,1\}not-notarized -->/d' docs/release-notes.md > "$notes"
+            fi
             prerelease=""
             if [[ "$VERSION" == *-* ]]; then prerelease="--prerelease"; fi
             # The install notes come first, then GitHub's list of what changed.
             gh release create "$GITHUB_REF_NAME" "${files[@]}" --verify-tag $prerelease \
-              --title "Radlet $VERSION" --notes-file docs/release-notes.md --generate-notes
+              --title "Radlet $VERSION" --notes-file "$notes" --generate-notes
           fi
+
+      - name: Remove the signing keychain
+        if: always()
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          if [[ -f "$keychain" ]]; then security delete-keychain "$keychain"; fi
