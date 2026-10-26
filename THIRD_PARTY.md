@@ -12,7 +12,7 @@ Radlet's own code is original. It depends on the following open-source component
 | flate2 / miniz_oxide | PDF stream compression | MIT OR Apache-2.0 |
 | pulldown-cmark | Reading Markdown | MIT |
 | sha2 | SHA-256 checksums | MIT OR Apache-2.0 |
-| serde, serde_json, toml | Protocol and recipe formats | MIT OR Apache-2.0 |
+| serde, serde_json, toml | Protocol and recipe formats; JSON and TOML files | MIT OR Apache-2.0 |
 | clap | Command-line parsing | MIT OR Apache-2.0 |
 | tempfile | Temporary files | MIT OR Apache-2.0 |
 | getrandom | Random keys for PDF passwords | MIT OR Apache-2.0 |
@@ -22,12 +22,13 @@ Radlet's own code is original. It depends on the following open-source component
 | resvg / usvg / tiny-skia (with fontdb and rustybuzz for text) | Drawing SVGs into pixels | Apache-2.0 OR MIT; tiny-skia BSD-3-Clause |
 | svg2pdf / pdf-writer | SVG to vector PDF | MIT OR Apache-2.0 |
 | zip | Making and extracting ZIP archives; reading Word files | MIT |
-| quick-xml | Reading Word documents | MIT |
+| quick-xml | Reading Word documents, XML and TTML subtitles | MIT |
 | csv | Reading and writing CSV and TSV | Unlicense OR MIT |
 | calamine | Reading Excel workbooks | MIT |
 | rust_xlsxwriter | Writing Excel workbooks | MIT OR Apache-2.0 |
 | rqrr | Reading QR codes (its decoder includes code under the ISC licence) | (MIT OR Apache-2.0) AND ISC |
 | qrcode | Making QR codes | MIT OR Apache-2.0 |
+| yaml-rust2 | Reading and writing YAML | MIT OR Apache-2.0 |
 
 Transitive dependencies are also permissive: MIT, Apache-2.0, BSD-2/3-Clause, ISC, Zlib, 0BSD, Unlicense, Unicode-3.0. Run `cargo deny list` for the full set.
 
@@ -42,8 +43,10 @@ A shipped app should include these notices in an About → Acknowledgements scre
 ## External programs
 
 - **FFmpeg / FFprobe.** Optional. Radlet runs them as separate programs and doesn't link them. If a release bundles them, it must be an **LGPL** build (no `--enable-gpl` or `--enable-nonfree`), shipped with its licence and a link to its source.
-- **sips.** Part of macOS. Used for HEIC and AVIF.
+- **sips.** Part of macOS. Used for HEIC, AVIF, camera RAW, PSD, JPEG XL and JPEG 2000.
+- **textutil.** Part of macOS. Used to read Word 97 (.doc) and OpenDocument (.odt) files.
+- **tar (bsdtar).** Part of macOS (libarchive, BSD licence). Used for 7-Zip, RAR, TAR and ISO archives, and to pack .tar.gz.
 
 ## Apple frameworks
 
-AppKit, SwiftUI, ServiceManagement, UniformTypeIdentifiers, PDFKit, AVFoundation, Core Image, Core Text, Vision and Speech are part of macOS and aren't redistributed. Text recognition and subject masks run on-device through Vision, and speech recognition for subtitles runs on-device through Speech.
+AppKit, SwiftUI, ServiceManagement, UniformTypeIdentifiers, PDFKit, AVFoundation, Core Image, Core Text, Vision, Speech and Translation are part of macOS and aren't redistributed. Text recognition, barcodes and subject masks run on-device through Vision, speech recognition for subtitles through Speech, and audio and video conversion without FFmpeg through AVFoundation.

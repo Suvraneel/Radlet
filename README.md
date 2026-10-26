@@ -83,15 +83,15 @@ Radlet is two programs. The **Mac app** (Swift) spots the drag, draws the wheel 
 
 | Kind | What you get |
 | --- | --- |
-| **Images** | JPEG, PNG, WebP, HEIC, TIFF, GIF, BMP, ICO, ICNS, TGA and QOI to each other or to PDF (AVIF reads in too). A picture converts to **Text** through text recognition. A PDF converted to JPEG, PNG, WebP or TIFF gives one image per page. |
+| **Images** | JPEG, PNG, WebP, HEIC, TIFF, GIF, BMP, ICO, ICNS, TGA and QOI to each other or to PDF. AVIF, camera RAW (DNG, CR2, CR3, NEF, ARW, RAF, ORF, RW2 and more), Photoshop PSD, JPEG XL and JPEG 2000 read in too, through macOS. A picture converts to **Text** through text recognition. A PDF converted to JPEG, PNG, WebP or TIFF gives one image per page. |
 | **SVG** | Treated as an image: PNG, JPEG, WebP, ICO and the rest, drawn sharp at 1×, 2× or 4× (at least 1024 px on its longest side by default). SVG to PDF stays vector. |
 | **Icons** | Any picture or SVG to a macOS ICNS (16 to 1024 px) or an ICO. |
-| **Documents** | TXT, Markdown, HTML, Word (.docx) and RTF convert to each other and to PDF, keeping headings, lists, quotes, code, tables, bold, italic and links. A PDF converts to text or Markdown. |
-| **Data** | CSV, TSV, JSON and Excel (.xlsx) convert to each other (numbers stay numbers, IDs with leading zeros stay text). A table also becomes a Markdown or HTML table, or a PDF. A workbook of several sheets becomes one CSV per sheet. |
-| **Audio and video** | Through FFmpeg: MP3, M4A, WAV, FLAC, AIFF, OGG, Opus and WMA; MP4, MOV, WebM, MKV, AVI, WMV and GIF. Video is remuxed without re-encoding when the codecs allow. |
-| **Subtitles** | SRT and WebVTT to each other or to plain text. |
+| **Documents** | TXT, Markdown, HTML, Word (.docx) and RTF convert to each other and to PDF, keeping headings, lists, quotes, code, tables, bold, italic and links. Word 97 (.doc) and OpenDocument (.odt) files read in too, through macOS. A PDF converts to **Word**, text, Markdown, HTML or RTF; on a Mac, scanned pages are read with text recognition first. |
+| **Data** | CSV, TSV, JSON and Excel (.xlsx) convert to each other (numbers stay numbers, IDs with leading zeros stay text); old Excel (.xls) and OpenDocument (.ods) workbooks read in too. A table also becomes a Markdown or HTML table, or a PDF. A workbook of several sheets becomes one CSV per sheet. JSON converts to and from **YAML**, **TOML** and **XML** (YAML anchors and merge keys are expanded; XML attributes become `@name` keys). |
+| **Audio and video** | Out of the box, through macOS: MP4 ↔ MOV (without re-encoding when the codecs allow), video or sound to M4A, WAV and AIFF, from MP4, MOV, M4A, MP3, WAV, AIFF and FLAC, plus trimming and compressing video. With FFmpeg: MP3, M4A, WAV, FLAC, AIFF, OGG, Opus and WMA; MP4, MOV, WebM, MKV, AVI, WMV and GIF. Video is remuxed without re-encoding when the codecs allow. |
+| **Subtitles** | SRT, WebVTT, ASS/SSA, SubViewer (SBV) and TTML (DFXP) to each other or to plain text. |
 | **Folders** | Drop a folder for **Images to JPEG**, **Documents to PDF**, **Audio to MP3** and so on. Results go into a copy of the folder ("Trip (JPEG)") with the same subfolders, and anything that couldn't be converted is listed in "Not converted.txt". |
-| **ZIPs** | A folder becomes a ZIP and a ZIP becomes a folder. Extraction never writes outside its folder, skips links and `__MACOSX` clutter, and refuses zip bombs. |
+| **Archives** | A folder becomes a ZIP (or a .tar.gz) and a ZIP becomes a folder; on a Mac, so do 7-Zip, RAR, TAR (.tar.gz, .tar.bz2, .tar.xz) and ISO disc images. Extraction never writes outside its folder, skips links and `__MACOSX` clutter, and refuses archive bombs. |
 
 ### Tools (Command)
 
@@ -104,7 +104,7 @@ Tools ending in "…" open a window first, with a live preview where it helps.
 | **PDF** | **Split…** (every page, every few pages, or ranges like `1-3, 5, 8-`) · **Pages…** to reorder, delete and rotate · **Page numbers…** · **Watermark…** · **Password…** (AES-256; passwords are never saved or logged) · Combine into PDF · **Make searchable PDF** |
 | **Audio and video** | **Trim…** · **Make GIF…** · **Save stills** (ten evenly spaced frames) · **Even out volume** (-16 LUFS, as podcasts do) · **Make subtitles…** as SRT, WebVTT or a transcript, with on-device speech recognition |
 | **Privacy** | **Privacy check…** shows what a file gives away before you share it: GPS location, camera and serial number, names, dates, editing apps, and hidden content such as earlier versions kept inside PDFs. **Remove Metadata** saves cleaned copies. **Hide faces** pixelates, blurs or blacks out every face Vision finds. |
-| **Text and AI** | **Copy text** from pictures and scanned PDFs · **Remove background** to a transparent PNG · **Translate…** documents and subtitles on device (macOS 26), keeping headings, lists, tables and timings · **Read QR code** / **Make QR code** |
+| **Text and AI** | **Copy text** from pictures and scanned PDFs · **Remove background** to a transparent PNG · **Translate…** documents and subtitles on device (macOS 26), keeping headings, lists, tables and timings · **Read code** (QR codes, and on a Mac barcodes too: EAN, UPC, Code 128, PDF417, Data Matrix, Aztec and more) / **Make QR code** |
 | **Documents and data** | **Word count** ("1,234 words · 6 min read") · Copy text · **Clean up text** · **Combine into one** · **Format JSON** / **Minify JSON**, keeping key order and numbers exactly · **Combine into workbook** (several tables into one .xlsx, a sheet each) |
 | **Folders** (on copies) | **Zip together** · **Merge folders** (identical files kept once) · **Flatten** · **Sort by kind** · **List contents** (a tree with sizes, or a CSV) · **Find duplicates** |
 | **Everyday** | **Rename…** with a pattern such as `Trip {date} {n}`, previewed first · **Copy path** · **Copy name** · **Open in Terminal** · **Share…** (AirDrop, Mail and Messages as presets) · **Copy image** · Copy SHA-256 |
@@ -126,14 +126,15 @@ Tools ending in "…" open a window first, with a live preview where it helps.
 | --- | --- |
 | Mac app | Swift 5.10 as a Swift package (no Xcode project), AppKit + SwiftUI, macOS 14+. It avoids SwiftUI macros so it builds with just the Command Line Tools. |
 | On-device intelligence | Apple's Vision (text, subject masks, faces), Speech (subtitles), Translation (macOS 26) and the system text engine for PDF layout, all in the `radlet-vision` helper |
-| Engine and CLI | Rust 2021 (1.88+): `clap`, `serde`, `image` + `webp`, `lopdf`, `resvg` + `svg2pdf`, `pulldown-cmark`, `calamine` + `rust_xlsxwriter`, `zip`, `qrcode` + `rqrr`, `kamadak-exif` |
-| Media | FFmpeg and ffprobe (optional, from Homebrew), macOS `sips` for HEIC and AVIF, PDFium for PDF to image |
+| Engine and CLI | Rust 2021 (1.88+): `clap`, `serde`, `image` + `webp`, `lopdf`, `resvg` + `svg2pdf`, `pulldown-cmark`, `calamine` + `rust_xlsxwriter`, `zip`, `qrcode` + `rqrr`, `kamadak-exif`, `yaml-rust2`, `toml`, `quick-xml` |
+| Media | AVFoundation (in the helper) for everyday audio and video, FFmpeg and ffprobe (optional, from Homebrew) for the rest; macOS `sips` for HEIC, AVIF, RAW, PSD, JPEG XL and JPEG 2000, `textutil` for Word 97 and ODT, and `tar` (libarchive) for 7-Zip, RAR, TAR and ISO; PDFium for PDF to image |
+| Updates | [Sparkle](https://sparkle-project.org) (MIT), from an appcast attached to each GitHub release and checked with an EdDSA key |
 | Protocols | JSON lines between app and engine (`radlet serve`), Model Context Protocol for AI agents (`radlet mcp`) |
 | Quality | 200+ Rust tests and 90+ Swift tests, `rustfmt`, `clippy -D warnings`, `cargo deny` licence checks, GitHub Actions on Linux and macOS |
 
 ## Install
 
-Download the `.dmg` from the [latest release](https://github.com/Suvraneel/radlet/releases/latest), open it and drag **Radlet** into **Applications**. It runs on macOS 14 or later, on Apple silicon and Intel Macs. For audio and video, also install FFmpeg: `brew install ffmpeg`.
+Download the `.dmg` from the [latest release](https://github.com/Suvraneel/radlet/releases/latest), open it and drag **Radlet** into **Applications**. It runs on macOS 14 or later, on Apple silicon and Intel Macs. Everyday audio and video (MP4, MOV, M4A, MP3, WAV, AIFF, FLAC) work as they are; for MP3 output, WebM, MKV, GIFs, loudness and subtitles, also install FFmpeg: `brew install ffmpeg`. Radlet checks for updates once a day and asks before installing one (**Settings → General**).
 
 Radlet isn't notarized by Apple yet, so macOS blocks it the first time you open it. On macOS 15 or later, open **System Settings → Privacy & Security** and click **Open Anyway**. On macOS 14, Control-click Radlet in Applications and choose **Open**.
 
@@ -148,7 +149,7 @@ mac/scripts/run.sh             # builds Radlet, replaces /Applications/Radlet.ap
 mac/scripts/run.sh --check     # the same, plus a self-test of text recognition
 ```
 
-For audio and video, install FFmpeg. Images, PDFs and text work without it.
+For audio and video beyond what macOS plays, install FFmpeg. Images, PDFs, text and everyday MP4, MOV and M4A work without it.
 
 ```sh
 brew install ffmpeg
@@ -170,6 +171,8 @@ The PDF-to-image tests are skipped unless `RADLET_PDFIUM` points at a PDFium lib
 | --- | --- |
 | `RADLET_PDFIUM` | Path to `libpdfium.dylib` (or `.so`), for PDF to image outside the app |
 | `RADLET_FFMPEG`, `RADLET_FFPROBE` | Use these binaries instead of the ones on `PATH` or in Homebrew's usual locations |
+| `RADLET_NO_FFMPEG`, `RADLET_NO_AVFOUNDATION` | Set to `1` to act as if FFmpeg (or, on a Mac, AVFoundation too) weren't there |
+| `RADLET_BSDTAR` | Path to libarchive's `bsdtar`, for 7-Zip, RAR, TAR and ISO (on a Mac, the system's `tar` is used) |
 | `RADLET_VISION` | Path to the `radlet-vision` helper, when the engine isn't running inside the app |
 | `RADLET_HELPER` | Run the Swift app against this `radlet` binary, such as a debug build |
 | `RADLET_LOADOUTS_DIR` | Where loadouts live (default `~/Library/Application Support/Radlet/Loadouts/`) |
@@ -191,7 +194,7 @@ The Swift tests cover the app's pure logic in `RadletKit`: wheel hit-testing for
 
 `mac/scripts/build-app.sh` makes `dist/Radlet.app` (ad-hoc signed). `mac/scripts/make-dmg.sh` packs `dist/Radlet-<version>.dmg`, a zip and their SHA-256 checksums. The disk image opens on a styled window (drag Radlet onto Applications) laid out by [dmgbuild](https://github.com/dmgbuild/dmgbuild), which the script installs into `target/dmgbuild` the first time; without Python 3 or a network it makes a plain image instead. Its background is in `mac/dmg`, and the app icon is `mac/Resources/AppIcon.icns`. Set `UNIVERSAL=1` for Apple silicon and Intel, `VERSION=0.2.0` to stamp a version, and `SKIP_PDFIUM=1` to leave out PDF to image. The build downloads a pinned PDFium once into `target/pdfium`.
 
-These builds aren't notarized, so whoever opens one has to allow it once. [docs/release-notes.md](docs/release-notes.md) has the steps. `build-app.sh` already takes a `SIGN_IDENTITY` for a Developer ID certificate.
+Unless they're signed with a Developer ID and notarized, whoever opens one has to allow it once ([docs/release-notes.md](docs/release-notes.md) has the steps). With a certificate, `SIGN_IDENTITY="Developer ID Application: …" mac/scripts/make-dmg.sh` signs the app, its helpers, Sparkle and the disk image with the hardened runtime, and `mac/scripts/notarize.sh` notarizes and staples them (with an App Store Connect API key, or a `notarytool` keychain profile).
 
 ### Publishing a release
 
@@ -202,7 +205,18 @@ git tag v0.2.0
 git push origin v0.2.0
 ```
 
-[The release workflow](.github/workflows/release.yml) builds the app for Apple silicon and Intel, checks every binary and the bundled helpers, and publishes the `.dmg`, zip and checksums on the Releases page, with [docs/release-notes.md](docs/release-notes.md) above GitHub's list of what changed. It stops early if the tag doesn't match `Cargo.toml`. A tag with a hyphen, such as `v0.2.0-beta.1`, becomes a prerelease, and re-running the workflow replaces a release's files.
+[The release workflow](.github/workflows/release.yml) builds the app for Apple silicon and Intel, checks every binary and the bundled helpers, and publishes the `.dmg`, zip and checksums on the Releases page, with [docs/release-notes.md](docs/release-notes.md) above GitHub's list of what changed. It stops early if the tag doesn't match `Cargo.toml`. A tag with a hyphen, such as `v0.2.0-beta.1`, becomes a prerelease. Re-running the workflow replaces a release's files, and publishes the release again if deleting and re-pushing its tag turned it into a draft.
+
+**Updates (once).** Run `mac/scripts/setup-updates.sh` on your Mac and commit `mac/Resources/Info.plist`. It makes an EdDSA key in your login keychain, writes its public half into Info.plist and stores the private half as the `SPARKLE_ED_PRIVATE_KEY` secret with `gh`. From then on every release also carries an `appcast.xml`, signed for installed copies, and the workflow checks the signature against the app's key before publishing. Copies from before the key was added don't update themselves; they need one manual download.
+
+**Signing and notarization (once you have a Developer ID).** Add these repository secrets and the next tag is signed, notarized and stapled, and its release notes drop the "Open Anyway" steps:
+
+| Secret | What goes in it |
+| --- | --- |
+| `MACOS_CERTIFICATE_P12` | Your **Developer ID Application** certificate and key, exported from Keychain Access as .p12, then base64 (`base64 -i cert.p12 \| pbcopy`) |
+| `MACOS_CERTIFICATE_PASSWORD` | The password you gave the .p12 |
+| `NOTARY_KEY_P8` | An App Store Connect API key (Users and Access → Integrations, with the Developer role): the contents of its `AuthKey_….p8` |
+| `NOTARY_KEY_ID`, `NOTARY_ISSUER_ID` | That key's ID and your issuer ID, from the same page |
 
 ### Upgrading from a Veer build
 
@@ -379,7 +393,7 @@ JSON, one object per line. Every request gets exactly one reply with the same `i
 
 Version 0.1.0, working towards 1.0.
 
-- **Releases come from tags.** Each `v*` tag builds a universal `.dmg` and publishes it on the Releases page. Builds are ad-hoc signed and not notarized, so the first open needs **Open Anyway**.
+- **Releases come from tags.** Each `v*` tag builds a universal `.dmg` and publishes it on the Releases page, with an appcast for installed copies once the update key is set up. Until the Developer ID secrets are added, builds are ad-hoc signed and not notarized, so the first open needs **Open Anyway**.
 - **What CI checks.** On Linux: formatting, clippy, every engine test (including the end-to-end, protocol, FFmpeg and PDFium tests) and the licence policy. On macOS: the engine tests again, the Swift tests, a live protocol contract against the freshly built engine, the app bundle build, and a smoke test of the bundled helpers, including `radlet-vision selftest`.
 - **Tested on a Mac.** The newest pieces (Hide faces, Translate, Share, Copy image, Next… and ⌃⌥V) have been run on a real Mac, on top of the Linux end-to-end tests.
 - **About the demo video.** The wheel frames are drawn by Radlet's own SwiftUI code, using slots the real engine returned for three HEIC photos. The Finder window, pointer and progress HUD were recreated for the video, and the photos are generated. Its title and end cards were re-lettered when Veer became Radlet.
@@ -388,9 +402,13 @@ Version 0.1.0, working towards 1.0.
 <summary><strong>Known limits</strong></summary>
 
 - Resize and rotate refuse animated GIFs rather than flatten them. Converting an animated GIF to a still format keeps the first frame. Removing metadata from a GIF is lossless and keeps every frame.
-- Word files are read for their text and structure: headings, lists, quotes, code, tables, bold, italic and links. Pictures, comments, footnotes, headers and footers aren't carried over, and Word output uses Calibri and simple styles. PowerPoint files aren't handled yet.
+- Word files are read for their text and structure: headings, lists, quotes, code, tables, bold, italic and links. Pictures, comments, footnotes, headers and footers aren't carried over, and Word output uses Calibri and simple styles. Word 97 and ODT files go through macOS's `textutil`, which keeps the text and simple formatting (paragraphs, lists, tables, bold and italic) but usually not heading levels. PowerPoint files aren't handled yet.
+- PDF to Word keeps the text, in paragraphs and lists, not the page layout, columns or pictures.
+- Without FFmpeg, a Mac converts only what AVFoundation reads (MP4, MOV, M4A, MP3, WAV, AIFF, FLAC) into MP4, MOV, M4A, WAV or AIFF. More than two sound channels are mixed to stereo in WAV and AIFF. Compressing video then means a smaller picture (1080p, 720p or 540p), with no size targets.
+- Camera RAW files are developed with macOS's default settings, as Preview shows them.
+- Password-protected 7-Zip and RAR archives can't be opened yet. An XML file converted to JSON and back keeps its elements, attributes and text, but not comments or the order of mixed text and elements.
 - Excel workbooks are read for their values: a formula gives the result Excel last saved, and formatting, charts and merged cells aren't carried over. Workbooks are refused if they'd unpack to more than 512 MB.
-- Hide faces finds the faces Vision detects; very small, turned-away or covered faces can be missed, so check the result before sharing. Read QR code reads QR codes only, not other barcodes.
+- Hide faces finds the faces Vision detects; very small, turned-away or covered faces can be missed, so check the result before sharing. Read code reads QR codes everywhere, and barcodes too on a Mac (through Vision).
 - Translate needs macOS 26 and the two languages downloaded in System Settings → General → Language & Region → Translation Languages. Each paragraph is translated as a whole, so bold or italic words inside one come out plain.
 - Without the Mac app, documents become PDF through a built-in writer with the standard PDF fonts (Helvetica, Courier), which cover Western European languages; other letters print as "?".
 - Password-protected ZIP files can't be opened yet, nor archives compressed with methods other than Deflate and Deflate64.
@@ -410,10 +428,13 @@ Version 0.1.0, working towards 1.0.
 
 ## Roadmap
 
-- [ ] Publish the first release: the workflow is ready, so this is pushing a `v0.1.0` tag.
-- [ ] Sign with a Developer ID and notarize, so the first open needs no workaround.
+- [x] Publish the first release.
+- [x] Updates inside the app (Sparkle): run `mac/scripts/setup-updates.sh` once to switch them on.
+- [ ] Sign with a Developer ID and notarize, so the first open needs no workaround. The workflow is ready; it needs the certificate and API key as secrets.
 - [x] Rename the GitHub repository to `radlet`.
-- [ ] Publish the landing page on Vercel and GitHub Pages.
+- [x] Publish the landing page on Vercel and GitHub Pages.
+- [x] Everyday audio and video without FFmpeg, through AVFoundation.
+- [x] RAW, PSD, JPEG XL, JPEG 2000, Word 97, ODT, old Excel, ODS, YAML, TOML, XML, ASS, SBV, TTML, 7-Zip, RAR, TAR and ISO; PDF to Word; barcodes.
 - [ ] Native Shortcuts actions (App Intents), in a release built with Xcode.
 - [ ] PowerPoint files, password-protected ZIPs and other ZIP compression methods.
 
