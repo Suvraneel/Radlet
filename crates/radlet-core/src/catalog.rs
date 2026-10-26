@@ -6,6 +6,7 @@ use std::sync::OnceLock;
 
 use serde::Serialize;
 
+use crate::engines::avmedia;
 use crate::format::{Category, Format};
 use crate::ops::{Action, CompressLevel, IconKind, Rect, RedactStyle, SplitMode, Step};
 use crate::recipe::Recipe;
@@ -26,12 +27,18 @@ pub struct Capabilities {
     /// background removal and searchable PDFs.
     #[serde(default)]
     pub vision: Option<PathBuf>,
+    /// The helper can also convert audio and video with AVFoundation (on a
+    /// Mac). Used only when FFmpeg is missing.
+    #[serde(default)]
+    pub avfoundation: bool,
 }
 
 impl Capabilities {
     /// Looks for helper programs: `RADLET_FFMPEG`/`RADLET_FFPROBE` overrides,
     /// next to the running binary (bundled builds), then `PATH` and the
-    /// usual Homebrew locations. `RADLET_NO_FFMPEG=1` disables media support.
+    /// usual Homebrew locations. `RADLET_NO_FFMPEG=1` turns FFmpeg off (a Mac
+    /// still handles what AVFoundation can); `RADLET_NO_AVFOUNDATION=1` turns
+    /// that off too.
     pub fn detect() -> Capabilities {
         let no_ffmpeg = std::env::var_os("RADLET_NO_FFMPEG").is_some_and(|v| v == "1");
         let ffmpeg = if no_ffmpeg {
@@ -51,12 +58,15 @@ impl Capabilities {
         } else {
             find_tool("radlet-vision", "RADLET_VISION")
         };
+        let no_avfoundation = std::env::var_os("RADLET_NO_AVFOUNDATION").is_some_and(|v| v == "1");
+        let avfoundation = cfg!(target_os = "macos") && vision.is_some() && !no_avfoundation;
         Capabilities {
             ffmpeg,
             ffprobe,
             sips,
             pdfium: find_pdfium(),
             vision,
+            avfoundation,
         }
     }
 
@@ -72,6 +82,12 @@ impl Capabilities {
 
     pub fn media(&self) -> bool {
         self.ffmpeg.is_some()
+    }
+
+    /// Audio and video through the Mac helper's AVFoundation: what a Mac
+    /// plays, without FFmpeg.
+    pub fn native_media(&self) -> bool {
+        self.ffmpeg.is_none() && self.avfoundation && self.vision.is_some()
     }
 
     /// Formats that can be decoded into pixels (an SVG is drawn).
@@ -179,6 +195,9 @@ pub fn targets(from: Format, caps: &Capabilities) -> Vec<Format> {
     match from.category() {
         Category::Audio if caps.media() => out.extend_from_slice(AUDIO_TARGETS),
         Category::Video if caps.media() => out.extend_from_slice(VIDEO_TARGETS),
+        Category::Audio | Category::Video if caps.native_media() => {
+            out.extend_from_slice(avmedia::targets(from))
+        }
         _ => {}
     }
     if from == Gif && caps.media() {
@@ -246,7 +265,11 @@ pub fn step_accepts(step: &Step, f: Format, caps: &Capabilities) -> bool {
         Step::Resize { .. } => caps.can_decode_raster(f) && (caps.can_encode_raster(f) || f == Svg),
         Step::Rotate { .. } => (caps.can_decode_raster(f) && caps.can_encode_raster(f)) || f == Pdf,
         Step::PageNumbers { .. } | Step::Watermark { .. } => f == Pdf,
-        Step::Trim { .. } | Step::NormalizeAudio => {
+        Step::Trim { .. } => {
+            (caps.media() && matches!(f.category(), Category::Audio | Category::Video))
+                || (caps.native_media() && avmedia::trims(f))
+        }
+        Step::NormalizeAudio => {
             caps.media() && matches!(f.category(), Category::Audio | Category::Video)
         }
         Step::Crop { .. } | Step::Redact { .. } => {
@@ -267,6 +290,8 @@ pub fn step_accepts(step: &Step, f: Format, caps: &Capabilities) -> bool {
                 || (caps.media()
                     && f.category() == Category::Video
                     && (target_bytes.is_none() || caps.ffprobe.is_some()))
+                // A Mac compresses to a smaller picture, with no size target.
+                || (caps.native_media() && target_bytes.is_none() && avmedia::compresses(f))
         }
         Step::RemoveBackground { .. } => {
             caps.vision.is_some() && caps.can_decode_raster(f) && f != Svg
@@ -1100,9 +1125,15 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
     }
     // Pictures: QR codes and icon sets (after the everyday tools).
     if every(&|f| caps.can_decode_raster(f)) {
+        // Vision reads barcodes too; the engine alone, QR codes.
+        let label = if caps.vision.is_some() {
+            "Read code"
+        } else {
+            "Read QR code"
+        };
         w.tools.push(tool(
             "read_codes",
-            "Read QR code",
+            label,
             "qrcode.viewfinder",
             Action::ReadCodes,
             None,
@@ -1316,6 +1347,13 @@ pub fn inside_slots(inside: &[Format], caps: &Capabilities) -> Vec<Slot> {
             out.push(slot("mp3", "Audio to MP3", Category::Audio, Mp3, "MP3"));
         }
         if has(&|f| f.category() == Category::Video && f != Mp4) {
+            out.push(slot("mp4", "Videos to MP4", Category::Video, Mp4, "MP4"));
+        }
+    } else if caps.native_media() {
+        if has(&|f| f.category() == Category::Audio && f != M4a && avmedia::reads(f)) {
+            out.push(slot("m4a", "Audio to M4A", Category::Audio, M4a, "M4A"));
+        }
+        if has(&|f| f == Mov) {
             out.push(slot("mp4", "Videos to MP4", Category::Video, Mp4, "MP4"));
         }
     }
@@ -1863,5 +1901,51 @@ mod tests {
         assert!(chain_accepts(&web, Jpeg, &caps));
         assert!(!chain_accepts(&web, Pdf, &caps));
         assert!(!chain_accepts(&[], Jpeg, &caps));
+    }
+
+    #[test]
+    fn a_mac_without_ffmpeg() {
+        let mac = Capabilities {
+            vision: Some("/x/radlet-vision".into()),
+            avfoundation: true,
+            ..Default::default()
+        };
+        assert!(mac.native_media() && !mac.media());
+        assert_eq!(targets(Mov, &mac), [Mp4, M4a, Wav, Aiff]);
+        assert_eq!(targets(Mp3, &mac), [M4a, Wav, Aiff]);
+        assert!(targets(Mkv, &mac).is_empty(), "Matroska needs FFmpeg");
+        let ids = |w: &Wheel| w.tools.iter().map(|s| s.id.clone()).collect::<Vec<_>>();
+        let video = ids(&wheel(&[Some(Mov)], &mac, &[]));
+        assert!(video.contains(&"trim".to_string()) && video.contains(&"compress".to_string()));
+        assert!(!video.contains(&"make_gif".to_string()), "GIFs need FFmpeg");
+        let w = wheel(&[Some(Mp4)], &mac, &[]);
+        let compress = w.tools.iter().find(|s| s.id == "compress").unwrap();
+        assert!(
+            compress.variants.iter().all(|v| v.id != "compress.discord"),
+            "no size targets without FFprobe"
+        );
+        let audio = ids(&wheel(&[Some(Mp3)], &mac, &[]));
+        assert!(
+            !audio.contains(&"trim".to_string()),
+            "no MP3 encoder to trim into"
+        );
+        assert!(ids(&wheel(&[Some(Wav)], &mac, &[])).contains(&"trim".to_string()));
+        // With FFmpeg, FFmpeg does it all.
+        let both = Capabilities {
+            ffmpeg: Some("/x/ffmpeg".into()),
+            ..mac.clone()
+        };
+        assert!(!both.native_media());
+        assert!(targets(Mov, &both).contains(&Webm));
+        // The helper reads barcodes too.
+        let read = wheel(&[Some(Png)], &mac, &[]);
+        assert_eq!(
+            read.tools
+                .iter()
+                .find(|s| s.id == "read_codes")
+                .unwrap()
+                .label,
+            "Read code"
+        );
     }
 }

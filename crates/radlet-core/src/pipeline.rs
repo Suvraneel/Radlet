@@ -1659,11 +1659,30 @@ pub fn read_codes(input: &Path, ctx: &mut Context<'_>) -> Result<Produced> {
             "QR codes are read from pictures, not {fmt} files"
         )));
     }
+    // On a Mac, Vision reads barcodes too; elsewhere (or if it fails),
+    // QR codes are read here.
+    if ctx.caps.vision.is_some() && fmt != Format::Svg {
+        let scratch = tempfile::tempdir()?;
+        match vision::codes(ctx.caps, input, scratch.path(), ctx.cancel) {
+            Ok(found) if !found.is_empty() => {
+                (ctx.progress)(1.0);
+                let values: Vec<String> = found.into_iter().map(|c| c.value).collect();
+                return Ok(value(values.join("\n")));
+            }
+            Err(Error::Cancelled) => return Err(Error::Cancelled),
+            _ => {}
+        }
+    }
     let pic = img::decode(input, fmt, ctx.caps)?;
     let found = crate::engines::codes::read(&pic.img);
     (ctx.progress)(1.0);
     if found.is_empty() {
-        return Err(Error::NothingToDo("no QR code found".into()));
+        let what = if ctx.caps.vision.is_some() {
+            "no QR code or barcode found"
+        } else {
+            "no QR code found"
+        };
+        return Err(Error::NothingToDo(what.into()));
     }
     Ok(value(found.join("\n")))
 }

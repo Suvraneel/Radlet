@@ -48,6 +48,21 @@ jobs:
         run: |
           echo '{"id":1,"method":"hello"}' | dist/Radlet.app/Contents/Helpers/radlet serve | grep '"vision":true'
           dist/Radlet.app/Contents/Helpers/radlet-vision selftest
+      - name: Convert sound and video without FFmpeg (AVFoundation)
+        env:
+          RADLET_NO_FFMPEG: "1"
+        run: |
+          work="$RUNNER_TEMP/native"
+          mkdir -p "$work"
+          python3 -c 'import math, struct, wave, sys
+          w = wave.open(sys.argv[1], "wb"); w.setnchannels(1); w.setsampwidth(2); w.setframerate(44100)
+          w.writeframes(b"".join(struct.pack("<h", int(8000 * math.sin(i * 2 * math.pi * 440 / 44100))) for i in range(44100)))
+          w.close()' "$work/tone.wav"
+          helper=dist/Radlet.app/Contents/Helpers/radlet
+          "$helper" convert --to m4a "$work/tone.wav"
+          "$helper" convert --to aiff "$work/tone.m4a"
+          test -s "$work/tone.m4a" && test -s "$work/tone.aiff"
+          file "$work/tone.m4a" "$work/tone.aiff"
       - run: ditto -c -k --keepParent dist/Radlet.app dist/Radlet.zip
       - uses: actions/upload-artifact@v4
         with:

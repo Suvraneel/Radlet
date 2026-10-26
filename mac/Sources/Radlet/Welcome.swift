@@ -425,7 +425,7 @@ private struct MediaPage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             PageTitle("Audio and video",
-                      "Images, PDFs and documents work already. Audio and video need FFmpeg, a free tool that Radlet finds on its own once it's installed.")
+                      "Images, PDFs and documents work already, and so do the videos and sound a Mac plays: MP4 and MOV, M4A, WAV, AIFF, MP3 and FLAC. FFmpeg, a free tool that Radlet finds on its own once it's installed, adds MP3 output, WebM, MKV and the rest, GIFs, loudness and subtitles.")
             switch model.ffmpeg {
             case nil:
                 HStack(spacing: 8) {

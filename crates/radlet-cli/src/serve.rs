@@ -164,6 +164,7 @@ pub fn serve(
                         "sips": caps.sips.is_some(),
                         "pdfium": caps.pdfium.is_some(),
                         "vision": caps.vision.is_some(),
+                        "avfoundation": caps.avfoundation,
                     }
                 }}),
             ),

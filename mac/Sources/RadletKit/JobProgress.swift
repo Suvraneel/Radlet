@@ -104,7 +104,7 @@ public final class JobProgress: ObservableObject {
         case .finished, .failed:
             if let message { return message }
             if !values.isEmpty {
-                // One word count or QR code is worth showing, not just
+                // One word count or code is worth showing, not just
                 // copying.
                 if valueKind == .count || valueKind == .code, values.count == 1, skipped.isEmpty, failures.isEmpty {
                     return "\(values[0].value) · copied"
@@ -114,7 +114,7 @@ public final class JobProgress: ObservableObject {
                 case .text: what = "Text"
                 case .checksum: what = "SHA-256"
                 case .count: what = "Word counts"
-                case .code: what = "QR codes"
+                case .code: what = "Codes"
                 }
                 let problems = skipped.count + failures.filter { $0 != "Cancelled" }.count
                 return problems > 0 ? "\(what) copied to the clipboard · \(problems) without" : "\(what) copied to the clipboard"

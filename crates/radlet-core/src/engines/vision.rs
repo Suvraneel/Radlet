@@ -22,6 +22,11 @@
 //! radlet-vision translate <to> <from|auto> <input.json> <output.json>
 //!                                              a JSON list of strings,
 //!                                              translated (macOS 26)
+//! radlet-vision codes <input> <output.json>      barcodes and QR codes as
+//!                                              [{"kind","value"}]
+//! radlet-vision media <input> <output> <to> [options]
+//!                                              audio and video with
+//!                                              AVFoundation (see avmedia.rs)
 //! ```
 //!
 //! `transcribe` writes `{"locale": "en-US", "chunks": [[{"t": "Hello,",
@@ -113,6 +118,27 @@ pub fn faces(
     Ok(rects)
 }
 
+/// A barcode or QR code the helper found.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+pub struct Code {
+    pub kind: String,
+    pub value: String,
+}
+
+/// Barcodes and QR codes in a picture, top to bottom.
+pub fn codes(
+    caps: &Capabilities,
+    input: &Path,
+    scratch: &Path,
+    cancel: &AtomicBool,
+) -> Result<Vec<Code>> {
+    let out = scratch.join("codes.json");
+    std::fs::File::create(&out)?;
+    run(caps, "codes", input, &out, cancel, &mut |_| {})?;
+    serde_json::from_slice(&std::fs::read(&out)?)
+        .map_err(|e| Error::Helper(format!("the Vision helper's codes don't read ({e})")))
+}
+
 /// Translates strings into `to` (from `from`, or the detected language)
 /// with the Mac's on-device translation.
 pub fn translate(
@@ -183,7 +209,7 @@ fn run(
     )
 }
 
-fn run_args(
+pub(crate) fn run_args(
     caps: &Capabilities,
     args: &[&OsStr],
     out: &Path,

@@ -1,6 +1,7 @@
 // radlet-vision: on-device text recognition, subject masks, faces,
 // searchable PDFs, speech and translation for the Radlet engine, using
-// Apple's Vision, PDFKit, Speech and Translation frameworks.
+// Apple's Vision, PDFKit, Speech and Translation frameworks, and audio and
+// video through AVFoundation.
 // Nothing leaves the Mac.
 //
 //   radlet-vision text <input> <output.txt>        image or PDF
@@ -17,6 +18,11 @@
 //   radlet-vision translate <to> <from|auto> <input.json> <output.json>
 //                                                a JSON list of strings,
 //                                                translated (Translate.swift)
+//   radlet-vision media <input> <output> <to> [options]
+//                                                audio and video with
+//                                                AVFoundation (Media.swift)
+//   radlet-vision codes <input> <output.json>      barcodes and QR codes as
+//                                                [{"kind","value"}] (Codes.swift)
 //   radlet-vision selftest                         checks this Mac can do them
 //   radlet-vision --version
 //
@@ -627,6 +633,18 @@ func selftest() throws {
     }
     print(translationStatus())
 
+    // A Mac's own codecs: what Radlet does without FFmpeg.
+    print(try mediaSelftest(in: dir))
+
+    do {
+        try codes(png, dir.appendingPathComponent("codes.json"))
+        print("codes: ran")
+    } catch Failure.nothingFound {
+        print("codes: ok (none in the test picture)")
+    } catch {
+        print("codes: unavailable here (\(error.localizedDescription))")
+    }
+
     // Speech needs permission and a downloaded language, so it's reported
     // rather than required.
     do {
@@ -658,12 +676,16 @@ do {
         try faces(URL(fileURLWithPath: args[1]), URL(fileURLWithPath: args[2]))
     case "translate" where args.count == 5:
         try translateTexts(Array(args.dropFirst()))
+    case "media" where args.count >= 4:
+        try media(Array(args.dropFirst()))
+    case "codes" where args.count == 3:
+        try codes(URL(fileURLWithPath: args[1]), URL(fileURLWithPath: args[2]))
     case "selftest":
         try selftest()
     case "--version":
-        print("radlet-vision 2")
+        print("radlet-vision 3")
     default:
-        FileHandle.standardError.write(Data("usage: radlet-vision text|mask|searchable|document-pdf|faces <input> <output>, transcribe <language> <output.json> <chunk>..., translate <to> <from|auto> <input.json> <output.json>, or selftest\n".utf8))
+        FileHandle.standardError.write(Data("usage: radlet-vision text|mask|searchable|document-pdf|faces <input> <output>, transcribe <language> <output.json> <chunk>..., translate <to> <from|auto> <input.json> <output.json>, media <input> <output> <to> [options], codes <input> <output.json>, or selftest\n".utf8))
         exit(2)
     }
 } catch Failure.nothingFound(let message) {

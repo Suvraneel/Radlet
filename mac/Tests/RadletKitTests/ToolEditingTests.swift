@@ -299,6 +299,6 @@ final class JobValueTests: XCTestCase {
         XCTAssertEqual(p.clipboardText, "https://example.com/menu")
         XCTAssertEqual(p.detail, "https://example.com/menu · copied")
         finish(p, 1, "/s/cat.png", value: nil, status: "skipped")
-        XCTAssertEqual(p.detail, "QR codes copied to the clipboard · 1 without")
+        XCTAssertEqual(p.detail, "Codes copied to the clipboard · 1 without")
     }
 }

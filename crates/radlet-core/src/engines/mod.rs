@@ -2,6 +2,7 @@
 //! and decoded data; orchestration lives in [`crate::pipeline`].
 
 pub mod archive;
+pub mod avmedia;
 pub mod codes;
 pub mod data;
 pub mod doc;

@@ -260,7 +260,10 @@ final class AppState: ObservableObject {
     func checkEngine() async {
         do {
             let hello = try await EngineClient.shared.hello()
-            let media = hello.capabilities.ffmpeg ? "audio and video on" : "install FFmpeg for audio and video"
+            let caps = hello.capabilities
+            let media = caps.ffmpeg ? "audio and video on"
+                : caps.avfoundation == true ? "audio and video through macOS (FFmpeg adds more)"
+                : "install FFmpeg for audio and video"
             let vision = hello.capabilities.vision == true ? " · text recognition on" : ""
             engineStatus = "Engine \(hello.version) · \(media)\(vision)"
         } catch {

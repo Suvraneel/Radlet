@@ -329,6 +329,9 @@ public struct Capabilities: Codable, Sendable {
     public let pdfium: Bool?
     /// The Vision helper: text recognition and background removal.
     public let vision: Bool?
+    /// The helper converts audio and video with AVFoundation when FFmpeg is
+    /// missing. Missing from older helpers.
+    public let avfoundation: Bool?
 }
 
 public struct Hello: Codable, Sendable {

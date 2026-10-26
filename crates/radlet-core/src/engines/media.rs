@@ -596,6 +596,7 @@ fn remux_ok(from: Format, to: Format, p: &Probe) -> bool {
 }
 
 /// Runs FFmpeg, reporting progress (0..1) and honouring cancellation.
+/// Without FFmpeg, jobs AVFoundation can do go to the Mac helper instead.
 pub fn run(
     caps: &Capabilities,
     job: MediaJob,
@@ -605,7 +606,10 @@ pub fn run(
     cancel: &AtomicBool,
     progress: &mut dyn FnMut(f32),
 ) -> Result<Format> {
-    let ffmpeg = caps.ffmpeg.as_ref().ok_or(Error::FfmpegMissing)?;
+    let Some(ffmpeg) = caps.ffmpeg.as_ref() else {
+        // Without FFmpeg, a Mac still converts and trims what it plays.
+        return crate::engines::avmedia::run(caps, job, input, from, out, cancel, progress);
+    };
     let probe = probe(caps, input);
     let pre = input_args(&job);
     // Progress is measured against the length of what's written.
