@@ -1090,9 +1090,11 @@ pub fn read(path: &Path, fmt: Format) -> Result<Doc> {
         Format::Docx => docx::read(path)?,
         Format::Rtf => rtf::read(&std::fs::read(path)?)?,
         Format::Csv | Format::Tsv => data::table_doc(path, fmt)?,
-        Format::Xlsx => crate::engines::sheet::doc(path)?,
-        Format::Srt | Format::Vtt => {
-            let cues = text::parse_subtitles(&text::read_text(path)?)?;
+        Format::Xlsx | Format::Xls | Format::Ods => crate::engines::sheet::doc(path, fmt)?,
+        // Word 97 and OpenDocument go through macOS's own converter, as HTML.
+        Format::Doc | Format::Odt => htmlread::parse(&textutil_html(path)?),
+        f if f.is_subtitles() => {
+            let cues = text::read_cues(&text::read_text(path)?, f)?;
             from_text(&text::subtitles_to_text(&cues))
         }
         Format::Pdf => from_text(&crate::engines::pdf::to_text(path)?),
@@ -1103,6 +1105,29 @@ pub fn read(path: &Path, fmt: Format) -> Result<Doc> {
         }
     };
     Ok(doc)
+}
+
+/// A document as HTML, by macOS's `textutil`.
+fn textutil_html(path: &Path) -> Result<String> {
+    let tool = Path::new("/usr/bin/textutil");
+    if !tool.is_file() {
+        return Err(Error::Missing(
+            "Word 97 and OpenDocument files need macOS".into(),
+        ));
+    }
+    let out = std::process::Command::new(tool)
+        .args(["-convert", "html", "-stdout"])
+        .arg(path)
+        .stdin(std::process::Stdio::null())
+        .output()?;
+    if !out.status.success() || out.stdout.is_empty() {
+        return Err(Error::UnsupportedInput(format!(
+            "{} couldn't be read ({})",
+            crate::format::display_name(path),
+            String::from_utf8_lossy(&out.stderr).trim()
+        )));
+    }
+    Ok(crate::engines::text::decode(&out.stdout))
 }
 
 /// Writes a document as `to` (TXT, Markdown, HTML, Word or RTF).

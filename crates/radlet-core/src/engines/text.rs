@@ -346,15 +346,371 @@ pub fn markdown_to_text(src: &str) -> String {
     result.trim().to_string() + "\n"
 }
 
+/// `H:MM:SS.cc`, as SubStation Alpha writes times.
+fn ass_time(ms: u64) -> String {
+    let cs = ms / 10;
+    format!(
+        "{}:{:02}:{:02}.{:02}",
+        cs / 360_000,
+        cs / 6_000 % 60,
+        cs / 100 % 60,
+        cs % 100
+    )
+}
+
+/// Parses SubStation Alpha (ASS or SSA): the `Dialogue:` lines of the
+/// `[Events]` section, in the order its `Format:` line gives.
+pub fn parse_ass(src: &str) -> Result<Vec<Cue>> {
+    let mut fields: Vec<String> = Vec::new();
+    let mut in_events = false;
+    let mut cues = Vec::new();
+    for line in src.lines().map(str::trim) {
+        if line.starts_with('[') {
+            in_events = line.eq_ignore_ascii_case("[events]");
+            continue;
+        }
+        if !in_events {
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("Format:") {
+            fields = rest
+                .split(',')
+                .map(|f| f.trim().to_ascii_lowercase())
+                .collect();
+        } else if let Some(rest) = line.strip_prefix("Dialogue:") {
+            if fields.is_empty() {
+                fields = [
+                    "layer", "start", "end", "style", "name", "marginl", "marginr", "marginv",
+                    "effect", "text",
+                ]
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
+            }
+            // The text is last and may hold commas.
+            let parts: Vec<&str> = rest.splitn(fields.len(), ',').collect();
+            let get = |name: &str| {
+                fields
+                    .iter()
+                    .position(|f| f == name)
+                    .and_then(|i| parts.get(i))
+            };
+            let (Some(start), Some(end), Some(text)) = (get("start"), get("end"), get("text"))
+            else {
+                continue;
+            };
+            let (Some(start_ms), Some(end_ms)) = (parse_time(start.trim()), parse_time(end.trim()))
+            else {
+                continue;
+            };
+            cues.push(Cue {
+                start_ms,
+                end_ms: end_ms.max(start_ms),
+                text: ass_text(text),
+            });
+        }
+    }
+    if cues.is_empty() {
+        return Err(Error::Invalid("no subtitle lines found".into()));
+    }
+    cues.sort_by_key(|c| c.start_ms);
+    Ok(cues)
+}
+
+/// SubStation text to SRT-style text: line breaks, and italic, bold and
+/// underline kept as tags; other styling dropped.
+fn ass_text(raw: &str) -> String {
+    let mut out = String::new();
+    let mut rest = raw;
+    while let Some(open) = rest.find('{') {
+        out.push_str(&rest[..open]);
+        let Some(close) = rest[open..].find('}') else {
+            out.push_str(&rest[open..]);
+            rest = "";
+            break;
+        };
+        for code in rest[open + 1..open + close].split('\\') {
+            let tag = match code {
+                "i1" => "<i>",
+                "i0" => "</i>",
+                "b1" => "<b>",
+                "b0" => "</b>",
+                "u1" => "<u>",
+                "u0" => "</u>",
+                _ => "",
+            };
+            out.push_str(tag);
+        }
+        rest = &rest[open + close + 1..];
+    }
+    out.push_str(rest);
+    out.replace("\\N", "\n")
+        .replace("\\n", "\n")
+        .replace("\\h", " ")
+}
+
+pub fn write_ass(cues: &[Cue]) -> String {
+    let mut out = String::from(
+        "[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\nWrapStyle: 0\n\n\
+         [V4+ Styles]\n\
+         Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, \
+         Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, \
+         Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n\
+         Style: Default,Helvetica,64,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,\
+         1,3,1,2,60,60,50,1\n\n\
+         [Events]\n\
+         Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n",
+    );
+    for c in cues {
+        let text = srt_safe(&c.text)
+            .replace("<i>", "{\\i1}")
+            .replace("</i>", "{\\i0}")
+            .replace("<b>", "{\\b1}")
+            .replace("</b>", "{\\b0}")
+            .replace("<u>", "{\\u1}")
+            .replace("</u>", "{\\u0}")
+            .replace('\n', "\\N");
+        out.push_str(&format!(
+            "Dialogue: 0,{},{},Default,,0,0,0,,{}\n",
+            ass_time(c.start_ms),
+            ass_time(c.end_ms),
+            text
+        ));
+    }
+    out
+}
+
+/// Parses SubViewer (SBV): `0:00:01.000,0:00:04.000`, then the text.
+pub fn parse_sbv(src: &str) -> Result<Vec<Cue>> {
+    let normalized = src.replace("\r\n", "\n").replace('\r', "\n");
+    let mut cues = Vec::new();
+    for block in normalized.split("\n\n") {
+        let mut lines = block.lines().filter(|l| !l.trim().is_empty());
+        let Some(timing) = lines.next() else { continue };
+        let Some((a, b)) = timing.split_once(',') else {
+            continue;
+        };
+        let (Some(start_ms), Some(end_ms)) = (parse_time(a.trim()), parse_time(b.trim())) else {
+            continue;
+        };
+        cues.push(Cue {
+            start_ms,
+            end_ms: end_ms.max(start_ms),
+            text: lines.collect::<Vec<_>>().join("\n"),
+        });
+    }
+    if cues.is_empty() {
+        return Err(Error::Invalid("no subtitle cues found".into()));
+    }
+    Ok(cues)
+}
+
+pub fn write_sbv(cues: &[Cue]) -> String {
+    let t = |ms: u64| {
+        let s = fmt_time(ms, '.');
+        // SubViewer writes hours without a leading zero.
+        s.strip_prefix('0').map(str::to_string).unwrap_or(s)
+    };
+    let mut out = String::new();
+    for c in cues {
+        out.push_str(&format!(
+            "{},{}\n{}\n\n",
+            t(c.start_ms),
+            t(c.end_ms),
+            strip_tags(&c.text, &[])
+        ));
+    }
+    out
+}
+
+/// A TTML time: clock time (`00:00:01.500`, or with frames as
+/// `00:00:01:12`) or an offset (`1.5s`, `1500ms`, `2m`, `1h`, `36f`).
+fn ttml_time(s: &str, fps: f64) -> Option<u64> {
+    let s = s.trim();
+    for (unit, scale) in [
+        ("ms", 1.0),
+        ("h", 3_600_000.0),
+        ("m", 60_000.0),
+        ("s", 1000.0),
+    ] {
+        if let Some(n) = s.strip_suffix(unit) {
+            return n
+                .trim()
+                .parse::<f64>()
+                .ok()
+                .map(|v| (v * scale).round() as u64);
+        }
+    }
+    if let Some(n) = s.strip_suffix('f') {
+        return n
+            .trim()
+            .parse::<f64>()
+            .ok()
+            .map(|v| (v / fps * 1000.0).round() as u64);
+    }
+    let parts: Vec<&str> = s.split(':').collect();
+    if parts.len() == 4 {
+        let base = parse_time(&parts[..3].join(":"))?;
+        let frames = parts[3].parse::<f64>().ok()?;
+        return Some(base + (frames / fps * 1000.0).round() as u64);
+    }
+    parse_time(s)
+}
+
+/// Parses Timed Text (TTML, DFXP): each `<p>` with `begin` and `end` (or
+/// `dur`); `<br/>` breaks lines.
+pub fn parse_ttml(src: &str) -> Result<Vec<Cue>> {
+    use quick_xml::events::Event;
+    let mut reader = quick_xml::Reader::from_str(src);
+    let attr = |e: &quick_xml::events::BytesStart, name: &str| {
+        e.attributes().flatten().find_map(|a| {
+            (a.key.local_name().as_ref() == name)
+                .then(|| a.normalized_value(quick_xml::XmlVersion::Implicit1_0).ok())
+                .flatten()
+                .map(|v| v.into_owned())
+        })
+    };
+    let mut fps = 30.0;
+    let mut cues = Vec::new();
+    let mut current: Option<(u64, u64, String)> = None;
+    let mut depth = 0usize;
+    loop {
+        let ev = reader
+            .read_event()
+            .map_err(|e| Error::Invalid(format!("this TTML file doesn't read ({e})")))?;
+        match ev {
+            Event::Start(e) | Event::Empty(e) if e.local_name().as_ref() == "tt" => {
+                if let Some(rate) = attr(&e, "frameRate").and_then(|r| r.parse::<f64>().ok()) {
+                    if rate > 0.0 {
+                        fps = rate;
+                    }
+                }
+            }
+            Event::Start(e) if e.local_name().as_ref() == "p" && current.is_none() => {
+                let begin = attr(&e, "begin").and_then(|b| ttml_time(&b, fps));
+                let end = attr(&e, "end")
+                    .and_then(|t| ttml_time(&t, fps))
+                    .or_else(|| {
+                        let dur = attr(&e, "dur").and_then(|d| ttml_time(&d, fps))?;
+                        Some(begin? + dur)
+                    });
+                if let (Some(b), Some(t)) = (begin, end) {
+                    current = Some((b, t.max(b), String::new()));
+                    depth = 0;
+                }
+            }
+            Event::Start(_) if current.is_some() => depth += 1,
+            Event::Empty(e) if e.local_name().as_ref() == "br" => {
+                if let Some((_, _, text)) = &mut current {
+                    text.push('\n');
+                }
+            }
+            Event::Text(t) => {
+                if let Some((_, _, text)) = &mut current {
+                    text.push_str(&t.xml10_content());
+                }
+            }
+            Event::GeneralRef(r) => {
+                if let Some((_, _, text)) = &mut current {
+                    match r.resolve_char_ref() {
+                        Ok(Some(c)) => text.push(c),
+                        _ => text.push_str(match r.as_ref() {
+                            "amp" => "&",
+                            "lt" => "<",
+                            "gt" => ">",
+                            "quot" => "\"",
+                            "apos" => "'",
+                            _ => "",
+                        }),
+                    }
+                }
+            }
+            Event::End(e) if current.is_some() => {
+                if depth > 0 {
+                    depth -= 1;
+                } else if e.local_name().as_ref() == "p" {
+                    let (start_ms, end_ms, text) = current.take().expect("checked");
+                    let text = text
+                        .lines()
+                        .map(|l| l.split_whitespace().collect::<Vec<_>>().join(" "))
+                        .filter(|l| !l.is_empty())
+                        .collect::<Vec<_>>()
+                        .join("\n");
+                    if !text.is_empty() {
+                        cues.push(Cue {
+                            start_ms,
+                            end_ms,
+                            text,
+                        });
+                    }
+                }
+            }
+            Event::Eof => break,
+            _ => {}
+        }
+    }
+    if cues.is_empty() {
+        return Err(Error::Invalid("no subtitle cues found".into()));
+    }
+    cues.sort_by_key(|c| c.start_ms);
+    Ok(cues)
+}
+
+pub fn write_ttml(cues: &[Cue]) -> String {
+    let mut out = String::from(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n\
+         <tt xmlns=\"http://www.w3.org/ns/ttml\">\n  <body>\n    <div>\n",
+    );
+    for c in cues {
+        let lines: Vec<String> = strip_tags(&c.text, &[])
+            .lines()
+            .map(|l| quick_xml::escape::escape(l).into_owned())
+            .collect();
+        out.push_str(&format!(
+            "      <p begin=\"{}\" end=\"{}\">{}</p>\n",
+            fmt_time(c.start_ms, '.'),
+            fmt_time(c.end_ms, '.'),
+            lines.join("<br/>")
+        ));
+    }
+    out.push_str("    </div>\n  </body>\n</tt>\n");
+    out
+}
+
+/// Cues from any subtitle format Radlet reads.
+pub fn read_cues(src: &str, from: Format) -> Result<Vec<Cue>> {
+    match from {
+        Format::Ass => parse_ass(src),
+        Format::Sbv => parse_sbv(src),
+        Format::Ttml => parse_ttml(src),
+        _ => parse_subtitles(src),
+    }
+}
+
+/// Cues in a subtitle format, or as plain text.
+pub fn write_cues(cues: &[Cue], to: Format) -> Result<String> {
+    Ok(match to {
+        Format::Srt => write_srt(cues),
+        Format::Vtt => write_vtt(cues),
+        Format::Ass => write_ass(cues),
+        Format::Sbv => write_sbv(cues),
+        Format::Ttml => write_ttml(cues),
+        Format::Txt => subtitles_to_text(cues),
+        other => {
+            return Err(Error::UnsupportedRoute {
+                from: "subtitles".into(),
+                to: other.label().into(),
+            })
+        }
+    })
+}
+
 /// Converts between text formats.
 pub fn convert(input: &Path, from: Format, to: Format, out: &Path) -> Result<()> {
     let src = read_text(input)?;
     let result = match (from, to) {
-        (Format::Srt | Format::Vtt, Format::Srt) => write_srt(&parse_subtitles(&src)?),
-        (Format::Srt | Format::Vtt, Format::Vtt) => write_vtt(&parse_subtitles(&src)?),
-        (Format::Srt | Format::Vtt, Format::Txt) => subtitles_to_text(&parse_subtitles(&src)?),
-        (Format::Txt, Format::Srt) => write_srt(&text_to_cues(&src)?),
-        (Format::Txt, Format::Vtt) => write_vtt(&text_to_cues(&src)?),
+        (f, t) if f.is_subtitles() => write_cues(&read_cues(&src, f)?, t)?,
+        (Format::Txt, t) if t.is_subtitles() => write_cues(&text_to_cues(&src)?, t)?,
         (Format::Md, Format::Html) => {
             let title = input
                 .file_stem()
@@ -516,5 +872,49 @@ mod tests {
         let p = dir.path().join("w.srt");
         std::fs::write(&p, b"caf\xE9 \x93quoted\x94").unwrap();
         assert_eq!(read_text(&p).unwrap(), "café “quoted”");
+    }
+    #[test]
+    fn subtitle_formats_round_trip() {
+        let srt = "1\n00:00:01,000 --> 00:00:03,500\n<i>Hello</i>, world\nsecond line\n\n2\n00:01:02,250 --> 00:01:04,000\nBye & see you\n\n";
+        let cues = parse_subtitles(srt).unwrap();
+        for f in [Format::Ass, Format::Sbv, Format::Ttml, Format::Vtt] {
+            let written = write_cues(&cues, f).unwrap();
+            let back = read_cues(&written, f).unwrap();
+            assert_eq!(back.len(), 2, "{f}");
+            assert_eq!(back[0].start_ms, 1000, "{f}");
+            assert_eq!(back[0].end_ms, 3500, "{f}");
+            assert_eq!(back[1].start_ms, 62_250, "{f}");
+            assert!(
+                back[1].text.contains("Bye & see you"),
+                "{f}: {:?}",
+                back[1].text
+            );
+            assert!(back[0].text.contains("second line"), "{f}");
+        }
+        let ass = write_ass(&cues);
+        assert!(ass.contains("Dialogue: 0,0:00:01.00,0:00:03.50,Default,,0,0,0,,{\\i1}Hello{\\i0}, world\\Nsecond line"), "{ass}");
+        assert_eq!(
+            read_cues(&ass, Format::Ass).unwrap()[0].text,
+            "<i>Hello</i>, world\nsecond line"
+        );
+    }
+
+    #[test]
+    fn subtitle_formats_from_other_tools() {
+        let ssa = "[Script Info]\nScriptType: v4.00\n\n[Events]\nFormat: Marked, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\nDialogue: Marked=0,0:00:05.00,0:00:06.00,Default,,0,0,0,,{\\pos(10,10)}Hi, there\n";
+        let c = parse_ass(ssa).unwrap();
+        assert_eq!((c[0].start_ms, c[0].text.as_str()), (5000, "Hi, there"));
+        let ttml = r#"<tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttp="http://www.w3.org/ns/ttml#parameter" ttp:frameRate="25"><body><div><p begin="00:00:01:12" dur="2s">One <span>two</span><br/>three</p><p begin="4.5s" end="6000ms">Four</p></div></body></tt>"#;
+        let c = parse_ttml(ttml).unwrap();
+        assert_eq!((c[0].start_ms, c[0].end_ms), (1480, 3480));
+        assert_eq!(c[0].text, "One two\nthree");
+        assert_eq!((c[1].start_ms, c[1].end_ms), (4500, 6000));
+        let sbv = "0:00:00.599,0:00:04.160\n>> Welcome\n\n0:00:04.160,0:00:06.770\nback\n";
+        let c = parse_sbv(sbv).unwrap();
+        assert_eq!((c[1].start_ms, c[1].text.as_str()), (4160, "back"));
+        assert_eq!(
+            write_sbv(&c[..1]),
+            "0:00:00.599,0:00:04.160\n>> Welcome\n\n"
+        );
     }
 }

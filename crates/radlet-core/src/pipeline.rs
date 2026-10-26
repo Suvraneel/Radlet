@@ -211,7 +211,9 @@ pub fn run_steps(
             (Format::Folder, Format::Zip) => {
                 return zip_all(std::slice::from_ref(&input.to_path_buf()), ctx)
             }
+            (Format::Folder, Format::Tar) => return tar_folder(input, ctx),
             (Format::Zip, Format::Folder) => return unzip(input, ctx),
+            (f, Format::Folder) if f.needs_bsdtar() => return unzip(input, ctx),
             _ => {}
         }
     }
@@ -219,7 +221,7 @@ pub fn run_steps(
     let final_fmt = validate_chain(steps, from, caps)?;
 
     // A workbook of several sheets becomes one table per sheet.
-    if let (Format::Xlsx, [Step::Convert { to, .. }]) = (from, steps) {
+    if let ([Step::Convert { to, .. }], true) = (steps, from.is_workbook()) {
         if matches!(to, Format::Csv | Format::Tsv | Format::Json) {
             return sheets_to_files(input, *to, ctx);
         }
@@ -544,7 +546,8 @@ fn apply(
                         // Drawings stay vector.
                         Format::Svg => Some(svg::to_pdf(path)?),
                         f if f.is_document_text()
-                            || matches!(f, Format::Csv | Format::Tsv | Format::Xlsx) =>
+                            || f.is_workbook()
+                            || matches!(f, Format::Csv | Format::Tsv) =>
                         {
                             let d = doc::read(path, *f)?;
                             Some(docpdf::render(&d, title, caps, cancel)?)
@@ -584,21 +587,35 @@ fn apply(
                 (Format::Pdf, Format::Txt) => {
                     std::fs::write(dst, pdf_text(&path, scratch, caps, cancel, progress)?)?
                 }
-                (Format::Pdf, Format::Md) => {
+                // Word, Markdown and the rest from the PDF's text (recognised
+                // first on a Mac, so scans work too), in paragraphs and lists.
+                (Format::Pdf, t) if doc::writable(t) => {
                     let text = pdf_text(&path, scratch, caps, cancel, progress)?;
-                    std::fs::write(dst, doc::to_markdown(&doc::from_text(&text)))?
+                    doc::write(&doc::from_text(&text), t, title, dst)?
                 }
                 // Markdown keeps its own renderer, with footnotes and the
                 // rest of CommonMark.
                 (Format::Md, Format::Html | Format::Txt)
-                | (Format::Srt | Format::Vtt, _)
                 | (Format::Txt, Format::Srt | Format::Vtt) => {
                     text::convert(&path, fmt, to, dst)?;
                     if fmt == Format::Md && to == Format::Html {
                         retitle_html(dst, title)?;
                     }
                 }
-                (Format::Csv | Format::Tsv | Format::Json | Format::Xlsx, _) => {
+                (f, _) if f.is_subtitles() => text::convert(&path, fmt, to, dst)?,
+                (Format::Txt, t) if t.is_subtitles() => text::convert(&path, fmt, to, dst)?,
+                (f, _)
+                    if f.is_workbook()
+                        || matches!(
+                            f,
+                            Format::Csv
+                                | Format::Tsv
+                                | Format::Json
+                                | Format::Yaml
+                                | Format::Toml
+                                | Format::Xml
+                        ) =>
+                {
                     data::convert(&path, fmt, to, dst)?
                 }
                 (f, t) if f.is_document_text() && doc::writable(t) => {
@@ -1270,17 +1287,19 @@ fn value(v: String) -> Produced {
 /// they are; Word, RTF and HTML as plain text.
 pub fn copy_text(input: &Path, ctx: &mut Context<'_>) -> Result<Produced> {
     let fmt = format::detect(input)?;
-    let raw = matches!(
-        fmt,
-        Format::Txt
-            | Format::Md
-            | Format::Csv
-            | Format::Tsv
-            | Format::Json
-            | Format::Srt
-            | Format::Vtt
-    );
-    if raw || matches!(fmt, Format::Html | Format::Docx | Format::Rtf) {
+    let raw = fmt.is_subtitles()
+        || matches!(
+            fmt,
+            Format::Txt
+                | Format::Md
+                | Format::Csv
+                | Format::Tsv
+                | Format::Json
+                | Format::Yaml
+                | Format::Toml
+                | Format::Xml
+        );
+    if raw || fmt.is_document_text() {
         let text = if raw {
             text::read_text(input)?
         } else {
@@ -1409,7 +1428,7 @@ pub fn combine_text(inputs: &[PathBuf], ctx: &mut Context<'_>) -> Result<Produce
 /// Each sheet of a workbook as its own CSV, TSV or JSON file: beside the
 /// workbook for up to four sheets, otherwise in a folder.
 fn sheets_to_files(input: &Path, to: Format, ctx: &mut Context<'_>) -> Result<Produced> {
-    let sheets = sheet::read(input)?;
+    let sheets = sheet::read_book(input, format::detect(input)?)?;
     if sheets.is_empty() {
         return Err(Error::NothingToDo("the workbook is empty".into()));
     }
@@ -1773,12 +1792,34 @@ pub fn zip_all(inputs: &[PathBuf], ctx: &mut Context<'_>) -> Result<Produced> {
     Ok(Produced::one(out))
 }
 
+/// Packs a folder as a .tar.gz beside it.
+pub fn tar_folder(input: &Path, ctx: &mut Context<'_>) -> Result<Produced> {
+    let dir = ctx.output.dir_for(input);
+    let tmp = naming::temp_in(&dir, ctx.temp_tag, "tar.gz")?;
+    crate::engines::bsdtar::pack(ctx.caps, input, tmp.path(), ctx.cancel, &mut *ctx.progress)?;
+    let name = format!("{}.tar.gz", display_name(input));
+    let out = naming::publish(tmp.into_temp_path(), &dir.join(name))?;
+    (ctx.progress)(1.0);
+    Ok(Produced::one(out))
+}
+
 /// Extracts an archive beside it: its single top-level folder or file
-/// as it is, or everything in a folder named after the archive.
+/// as it is, or everything in a folder named after the archive. ZIPs are
+/// opened here; 7-Zip, RAR, TAR and disc images through `bsdtar`.
 pub fn unzip(input: &Path, ctx: &mut Context<'_>) -> Result<Produced> {
     let dir = ctx.output.dir_for(input);
     let tmp = naming::temp_dir_in(&dir, ctx.temp_tag)?;
-    archive::extract(input, tmp.path(), ctx.cancel, &mut *ctx.progress)?;
+    if format::detect(input)? == Format::Zip {
+        archive::extract(input, tmp.path(), ctx.cancel, &mut *ctx.progress)?;
+    } else {
+        crate::engines::bsdtar::extract(
+            ctx.caps,
+            input,
+            tmp.path(),
+            ctx.cancel,
+            &mut *ctx.progress,
+        )?;
+    }
     let top: Vec<std::fs::DirEntry> = std::fs::read_dir(tmp.path())?.flatten().collect();
     let out = match top.as_slice() {
         [] => return Err(Error::NothingToDo("the archive is empty".into())),
@@ -1793,9 +1834,15 @@ pub fn unzip(input: &Path, ctx: &mut Context<'_>) -> Result<Produced> {
             naming::publish(tempfile::TempPath::try_from_path(path)?, &dir.join(name))?
         }
         _ => {
-            let stem = input
-                .file_stem()
-                .map(|s| s.to_string_lossy().into_owned())
+            let name = display_name(input);
+            let lower = name.to_ascii_lowercase();
+            // "Photos.tar.gz" unpacks into "Photos", not "Photos.tar".
+            let stem = [".tar.gz", ".tar.bz2", ".tar.xz"]
+                .iter()
+                .find(|e| lower.ends_with(*e))
+                .map(|e| name[..name.len() - e.len()].to_string())
+                .or_else(|| input.file_stem().map(|s| s.to_string_lossy().into_owned()))
+                .filter(|s| !s.is_empty())
                 .unwrap_or_else(|| "Archive".into());
             naming::publish_dir(tmp, &dir.join(stem))?
         }

@@ -10,6 +10,8 @@ public enum StepText {
         "wav": "WAV", "flac": "FLAC", "ogg": "OGG", "opus": "Opus", "srt": "SRT", "vtt": "WebVTT",
         "svg": "SVG", "docx": "Word", "rtf": "RTF", "csv": "CSV", "tsv": "TSV", "json": "JSON",
         "zip": "ZIP", "folder": "Folder", "xlsx": "Excel", "icns": "ICNS", "ico": "ICO",
+        "aiff": "AIFF", "yaml": "YAML", "toml": "TOML", "xml": "XML", "ass": "ASS", "sbv": "SBV",
+        "ttml": "TTML", "tar": "TAR (.tar.gz)",
     ]
 
     public static func formatName(_ id: String) -> String {

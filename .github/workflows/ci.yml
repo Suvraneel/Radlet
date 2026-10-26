@@ -13,8 +13,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
-      - name: Install FFmpeg for media tests
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install FFmpeg and bsdtar for media and archive tests
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg libarchive-tools
       - name: Download PDFium for PDF-to-image tests
         run: |
           mkdir -p "$RUNNER_TEMP/pdfium"

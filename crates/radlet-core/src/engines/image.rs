@@ -66,7 +66,7 @@ pub fn decode(path: &Path, format: Format, caps: &Capabilities) -> Result<Pictur
     if format == Format::Svg {
         return crate::engines::svg::decode(path);
     }
-    if matches!(format, Format::Heic | Format::Avif) {
+    if format.is_sips_raster() {
         let scratch = tempfile::tempdir()?;
         let png = scratch.path().join("decoded.png");
         sips::convert(caps, path, &png, "png", None)?;

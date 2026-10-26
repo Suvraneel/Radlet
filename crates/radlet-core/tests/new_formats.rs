@@ -1,5 +1,7 @@
 //! Formats and routes added for 0.2: audio and video through the Mac
-//! helper without FFmpeg, and barcodes through Vision.
+//! helper without FFmpeg, barcodes through Vision, PDF to Word, YAML, TOML
+//! and XML, OpenDocument spreadsheets, more subtitle formats, and 7-Zip,
+//! RAR, TAR and disc images through bsdtar.
 
 #![allow(clippy::cloned_ref_to_slice_refs)]
 
@@ -128,4 +130,159 @@ fn barcodes_through_vision() {
     // Without the helper, a blank picture has no QR code.
     let o = one_with(&Capabilities::none(), &[photo], Action::ReadCodes);
     assert_ne!(o.status, Status::Done);
+}
+
+#[test]
+fn pdf_to_word() {
+    let dir = tempfile::tempdir().unwrap();
+    let md = dir.path().join("letter.md");
+    std::fs::write(&md, "# Dear Ada\n\nThe engine works.\n\n- gears\n- cards\n").unwrap();
+    let caps = Capabilities::none();
+    let pdf = done(&one_with(&caps, &[md], Action::convert(Format::Pdf)));
+    let docx = done(&one_with(&caps, &[pdf], Action::convert(Format::Docx)));
+    assert_eq!(name(&docx), "letter.docx");
+    assert_eq!(detect(&docx).unwrap(), Format::Docx);
+    let text = done(&one_with(&caps, &[docx], Action::convert(Format::Txt)));
+    let text = std::fs::read_to_string(text).unwrap();
+    assert!(text.contains("The engine works."), "{text}");
+}
+
+#[test]
+fn config_files() {
+    let dir = tempfile::tempdir().unwrap();
+    let caps = Capabilities::none();
+    let json = dir.path().join("settings.json");
+    std::fs::write(&json, r#"{"name":"Radlet","port":8080,"tags":["a","b"]}"#).unwrap();
+    let yaml = done(&one_with(
+        &caps,
+        &[json.clone()],
+        Action::convert(Format::Yaml),
+    ));
+    assert_eq!(name(&yaml), "settings.yaml");
+    let text = std::fs::read_to_string(&yaml).unwrap();
+    assert!(text.contains("port: 8080"), "{text}");
+    let toml = done(&one_with(&caps, &[yaml], Action::convert(Format::Toml)));
+    assert!(std::fs::read_to_string(&toml)
+        .unwrap()
+        .contains("name = \"Radlet\""));
+    let xml = done(&one_with(&caps, &[json], Action::convert(Format::Xml)));
+    assert_eq!(detect(&xml).unwrap(), Format::Xml);
+    let back = done(&one_with(&caps, &[xml], Action::convert(Format::Json)));
+    assert!(std::fs::read_to_string(back)
+        .unwrap()
+        .contains("\"Radlet\""));
+}
+
+#[test]
+fn opendocument_spreadsheets() {
+    use std::io::Write;
+    let dir = tempfile::tempdir().unwrap();
+    let ods = dir.path().join("budget.ods");
+    {
+        let mut z = zip::ZipWriter::new(std::fs::File::create(&ods).unwrap());
+        let stored = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        z.start_file("mimetype", stored).unwrap();
+        z.write_all(b"application/vnd.oasis.opendocument.spreadsheet")
+            .unwrap();
+        z.start_file("content.xml", stored).unwrap();
+        z.write_all(
+            br#"<?xml version="1.0" encoding="UTF-8"?>
+<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0" xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0" office:version="1.2">
+<office:body><office:spreadsheet>
+<table:table table:name="Budget">
+<table:table-row><table:table-cell office:value-type="string"><text:p>item</text:p></table:table-cell><table:table-cell office:value-type="string"><text:p>cost</text:p></table:table-cell></table:table-row>
+<table:table-row><table:table-cell office:value-type="string"><text:p>tea</text:p></table:table-cell><table:table-cell office:value-type="float" office:value="4.5"><text:p>4.5</text:p></table:table-cell></table:table-row>
+</table:table>
+</office:spreadsheet></office:body></office:document-content>"#,
+        )
+        .unwrap();
+        z.start_file("META-INF/manifest.xml", stored).unwrap();
+        z.write_all(br#"<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="urn:oasis:names:tc:opendocument:xmlns:manifest:1.0"><manifest:file-entry manifest:full-path="/" manifest:media-type="application/vnd.oasis.opendocument.spreadsheet"/></manifest:manifest>"#).unwrap();
+        z.finish().unwrap();
+    }
+    assert_eq!(detect(&ods).unwrap(), Format::Ods);
+    let caps = Capabilities::none();
+    let csv = done(&one_with(
+        &caps,
+        &[ods.clone()],
+        Action::convert(Format::Csv),
+    ));
+    assert_eq!(
+        std::fs::read_to_string(csv).unwrap(),
+        "item,cost\ntea,4.5\n"
+    );
+    let xlsx = done(&one_with(&caps, &[ods], Action::convert(Format::Xlsx)));
+    assert_eq!(detect(&xlsx).unwrap(), Format::Xlsx);
+
+    // A few hundred bytes describing millions of cells are refused before
+    // they're expanded.
+    let bomb = dir.path().join("bomb.ods");
+    {
+        let mut z = zip::ZipWriter::new(std::fs::File::create(&bomb).unwrap());
+        let stored = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        z.start_file("mimetype", stored).unwrap();
+        z.write_all(b"application/vnd.oasis.opendocument.spreadsheet")
+            .unwrap();
+        z.start_file("content.xml", stored).unwrap();
+        z.write_all(br#"<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" xmlns:table="urn:oasis:names:tc:opendocument:xmlns:table:1.0"><office:body><office:spreadsheet><table:table table:name="S"><table:table-row table:number-rows-repeated="2000"><table:table-cell table:number-columns-repeated="2000" office:value-type="float" office:value="1"/></table:table-row></table:table></office:spreadsheet></office:body></office:document-content>"#).unwrap();
+        z.finish().unwrap();
+    }
+    let o = one_with(&caps, &[bomb], Action::convert(Format::Csv));
+    assert_ne!(o.status, Status::Done);
+    assert!(
+        format!("{:?}", o.error).contains("3 million"),
+        "{:?}",
+        o.error
+    );
+}
+
+#[test]
+fn subtitles_into_other_formats() {
+    let dir = tempfile::tempdir().unwrap();
+    let srt = dir.path().join("talk.srt");
+    std::fs::write(&srt, "1\n00:00:01,000 --> 00:00:02,000\nHello\n\n").unwrap();
+    let caps = Capabilities::none();
+    let ass = done(&one_with(
+        &caps,
+        &[srt.clone()],
+        Action::convert(Format::Ass),
+    ));
+    assert_eq!(name(&ass), "talk.ass");
+    assert!(std::fs::read_to_string(&ass)
+        .unwrap()
+        .contains("Dialogue: 0,0:00:01.00,0:00:02.00,Default,,0,0,0,,Hello"));
+    let ttml = done(&one_with(&caps, &[ass], Action::convert(Format::Ttml)));
+    let back = done(&one_with(&caps, &[ttml], Action::convert(Format::Vtt)));
+    assert!(std::fs::read_to_string(back)
+        .unwrap()
+        .contains("00:00:01.000 --> 00:00:02.000\nHello"));
+}
+
+#[cfg(unix)]
+#[test]
+fn archives_through_bsdtar() {
+    let caps = Capabilities::detect();
+    if caps.bsdtar.is_none() {
+        eprintln!("skipped: no bsdtar");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let folder = dir.path().join("Photos");
+    std::fs::create_dir_all(folder.join("2026")).unwrap();
+    std::fs::write(folder.join("2026/a.txt"), "a").unwrap();
+    let tgz = done(&one_with(
+        &caps,
+        &[folder.clone()],
+        Action::convert(Format::Tar),
+    ));
+    assert_eq!(name(&tgz), "Photos.tar.gz");
+    std::fs::remove_dir_all(&folder).unwrap();
+    let out = done(&one_with(&caps, &[tgz], Action::convert(Format::Folder)));
+    assert_eq!(name(&out), "Photos");
+    assert_eq!(
+        std::fs::read_to_string(out.join("2026/a.txt")).unwrap(),
+        "a"
+    );
 }

@@ -3,6 +3,7 @@
 
 pub mod archive;
 pub mod avmedia;
+pub mod bsdtar;
 pub mod codes;
 pub mod data;
 pub mod doc;
@@ -24,6 +25,7 @@ pub mod speech;
 pub mod svg;
 pub mod text;
 pub mod translate;
+pub mod tree;
 pub mod vision;
 
 use std::io::Read;

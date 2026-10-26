@@ -277,7 +277,7 @@ fn tools(caps: &Capabilities) -> Vec<Value> {
              a PDF to one image per page, a folder to a ZIP, or a ZIP to a folder.",
             json!({
                 "paths": paths_schema(),
-                "to": { "type": "string", "description": "Target format, such as jpeg, png, webp, pdf, mp4, mp3, txt, md, html, docx, rtf, csv, json, zip or folder." },
+                "to": { "type": "string", "description": "Target format, such as jpeg, png, webp, pdf, mp4, m4a, mp3, txt, md, html, docx, rtf, csv, json, yaml, toml, xml, srt, vtt, ass, zip, tar or folder." },
                 "quality": { "type": "integer", "minimum": 1, "maximum": 100, "description": "For lossy formats." },
                 "output_dir": output_dir_schema(),
             }),

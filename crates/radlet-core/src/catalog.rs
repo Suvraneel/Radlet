@@ -31,6 +31,12 @@ pub struct Capabilities {
     /// Mac). Used only when FFmpeg is missing.
     #[serde(default)]
     pub avfoundation: bool,
+    /// macOS `textutil`, for Word 97 and OpenDocument text.
+    #[serde(default)]
+    pub textutil: Option<PathBuf>,
+    /// libarchive's `bsdtar` (macOS's `tar`), for 7-Zip, RAR, TAR and ISO.
+    #[serde(default)]
+    pub bsdtar: Option<PathBuf>,
 }
 
 impl Capabilities {
@@ -60,6 +66,12 @@ impl Capabilities {
         };
         let no_avfoundation = std::env::var_os("RADLET_NO_AVFOUNDATION").is_some_and(|v| v == "1");
         let avfoundation = cfg!(target_os = "macos") && vision.is_some() && !no_avfoundation;
+        let textutil = Some(PathBuf::from("/usr/bin/textutil")).filter(|p| is_executable(p));
+        // macOS's own tar is bsdtar; elsewhere it's a separate install.
+        let bsdtar = find_tool("bsdtar", "RADLET_BSDTAR").or_else(|| {
+            Some(PathBuf::from("/usr/bin/tar"))
+                .filter(|p| cfg!(target_os = "macos") && is_executable(p))
+        });
         Capabilities {
             ffmpeg,
             ffprobe,
@@ -67,6 +79,8 @@ impl Capabilities {
             pdfium: find_pdfium(),
             vision,
             avfoundation,
+            textutil,
+            bsdtar,
         }
     }
 
@@ -92,9 +106,12 @@ impl Capabilities {
 
     /// Formats that can be decoded into pixels (an SVG is drawn).
     pub fn can_decode_raster(&self, f: Format) -> bool {
-        f.is_builtin_raster()
-            || f == Format::Svg
-            || (self.sips.is_some() && matches!(f, Format::Heic | Format::Avif))
+        f.is_builtin_raster() || f == Format::Svg || (self.sips.is_some() && f.is_sips_raster())
+    }
+
+    /// Documents whose text and structure can be read here.
+    pub fn reads_document(&self, f: Format) -> bool {
+        f.is_document_text() && (!f.needs_textutil() || self.textutil.is_some())
     }
 
     /// Formats that pixels can be encoded into.
@@ -205,13 +222,16 @@ pub fn targets(from: Format, caps: &Capabilities) -> Vec<Format> {
     }
     match from {
         Pdf => {
+            out.push(Docx);
             if caps.pdfium.is_some() {
                 out.extend_from_slice(&[Jpeg, Png, Webp, Tiff]);
             }
-            out.extend_from_slice(&[Txt, Md]);
+            out.extend_from_slice(&[Txt, Md, Html, Rtf]);
         }
-        Srt => out.extend_from_slice(&[Vtt, Txt]),
-        Vtt => out.extend_from_slice(&[Srt, Txt]),
+        Srt | Vtt | Ass | Sbv | Ttml => out.extend_from_slice(&[Srt, Vtt, Txt, Ass, Ttml, Sbv]),
+        Doc | Odt if caps.textutil.is_some() => {
+            out.extend_from_slice(&[Pdf, Docx, Md, Txt, Html, Rtf])
+        }
         Txt => out.extend_from_slice(&[Pdf, Docx, Md, Html, Rtf, Srt, Vtt]),
         Md => out.extend_from_slice(&[Pdf, Html, Docx, Txt, Rtf]),
         Html => out.extend_from_slice(&[Pdf, Md, Docx, Txt, Rtf]),
@@ -219,10 +239,20 @@ pub fn targets(from: Format, caps: &Capabilities) -> Vec<Format> {
         Rtf => out.extend_from_slice(&[Pdf, Docx, Md, Txt, Html]),
         Csv => out.extend_from_slice(&[Xlsx, Json, Tsv, Md, Html, Pdf]),
         Tsv => out.extend_from_slice(&[Xlsx, Csv, Json, Md, Html, Pdf]),
-        Json => out.extend_from_slice(&[Csv, Xlsx, Tsv]),
+        Json => out.extend_from_slice(&[Csv, Xlsx, Tsv, Yaml, Toml, Xml]),
+        Yaml => out.extend_from_slice(&[Json, Toml]),
+        Toml => out.extend_from_slice(&[Json, Yaml]),
+        Xml => out.push(Json),
         Xlsx => out.extend_from_slice(&[Csv, Json, Tsv, Pdf, Html, Md]),
-        Folder => out.push(Zip),
+        Xls | Ods => out.extend_from_slice(&[Xlsx, Csv, Json, Tsv, Pdf, Html, Md]),
+        Folder => {
+            out.push(Zip);
+            if caps.bsdtar.is_some() {
+                out.push(Tar);
+            }
+        }
         Zip => out.push(Folder),
+        f if f.needs_bsdtar() && caps.bsdtar.is_some() => out.push(Folder),
         _ => {}
     }
     let mut seen = Vec::with_capacity(out.len());
@@ -525,8 +555,9 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
     let pdfable = |f: Format| {
         f == Pdf
             || caps.can_decode_raster(f)
-            || f.is_document_text()
-            || matches!(f, Csv | Tsv | Xlsx)
+            || caps.reads_document(f)
+            || f.is_workbook()
+            || matches!(f, Csv | Tsv)
     };
     let combinable = known
         .as_ref()
@@ -945,7 +976,7 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
         ));
     }
     // Documents.
-    let readable = |f: Format| f.is_document_text() || f == Pdf;
+    let readable = |f: Format| caps.reads_document(f) || f == Pdf;
     if every(&readable) {
         w.tools.push(tool(
             "word_count",
@@ -956,7 +987,9 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
         ));
     }
     let vision_copy = all(&Step::MakeSearchable);
-    let textual = |f: Format| readable(f) || matches!(f, Srt | Vtt | Csv | Tsv | Json);
+    let textual = |f: Format| {
+        readable(f) || f.is_subtitles() || matches!(f, Csv | Tsv | Json | Yaml | Toml | Xml)
+    };
     if !vision_copy && every(&textual) {
         w.tools.push(tool(
             "copy_text",
@@ -991,7 +1024,7 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
             None,
         ));
     }
-    if formats.len() >= 2 && every(&|f| f.is_document_text()) {
+    if formats.len() >= 2 && every(&|f| caps.reads_document(f)) {
         w.tools.push(tool(
             "combine_text",
             "Combine into one",
@@ -1172,7 +1205,7 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
             ]),
         );
     }
-    if formats.len() >= 2 && every(&|f| matches!(f, Csv | Tsv | Json | Xlsx)) {
+    if formats.len() >= 2 && every(&|f| f.is_workbook() || matches!(f, Csv | Tsv | Json)) {
         w.tools.push(tool(
             "combine_workbook",
             "Combine into workbook",
@@ -1298,7 +1331,9 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
 /// icon files it makes).
 pub fn inside_kind(only: Category, f: Format, caps: &Capabilities) -> bool {
     match only {
-        Category::Document => f.category() == Category::Document || f.is_document_text(),
+        Category::Document => {
+            (f.category() == Category::Document && !f.needs_textutil()) || caps.reads_document(f)
+        }
         Category::Image => f.category() == Category::Image && caps.can_decode_raster(f),
         other => f.category() == other,
     }
@@ -1333,7 +1368,7 @@ pub fn inside_slots(inside: &[Format], caps: &Capabilities) -> Vec<Slot> {
             ));
         }
     }
-    if has(&|f| f.is_document_text()) {
+    if has(&|f| caps.reads_document(f)) {
         out.push(slot(
             "pdf",
             "Documents to PDF",
@@ -1528,14 +1563,17 @@ mod tests {
                 "privacy"
             ]
         );
-        assert_eq!(targets(Pdf, &Capabilities::none()), vec![Txt, Md]);
+        assert_eq!(
+            targets(Pdf, &Capabilities::none()),
+            vec![Docx, Txt, Md, Html, Rtf]
+        );
         let with_pdfium = Capabilities {
             pdfium: Some("/x/libpdfium.so".into()),
             ..Default::default()
         };
         assert_eq!(
             targets(Pdf, &with_pdfium),
-            vec![Jpeg, Png, Webp, Tiff, Txt, Md]
+            vec![Docx, Jpeg, Png, Webp, Tiff, Txt, Md, Html, Rtf]
         );
         // Several PDFs: split each, combine, but no single-file page editor.
         let w = wheel(&[Some(Pdf), Some(Pdf)], &Capabilities::none(), &[]);
@@ -1789,8 +1827,12 @@ mod tests {
     fn data_files() {
         let caps = Capabilities::none();
         assert_eq!(targets(Csv, &caps), [Xlsx, Json, Tsv, Md, Html, Pdf]);
-        assert_eq!(targets(Json, &caps), [Csv, Xlsx, Tsv]);
+        assert_eq!(targets(Json, &caps), [Csv, Xlsx, Tsv, Yaml, Toml, Xml]);
         assert_eq!(targets(Xlsx, &caps), [Csv, Json, Tsv, Pdf, Html, Md]);
+        assert_eq!(targets(Yaml, &caps), [Json, Toml]);
+        assert_eq!(targets(Xml, &caps), [Json]);
+        assert_eq!(targets(Xls, &caps), [Xlsx, Csv, Json, Tsv, Pdf, Html, Md]);
+        assert_eq!(targets(Ods, &caps)[0], Xlsx);
         let w = wheel(&[Some(Csv), Some(Xlsx)], &caps, &[]);
         assert!(ids(&w.tools).contains(&"combine_workbook"));
         assert!(ids(&w.tools).contains(&"combine_pdf"));
@@ -1937,8 +1979,41 @@ mod tests {
         };
         assert!(!both.native_media());
         assert!(targets(Mov, &both).contains(&Webm));
-        // The helper reads barcodes too.
-        let read = wheel(&[Some(Png)], &mac, &[]);
+    }
+
+    #[test]
+    fn formats_read_through_macos() {
+        let mac = Capabilities {
+            sips: Some("/usr/bin/sips".into()),
+            textutil: Some("/usr/bin/textutil".into()),
+            bsdtar: Some("/usr/bin/tar".into()),
+            ..Default::default()
+        };
+        for f in [Raw, Psd, Jxl, Jp2] {
+            assert!(targets(f, &mac).starts_with(&[Jpeg, Png]), "{f}");
+            assert!(targets(f, &Capabilities::none()).is_empty(), "{f}");
+        }
+        assert_eq!(targets(Doc, &mac), [Pdf, Docx, Md, Txt, Html, Rtf]);
+        assert!(targets(Odt, &Capabilities::none()).is_empty());
+        for f in [SevenZ, Rar, Tar, Iso] {
+            assert_eq!(targets(f, &mac), [Folder], "{f}");
+            assert!(targets(f, &Capabilities::none()).is_empty(), "{f}");
+        }
+        assert_eq!(targets(Folder, &mac), [Zip, Tar]);
+        assert_eq!(targets(Ass, &mac), [Srt, Vtt, Txt, Ttml, Sbv]);
+        let ids = |w: &Wheel| w.tools.iter().map(|s| s.id.clone()).collect::<Vec<_>>();
+        let doc = ids(&wheel(&[Some(Doc)], &mac, &[]));
+        assert!(doc.contains(&"word_count".to_string()), "{doc:?}");
+        assert!(!ids(&wheel(&[Some(Doc)], &Capabilities::none(), &[]))
+            .contains(&"word_count".to_string()));
+        let read = wheel(
+            &[Some(Png)],
+            &Capabilities {
+                vision: Some("/x".into()),
+                ..Default::default()
+            },
+            &[],
+        );
         assert_eq!(
             read.tools
                 .iter()

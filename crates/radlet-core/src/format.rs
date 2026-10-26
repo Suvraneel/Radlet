@@ -29,12 +29,25 @@ pub enum Format {
     Qoi,
     Heic,
     Avif,
+    /// Camera RAW (DNG, CR2, CR3, NEF, ARW, RAF, ORF, RW2 and more), read
+    /// through macOS. Radlet doesn't write it.
+    Raw,
+    /// Photoshop, read flattened through macOS.
+    Psd,
+    /// JPEG XL, read through macOS 14 and later.
+    Jxl,
+    /// JPEG 2000, read through macOS.
+    Jp2,
     /// Scalable vector graphics, rendered to pixels when converted.
     Svg,
     // Documents
     Pdf,
     Docx,
     Rtf,
+    /// Word 97–2003, read through macOS's `textutil`.
+    Doc,
+    /// OpenDocument text, read through macOS's `textutil`.
+    Odt,
     // Audio
     Mp3,
     M4a,
@@ -57,14 +70,36 @@ pub enum Format {
     Html,
     Srt,
     Vtt,
+    /// Advanced SubStation Alpha subtitles (and the older SSA).
+    Ass,
+    /// SubViewer subtitles, as YouTube exports them.
+    Sbv,
+    /// Timed Text (TTML and DFXP) subtitles.
+    Ttml,
     // Data
     Csv,
     Tsv,
     Json,
+    Yaml,
+    Toml,
+    Xml,
     /// An Excel workbook.
     Xlsx,
+    /// An Excel 97–2003 workbook.
+    Xls,
+    /// An OpenDocument spreadsheet.
+    Ods,
     // Archives
     Zip,
+    /// 7-Zip, extracted with macOS's `tar` (libarchive).
+    SevenZ,
+    /// RAR, extracted with macOS's `tar` (libarchive).
+    Rar,
+    /// TAR, plain or compressed (.tar.gz, .tgz, .tar.bz2, .tar.xz). Radlet
+    /// writes .tar.gz.
+    Tar,
+    /// A disc image (ISO 9660).
+    Iso,
     /// A folder on disk. Not a file format, but it gets its own actions.
     Folder,
 }
@@ -104,9 +139,10 @@ use Format::*;
 
 impl Format {
     pub const ALL: &'static [Format] = &[
-        Png, Jpeg, Webp, Gif, Bmp, Tiff, Ico, Icns, Tga, Qoi, Heic, Avif, Svg, Pdf, Docx, Rtf, Mp3,
-        M4a, Wav, Flac, Ogg, Opus, Aiff, Wma, Mp4, Mov, Mkv, Webm, Avi, Wmv, Txt, Md, Html, Srt,
-        Vtt, Csv, Tsv, Json, Xlsx, Zip, Folder,
+        Png, Jpeg, Webp, Gif, Bmp, Tiff, Ico, Icns, Tga, Qoi, Heic, Avif, Raw, Psd, Jxl, Jp2, Svg,
+        Pdf, Docx, Rtf, Doc, Odt, Mp3, M4a, Wav, Flac, Ogg, Opus, Aiff, Wma, Mp4, Mov, Mkv, Webm,
+        Avi, Wmv, Txt, Md, Html, Srt, Vtt, Ass, Sbv, Ttml, Csv, Tsv, Json, Yaml, Toml, Xml, Xlsx,
+        Xls, Ods, Zip, SevenZ, Rar, Tar, Iso, Folder,
     ];
 
     /// Stable identifier used on the wire and in recipes.
@@ -124,10 +160,16 @@ impl Format {
             Qoi => "qoi",
             Heic => "heic",
             Avif => "avif",
+            Raw => "raw",
+            Psd => "psd",
+            Jxl => "jxl",
+            Jp2 => "jp2",
             Svg => "svg",
             Pdf => "pdf",
             Docx => "docx",
             Rtf => "rtf",
+            Doc => "doc",
+            Odt => "odt",
             Mp3 => "mp3",
             M4a => "m4a",
             Wav => "wav",
@@ -147,11 +189,23 @@ impl Format {
             Html => "html",
             Srt => "srt",
             Vtt => "vtt",
+            Ass => "ass",
+            Sbv => "sbv",
+            Ttml => "ttml",
             Csv => "csv",
             Tsv => "tsv",
             Json => "json",
+            Yaml => "yaml",
+            Toml => "toml",
+            Xml => "xml",
             Xlsx => "xlsx",
+            Xls => "xls",
+            Ods => "ods",
             Zip => "zip",
+            SevenZ => "7z",
+            Rar => "rar",
+            Tar => "tar",
+            Iso => "iso",
             Folder => "folder",
         }
     }
@@ -171,10 +225,16 @@ impl Format {
             Qoi => "QOI",
             Heic => "HEIC",
             Avif => "AVIF",
+            Raw => "RAW",
+            Psd => "PSD",
+            Jxl => "JPEG XL",
+            Jp2 => "JPEG 2000",
             Svg => "SVG",
             Pdf => "PDF",
             Docx => "Word",
             Rtf => "RTF",
+            Doc => "Word 97",
+            Odt => "ODT",
             Mp3 => "MP3",
             M4a => "M4A",
             Wav => "WAV",
@@ -194,11 +254,23 @@ impl Format {
             Html => "HTML",
             Srt => "SRT",
             Vtt => "VTT",
+            Ass => "ASS",
+            Sbv => "SBV",
+            Ttml => "TTML",
             Csv => "CSV",
             Tsv => "TSV",
             Json => "JSON",
+            Yaml => "YAML",
+            Toml => "TOML",
+            Xml => "XML",
             Xlsx => "Excel",
+            Xls => "Excel 97",
+            Ods => "ODS",
             Zip => "ZIP",
+            SevenZ => "7z",
+            Rar => "RAR",
+            Tar => "TAR",
+            Iso => "ISO",
             Folder => "Folder",
         }
     }
@@ -209,6 +281,7 @@ impl Format {
             Jpeg => "jpg",
             Tiff => "tiff",
             Aiff => "aiff",
+            Tar => "tar.gz",
             Folder => "",
             other => other.id(),
         }
@@ -216,16 +289,15 @@ impl Format {
 
     pub fn category(self) -> Category {
         match self {
-            Png | Jpeg | Webp | Gif | Bmp | Tiff | Ico | Icns | Tga | Qoi | Heic | Avif | Svg => {
-                Category::Image
-            }
-            Pdf | Docx | Rtf => Category::Document,
+            Png | Jpeg | Webp | Gif | Bmp | Tiff | Ico | Icns | Tga | Qoi | Heic | Avif | Raw
+            | Psd | Jxl | Jp2 | Svg => Category::Image,
+            Pdf | Docx | Rtf | Doc | Odt => Category::Document,
             Mp3 | M4a | Wav | Flac | Ogg | Opus | Aiff | Wma => Category::Audio,
             Mp4 | Mov | Mkv | Webm | Avi | Wmv => Category::Video,
             Txt | Md | Html => Category::Text,
-            Srt | Vtt => Category::Subtitle,
-            Csv | Tsv | Json | Xlsx => Category::Data,
-            Zip => Category::Archive,
+            Srt | Vtt | Ass | Sbv | Ttml => Category::Subtitle,
+            Csv | Tsv | Json | Yaml | Toml | Xml | Xlsx | Xls | Ods => Category::Data,
+            Zip | SevenZ | Rar | Tar | Iso => Category::Archive,
             Folder => Category::Folder,
         }
     }
@@ -249,12 +321,28 @@ impl Format {
             "tab" => Tsv,
             "geojson" => Json,
             "excel" => Xlsx,
+            "yml" => Yaml,
+            "ssa" => Ass,
+            "dfxp" => Ttml,
+            "j2k" | "jpf" | "jpx" | "j2c" => Jp2,
+            "tgz" | "tar.gz" | "tbz" | "tbz2" | "tar.bz2" | "txz" | "tar.xz" => Tar,
+            "dng" | "cr2" | "cr3" | "crw" | "nef" | "nrw" | "arw" | "srf" | "sr2" | "raf"
+            | "orf" | "rw2" | "rwl" | "pef" | "srw" | "x3f" | "3fr" | "erf" | "kdc" | "mrw"
+            | "iiq" => Raw,
             _ => return Format::ALL.iter().copied().find(|f| f.id() == n),
         };
         Some(f)
     }
 
     pub fn from_path(path: &Path) -> Option<Format> {
+        // Compressed TARs have two extensions.
+        let name = path.file_name()?.to_str()?.to_ascii_lowercase();
+        if [".tar.gz", ".tar.bz2", ".tar.xz"]
+            .iter()
+            .any(|e| name.ends_with(e))
+        {
+            return Some(Tar);
+        }
         path.extension()
             .and_then(|e| e.to_str())
             .and_then(Format::parse)
@@ -266,17 +354,58 @@ impl Format {
         matches!(self, Png | Jpeg | Webp | Gif | Bmp | Tiff | Ico | Tga | Qoi)
     }
 
+    /// Pictures only macOS reads (through `sips`).
+    pub fn is_sips_raster(self) -> bool {
+        matches!(self, Heic | Avif | Raw | Psd | Jxl | Jp2)
+    }
+
     /// Documents and text Radlet can read as structured text (headings,
-    /// paragraphs, lists) and write back out in another of these formats.
+    /// paragraphs, lists). All but Word 97 and ODT can be written too
+    /// (see `doc::writable`).
     pub fn is_document_text(self) -> bool {
-        matches!(self, Txt | Md | Html | Docx | Rtf)
+        matches!(self, Txt | Md | Html | Docx | Rtf | Doc | Odt)
+    }
+
+    /// Documents read through macOS's `textutil`.
+    pub fn needs_textutil(self) -> bool {
+        matches!(self, Doc | Odt)
+    }
+
+    /// Spreadsheets with sheets: Excel, old Excel and OpenDocument.
+    pub fn is_workbook(self) -> bool {
+        matches!(self, Xlsx | Xls | Ods)
+    }
+
+    /// Subtitle formats Radlet reads and writes.
+    pub fn is_subtitles(self) -> bool {
+        matches!(self, Srt | Vtt | Ass | Sbv | Ttml)
+    }
+
+    /// Archives extracted with `tar` (libarchive), unlike ZIPs, which
+    /// Radlet opens itself.
+    pub fn needs_bsdtar(self) -> bool {
+        matches!(self, SevenZ | Rar | Tar | Iso)
     }
 
     /// Plain-text formats whose bytes are the text itself.
     pub fn is_plain_text(self) -> bool {
         matches!(
             self,
-            Txt | Md | Html | Srt | Vtt | Csv | Tsv | Json | Svg | Rtf
+            Txt | Md
+                | Html
+                | Srt
+                | Vtt
+                | Ass
+                | Sbv
+                | Ttml
+                | Csv
+                | Tsv
+                | Json
+                | Yaml
+                | Toml
+                | Xml
+                | Svg
+                | Rtf
         )
     }
 }
@@ -314,8 +443,13 @@ pub fn detect(path: &Path) -> Result<Format> {
         return Ok(f);
     }
     match by_ext {
-        // Formats with no reliable signature are trusted by extension.
-        Some(f @ (Tga | Txt | Md | Html | Srt | Vtt | Csv | Tsv | Json | Svg)) => Ok(f),
+        // Formats with no reliable signature are trusted by extension
+        // (compressed TARs show only their compression, disc images their
+        // label 32 KB in, and some RAW formats their maker's own header).
+        Some(
+            f @ (Tga | Txt | Md | Html | Srt | Vtt | Ass | Sbv | Ttml | Csv | Tsv | Json | Yaml
+            | Toml | Xml | Svg | Raw | Tar | Iso),
+        ) => Ok(f),
         _ => Err(unsupported()),
     }
 }
@@ -339,6 +473,21 @@ fn classify_zip(path: &Path, by_ext: Option<Format>) -> Option<Format> {
     }
     if has("xl/workbook.xml") {
         return Some(Xlsx);
+    }
+    // OpenDocument names its kind in a "mimetype" file.
+    if has("mimetype") && has("content.xml") {
+        let mut kind = String::new();
+        if let Ok(f) = zip::ZipArchive::new(File::open(path).ok()?)
+            .ok()?
+            .by_name("mimetype")
+        {
+            let _ = f.take(100).read_to_string(&mut kind);
+        }
+        match kind.trim() {
+            "application/vnd.oasis.opendocument.text" => return Some(Odt),
+            "application/vnd.oasis.opendocument.spreadsheet" => return Some(Ods),
+            _ => {}
+        }
     }
     let container = has("[Content_Types].xml")
         || has("mimetype")
@@ -382,10 +531,7 @@ pub fn sniff(h: &[u8], hint: Option<Format>) -> Option<Format> {
     // Weak signatures (two-byte magic, a marker that may sit after junk,
     // MPEG frame sync) are ignored for files named as text, so a note that
     // starts with "BM" or quotes "%PDF-" stays text.
-    let weak_ok = !matches!(
-        hint,
-        Some(Txt | Md | Html | Srt | Vtt | Csv | Tsv | Json | Svg | Rtf)
-    );
+    let weak_ok = !hint.is_some_and(Format::is_plain_text);
     if starts(b"{\\rtf") {
         return Some(Rtf);
     }
@@ -403,11 +549,54 @@ pub fn sniff(h: &[u8], hint: Option<Format>) -> Option<Format> {
         }
     }
     if starts(b"II*\0") || starts(b"MM\0*") {
-        // Many camera RAW formats are TIFF containers; only accept real TIFFs.
+        // Many camera RAW formats are TIFF containers: named as RAW, they're
+        // RAW; otherwise only real TIFFs.
         return match hint {
+            Some(Raw) => Some(Raw),
             None | Some(Tiff) => Some(Tiff),
             _ => None,
         };
+    }
+    // RAW formats with headers of their own: Fujifilm, Olympus, Panasonic.
+    // (Signatures that are plain letters don't count in files named as text.)
+    if starts(b"FUJIFILMCCD-RAW")
+        || starts(b"IIU\0")
+        || (weak_ok && (starts(b"IIRO") || starts(b"IIRS") || starts(b"MMOR")))
+    {
+        return Some(Raw);
+    }
+    if weak_ok && starts(b"8BPS") {
+        return Some(Psd);
+    }
+    if starts(b"\0\0\0\x0cJXL \r\n\x87\n") || (weak_ok && starts(&[0xFF, 0x0A])) {
+        return Some(Jxl);
+    }
+    if starts(b"\0\0\0\x0cjP  \r\n\x87\n") || starts(&[0xFF, 0x4F, 0xFF, 0x51]) {
+        return Some(Jp2);
+    }
+    // Microsoft's compound files hold old Word and Excel files (and Outlook
+    // messages, PowerPoint...): the name tells which.
+    if starts(&[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]) {
+        return match hint {
+            Some(Doc) => Some(Doc),
+            Some(Xls) => Some(Xls),
+            _ => None,
+        };
+    }
+    if starts(&[0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C]) {
+        return Some(SevenZ);
+    }
+    if starts(b"Rar!\x1a\x07") {
+        return Some(Rar);
+    }
+    if weak_ok && at(257, b"ustar") {
+        return Some(Tar);
+    }
+    // Compressed TARs: gzip, bzip2 or xz, named as TARs.
+    if hint == Some(Tar)
+        && (starts(&[0x1F, 0x8B]) || starts(b"BZh") || starts(&[0xFD, b'7', b'z', b'X', b'Z', 0]))
+    {
+        return Some(Tar);
     }
     if starts(&[0, 0, 1, 0]) && h.len() >= 6 && hint == Some(Ico) {
         return Some(Ico);
@@ -518,6 +707,10 @@ fn classify_ftyp(h: &[u8], hint: Option<Format>) -> Format {
     }
     if major == b"qt  " {
         return Mov;
+    }
+    // Canon's CR3.
+    if major == b"crx " {
+        return Raw;
     }
     if major.starts_with(b"M4A") || major.starts_with(b"M4B") || major.starts_with(b"M4P") {
         return M4a;
@@ -660,7 +853,15 @@ mod tests {
         assert_eq!(Format::parse(".tif"), Some(Tiff));
         assert_eq!(Format::parse("markdown"), Some(Md));
         assert_eq!(Format::parse("webm"), Some(Webm));
-        assert_eq!(Format::parse("doc"), None);
+        assert_eq!(Format::parse("doc"), Some(Doc));
+        assert_eq!(Format::parse("yml"), Some(Yaml));
+        assert_eq!(Format::parse("CR3"), Some(Raw));
+        assert_eq!(Format::parse("tgz"), Some(Tar));
+        assert_eq!(Format::parse("pptx"), None);
+        assert_eq!(
+            Format::from_path(Path::new("site backup.tar.gz")),
+            Some(Tar)
+        );
     }
 
     #[test]
@@ -671,5 +872,44 @@ mod tests {
                 assert_eq!(Format::parse(f.extension()), Some(*f));
             }
         }
+    }
+
+    #[test]
+    fn formats_added_in_0_2() {
+        assert_eq!(sniff(b"8BPS\0\x01", None), Some(Psd));
+        assert_eq!(sniff(b"\0\0\0\x0cJXL \r\n\x87\n", None), Some(Jxl));
+        assert_eq!(sniff(&[0xFF, 0x0A, 0xFA], None), Some(Jxl));
+        assert_eq!(sniff(&[0xFF, 0x0A, 0xFA], Some(Txt)), None);
+        assert_eq!(sniff(b"\0\0\0\x0cjP  \r\n\x87\n", None), Some(Jp2));
+        assert_eq!(
+            sniff(b"II*\0\x08\0\0\0", Some(Raw)),
+            Some(Raw),
+            "a NEF or DNG"
+        );
+        assert_eq!(sniff(b"FUJIFILMCCD-RAW 0201", None), Some(Raw));
+        let mut cr3 = vec![0, 0, 0, 0x18];
+        cr3.extend_from_slice(b"ftypcrx \0\0\0\x01crx isom");
+        assert_eq!(sniff(&cr3, Some(Raw)), Some(Raw));
+        let ole = [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1];
+        assert_eq!(sniff(&ole, Some(Doc)), Some(Doc));
+        assert_eq!(sniff(&ole, Some(Xls)), Some(Xls));
+        assert_eq!(sniff(&ole, None), None, "an Outlook message or slides");
+        assert_eq!(
+            sniff(&[0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C, 0, 4], None),
+            Some(SevenZ)
+        );
+        assert_eq!(sniff(b"Rar!\x1a\x07\x01\0", None), Some(Rar));
+        let mut tar = vec![0u8; 300];
+        tar[257..262].copy_from_slice(b"ustar");
+        assert_eq!(sniff(&tar, None), Some(Tar));
+        assert_eq!(sniff(&[0x1F, 0x8B, 8, 0], Some(Tar)), Some(Tar));
+        assert_eq!(sniff(&[0x1F, 0x8B, 8, 0], None), None);
+        assert_eq!(Tar.extension(), "tar.gz");
+        assert_eq!(Format::parse("yaml"), Some(Yaml));
+        assert_eq!(Format::parse("ssa"), Some(Ass));
+        assert_eq!(Yaml.category(), Category::Data);
+        assert_eq!(Ttml.category(), Category::Subtitle);
+        assert_eq!(Raw.category(), Category::Image);
+        assert!(Raw.is_sips_raster() && !Raw.is_builtin_raster());
     }
 }

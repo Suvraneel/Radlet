@@ -32,6 +32,7 @@ svg2pdf = "0.13"
 tempfile = "3"
 thiserror = "2"
 toml = "0.8"
+yaml-rust2 = { version = "0.13", default-features = false }
 webp = { version = "0.3", default-features = false }
 zip = { version = "9", default-features = false, features = ["deflate-flate2", "deflate64"] }
 

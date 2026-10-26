@@ -155,11 +155,182 @@ pub fn read(path: &Path) -> Result<Vec<Sheet>> {
     Ok(out)
 }
 
+/// Most bytes an old Excel workbook may have (it's read whole).
+const MAX_XLS: u64 = 200 << 20;
+/// Most cells in the used area of an old Excel or OpenDocument sheet,
+/// which is read whole rather than streamed (about 600 MB at worst).
+const MAX_DENSE: usize = 3_000_000;
+/// Most bytes of an OpenDocument spreadsheet's content.xml.
+const MAX_ODS_XML: u64 = 256 << 20;
+
+/// The used area an OpenDocument spreadsheet would expand to, from its
+/// rows and cells and their repeat counts, before anything is expanded: a
+/// few hundred bytes can describe millions of repeated cells.
+fn ods_area(path: &Path) -> Result<usize> {
+    use quick_xml::events::Event;
+    use std::io::Read;
+    let file = std::fs::File::open(path)?;
+    let mut zip = zip::ZipArchive::new(file).map_err(|e| bad(path, e))?;
+    let entry = zip.by_name("content.xml").map_err(|e| bad(path, e))?;
+    if entry.size() > MAX_ODS_XML {
+        return Err(too_big("is larger than 256 MB unpacked"));
+    }
+    let mut xml = String::new();
+    entry
+        .take(MAX_ODS_XML)
+        .read_to_string(&mut xml)
+        .map_err(|e| bad(path, e))?;
+    let repeat = |e: &quick_xml::events::BytesStart, name: &str| -> usize {
+        e.attributes()
+            .flatten()
+            .find(|a| a.key.local_name().as_ref() == name)
+            .and_then(|a| a.normalized_value(quick_xml::XmlVersion::Implicit1_0).ok())
+            .and_then(|v| v.parse::<usize>().ok())
+            .unwrap_or(1)
+            .max(1)
+    };
+    let valued = |e: &quick_xml::events::BytesStart| {
+        e.attributes()
+            .flatten()
+            .any(|a| a.key.local_name().as_ref() == "value-type")
+    };
+    let mut reader = quick_xml::Reader::from_str(&xml);
+    let mut worst = 0usize;
+    // The current sheet: rows so far, and its widest filled row.
+    let (mut rows, mut width) = (0usize, 0usize);
+    // The current row: its repeat count, the column reached, and the end
+    // of its last filled cell.
+    let (mut row_repeat, mut col, mut row_end) = (1usize, 0usize, 0usize);
+    loop {
+        match reader.read_event().map_err(|e| bad(path, e))? {
+            Event::Start(e) | Event::Empty(e) if e.local_name().as_ref() == "table" => {
+                (rows, width) = (0, 0);
+            }
+            Event::Start(e) if e.local_name().as_ref() == "table-row" => {
+                (row_repeat, col, row_end) = (repeat(&e, "number-rows-repeated"), 0, 0);
+            }
+            Event::Empty(e) if e.local_name().as_ref() == "table-row" => {
+                rows = rows.saturating_add(repeat(&e, "number-rows-repeated"));
+            }
+            Event::Start(e) | Event::Empty(e)
+                if matches!(e.local_name().as_ref(), "table-cell" | "covered-table-cell") =>
+            {
+                let n = repeat(&e, "number-columns-repeated");
+                col = col.saturating_add(n);
+                if valued(&e) {
+                    row_end = col;
+                }
+            }
+            Event::End(e) if e.local_name().as_ref() == "table-row" => {
+                rows = rows.saturating_add(row_repeat);
+                // Up to its last filled row, a sheet is as wide as its
+                // widest filled row.
+                if row_end > 0 {
+                    width = width.max(row_end);
+                    worst = worst.max(rows.saturating_mul(width));
+                }
+            }
+            Event::Eof => break,
+            _ => {}
+        }
+    }
+    Ok(worst)
+}
+
+/// One sheet of an old Excel or OpenDocument workbook, which calamine
+/// reads whole: from the first used cell, each row ending at its last
+/// non-empty cell.
+fn range_rows(range: &calamine::Range<Data>, budget: &mut usize) -> Result<Vec<Vec<String>>> {
+    let (height, width) = range.get_size();
+    if height.saturating_mul(width) > MAX_DENSE {
+        return Err(too_big("spreads over more than 3 million cells"));
+    }
+    let mut rows: Vec<Vec<String>> = Vec::with_capacity(height);
+    for row in range.rows() {
+        let mut out: Vec<String> = row.iter().map(cell).collect();
+        while out.last().is_some_and(String::is_empty) {
+            out.pop();
+        }
+        let filled = out.iter().filter(|c| !c.is_empty()).count();
+        if filled > *budget {
+            return Err(too_big("has over 10 million filled cells"));
+        }
+        *budget -= filled;
+        rows.push(out);
+    }
+    // Trim empty rows at the ends, and empty columns on the left.
+    while rows.last().is_some_and(Vec::is_empty) {
+        rows.pop();
+    }
+    let first = rows
+        .iter()
+        .position(|r| !r.is_empty())
+        .unwrap_or(rows.len());
+    rows.drain(..first);
+    let left = rows
+        .iter()
+        .filter_map(|r| r.iter().position(|c| !c.is_empty()))
+        .min()
+        .unwrap_or(0);
+    if left > 0 {
+        for r in &mut rows {
+            r.drain(..left.min(r.len()));
+        }
+    }
+    Ok(rows)
+}
+
+fn read_ranges<R: Reader<std::io::BufReader<std::fs::File>>>(
+    mut book: R,
+    path: &Path,
+) -> Result<Vec<Sheet>>
+where
+    R::Error: std::fmt::Display,
+{
+    let mut budget = MAX_CELLS;
+    let mut out = Vec::new();
+    for name in book.sheet_names() {
+        let range = book.worksheet_range(&name).map_err(|e| bad(path, e))?;
+        let rows = range_rows(&range, &mut budget)?;
+        if !rows.is_empty() {
+            out.push((name, rows));
+        }
+    }
+    Ok(out)
+}
+
+/// Every sheet with something in it, from Excel, old Excel or OpenDocument.
+pub fn read_book(path: &Path, fmt: Format) -> Result<Vec<Sheet>> {
+    match fmt {
+        Format::Xlsx => read(path),
+        Format::Xls => {
+            if std::fs::metadata(path)?.len() > MAX_XLS {
+                return Err(Error::TooLarge(
+                    "this workbook is larger than 200 MB".into(),
+                ));
+            }
+            let book: calamine::Xls<_> = calamine::open_workbook(path).map_err(|e| bad(path, e))?;
+            read_ranges(book, path)
+        }
+        Format::Ods => {
+            check_size(path)?;
+            if ods_area(path)? > MAX_DENSE {
+                return Err(too_big("spreads over more than 3 million cells"));
+            }
+            let book: calamine::Ods<_> = calamine::open_workbook(path).map_err(|e| bad(path, e))?;
+            read_ranges(book, path)
+        }
+        other => Err(Error::UnsupportedInput(format!(
+            "{other} files aren't workbooks"
+        ))),
+    }
+}
+
 /// A file Radlet can make a sheet from: its rows, named after the file.
 pub fn as_sheets(path: &Path, fmt: Format) -> Result<Vec<Sheet>> {
     let name = doc::title_of(path);
     let rows = match fmt {
-        Format::Xlsx => return read(path),
+        f if f.is_workbook() => return read_book(path, f),
         Format::Csv | Format::Tsv => data::read_rows(path, fmt)?,
         Format::Json => data::json_to_rows(&crate::engines::text::read_text(path)?)?,
         other => {
@@ -265,8 +436,8 @@ pub fn write(sheets: &[Sheet]) -> Result<Vec<u8>> {
 
 /// A workbook as a document: each sheet a table, under its name when
 /// there are several.
-pub fn doc(path: &Path) -> Result<Doc> {
-    let sheets = read(path)?;
+pub fn doc(path: &Path, fmt: Format) -> Result<Doc> {
+    let sheets = read_book(path, fmt)?;
     if sheets.is_empty() {
         return Err(Error::NothingToDo("the workbook is empty".into()));
     }
@@ -332,7 +503,7 @@ mod tests {
         assert_eq!(range.get_value((1, 3)), Some(&Data::Bool(true)));
         assert_eq!(range.get_value((1, 4)), Some(&Data::String("=1+1".into())));
 
-        let d = doc(&p).unwrap();
+        let d = doc(&p, Format::Xlsx).unwrap();
         assert!(
             matches!(&d.blocks[0], Block::Heading { text, .. } if doc::plain(text) == "Orders")
         );

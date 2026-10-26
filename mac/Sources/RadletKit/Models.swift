@@ -176,7 +176,7 @@ public struct Slot: Codable, Identifiable, Equatable, Sendable {
             return !steps.contains { step in
                 switch step["op"]?.string {
                 case "translate", "transcribe": return true
-                case "convert": return ["zip", "folder"].contains(step["to"]?.string ?? "")
+                case "convert": return ["zip", "tar", "folder"].contains(step["to"]?.string ?? "")
                 default: return false
                 }
             }

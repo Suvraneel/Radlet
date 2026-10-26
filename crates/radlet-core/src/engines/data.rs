@@ -286,10 +286,15 @@ pub fn table_doc(path: &Path, fmt: Format) -> Result<Doc> {
     })
 }
 
-/// Converts between CSV, TSV and JSON, or a table into a document.
+/// Converts between CSV, TSV and JSON, JSON and YAML, TOML or XML, or a
+/// table into a document.
 pub fn convert(input: &Path, from: Format, to: Format, out: &Path) -> Result<()> {
     let delim = |f: Format| if f == Format::Tsv { b'\t' } else { b',' };
     let result = match (from, to) {
+        (
+            Format::Json | Format::Yaml | Format::Toml | Format::Xml,
+            Format::Json | Format::Yaml | Format::Toml | Format::Xml,
+        ) => crate::engines::tree::convert(&read_text(input)?, from, to)?,
         (Format::Csv | Format::Tsv, Format::Csv | Format::Tsv) => {
             write_rows(&read_rows(input, from)?, delim(to))?
         }
@@ -306,14 +311,22 @@ pub fn convert(input: &Path, from: Format, to: Format, out: &Path) -> Result<()>
             std::fs::write(out, crate::engines::sheet::write(&sheets)?)?;
             return Ok(());
         }
-        (Format::Xlsx, t) if doc::writable(t) => {
-            let d = crate::engines::sheet::doc(input)?;
+        (f, t) if f.is_workbook() && doc::writable(t) => {
+            let d = crate::engines::sheet::doc(input, f)?;
             return doc::write(&d, t, &doc::title_of(input), out);
         }
-        (Format::Xlsx, Format::Csv | Format::Tsv | Format::Json) => {
+        (Format::Xls | Format::Ods, Format::Xlsx) => {
+            let sheets = crate::engines::sheet::read_book(input, from)?;
+            if sheets.is_empty() {
+                return Err(Error::NothingToDo("the workbook is empty".into()));
+            }
+            std::fs::write(out, crate::engines::sheet::write(&sheets)?)?;
+            return Ok(());
+        }
+        (f, Format::Csv | Format::Tsv | Format::Json) if f.is_workbook() => {
             // The first sheet with anything in it (the pipeline splits a
             // workbook of several sheets into one file each).
-            let sheets = crate::engines::sheet::read(input)?;
+            let sheets = crate::engines::sheet::read_book(input, f)?;
             let rows = sheets
                 .into_iter()
                 .map(|(_, rows)| rows)

@@ -909,9 +909,10 @@ fn dispatch(cli: Cli) -> Result<ExitCode> {
             quality,
         } => {
             let to = Format::parse(&to).with_context(|| format!("unknown format \"{to}\""))?;
-            // Folders: convert what's inside (a folder to ZIP stays as it is).
+            // Folders: convert what's inside (a folder to ZIP or TAR is
+            // packed as it is).
             let folders = !r.files.is_empty() && r.files.iter().all(|f| f.is_dir());
-            if folders && to != Format::Zip {
+            if folders && !matches!(to, Format::Zip | Format::Tar) {
                 // PDF means documents made into PDFs; otherwise files of
                 // the target's own kind (images to JPEG, audio to MP3...).
                 let only = if to == Format::Pdf {
