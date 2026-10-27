@@ -109,9 +109,12 @@ public struct Slot: Codable, Identifiable, Equatable, Sendable {
     /// Quick presets, most useful first: the Orbit style's outer ring
     /// shows two, Bloom up to four. They run without a window.
     public let variants: [SlotVariant]
+    /// Set when this can't run until something is got (see `Need`): the
+    /// wheel marks it, and choosing it offers the install first.
+    public let needs: String?
 
     public init(id: String, label: String, symbol: String, group: String, action: JSONValue, window: String? = nil,
-                variants: [SlotVariant] = []) {
+                variants: [SlotVariant] = [], needs: String? = nil) {
         self.id = id
         self.label = label
         self.symbol = symbol
@@ -119,10 +122,11 @@ public struct Slot: Codable, Identifiable, Equatable, Sendable {
         self.action = action
         self.window = window
         self.variants = variants
+        self.needs = needs
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, label, symbol, group, action, window, variants
+        case id, label, symbol, group, action, window, variants, needs
     }
 
     public init(from decoder: Decoder) throws {
@@ -134,11 +138,20 @@ public struct Slot: Codable, Identifiable, Equatable, Sendable {
         action = try c.decode(JSONValue.self, forKey: .action)
         window = try c.decodeIfPresent(String.self, forKey: .window)
         variants = try c.decodeIfPresent([SlotVariant].self, forKey: .variants) ?? []
+        needs = try c.decodeIfPresent(String.self, forKey: .needs)
+    }
+
+    /// What this needs first, when it's something the app knows how to get.
+    public var need: Need? { needs.flatMap(Need.init(rawValue:)) }
+
+    /// The same slot, ready to run once what it needed is there.
+    public var unlocked: Slot {
+        Slot(id: id, label: label, symbol: symbol, group: group, action: action, window: window, variants: variants)
     }
 
     /// The same slot running a different action, without its window.
     public func with(action: JSONValue) -> Slot {
-        Slot(id: id, label: label, symbol: symbol, group: group, action: action, window: nil)
+        Slot(id: id, label: label, symbol: symbol, group: group, action: action, window: nil, needs: needs)
     }
 
     /// One of this slot's presets as a slot of its own, for running and
@@ -146,7 +159,7 @@ public struct Slot: Codable, Identifiable, Equatable, Sendable {
     public func running(_ variant: SlotVariant) -> Slot {
         let base = label.hasSuffix("…") ? String(label.dropLast()) : label
         return Slot(id: variant.id, label: "\(base) · \(variant.label)", symbol: symbol, group: group,
-                    action: variant.action, window: nil)
+                    action: variant.action, window: nil, needs: needs)
     }
 
     /// The label without its trailing "…", for titles.
@@ -246,6 +259,8 @@ public struct InspectResult: Codable, Sendable {
 public struct EngineErrorInfo: Codable, Sendable {
     public let code: String
     public let message: String
+    /// Set when getting something would fix it (see `Need`).
+    public let need: String?
 }
 
 public struct Outcome: Codable, Sendable {

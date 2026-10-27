@@ -210,8 +210,16 @@ final class EngineClient: @unchecked Sendable {
         return (try await hello(), restarted)
     }
 
+    /// Has the helper look again for FFmpeg and the iWork apps, after one
+    /// was installed. Running jobs carry on as they were.
+    /// The answer says what's there now (see `Need.isMet(by:)`).
+    func refresh() async throws -> JSONValue {
+        try await request("refresh")
+    }
+
+    /// The wheel for `files`, with what needs installing first marked.
     func inspect(_ files: [URL], recipesDir: URL?) async throws -> InspectResult {
-        var params: [String: JSONValue] = ["paths": .array(files.map { .string($0.path) })]
+        var params: [String: JSONValue] = ["paths": .array(files.map { .string($0.path) }), "installs": .bool(true)]
         if let recipesDir { params["recipes_dir"] = .string(recipesDir.path) }
         return try await request("inspect", params).decode(InspectResult.self)
     }

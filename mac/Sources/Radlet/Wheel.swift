@@ -351,7 +351,8 @@ final class WheelController {
     private func showMore(_ slots: [Slot], files: [URL]) {
         let menu = NSMenu()
         for slot in slots {
-            let item = NSMenuItem(title: slot.label, action: #selector(MenuTarget.pick(_:)), keyEquivalent: "")
+            let title = slot.need.map { "\(slot.label) (needs \($0.name))" } ?? slot.label
+            let item = NSMenuItem(title: title, action: #selector(MenuTarget.pick(_:)), keyEquivalent: "")
             item.image = NSImage(systemSymbolName: slot.symbol, accessibilityDescription: nil)
             item.target = menuTarget
             item.representedObject = slot.id

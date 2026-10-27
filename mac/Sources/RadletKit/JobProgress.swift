@@ -25,6 +25,10 @@ public final class JobProgress: ObservableObject {
     @Published public var outputs: [URL] = []
     @Published public var failures: [String] = []
     @Published public var skipped: [String] = []
+    /// What failed items need first (`Need` raw values), in the order met.
+    @Published public var needs: [String] = []
+    /// The files of those items by need, to try again once it's got.
+    public private(set) var needing: [String: [URL]] = [:]
     @Published public var savedBytes: Int64 = 0
     /// Checksums or recognised text, one per file.
     @Published public private(set) var values: [NamedValue] = []
@@ -53,6 +57,8 @@ public final class JobProgress: ObservableObject {
         outputs = []
         failures = []
         skipped = []
+        needs = []
+        needing = [:]
         savedBytes = 0
         values = []
         valueKind = .checksum
@@ -85,6 +91,10 @@ public final class JobProgress: ObservableObject {
                 skipped.append("\(name): \(o.error?.message ?? "skipped")")
             case "failed":
                 failures.append("\(name): \(o.error?.message ?? "failed")")
+                if let need = o.error?.need {
+                    if !needs.contains(need) { needs.append(need) }
+                    needing[need, default: []].append(contentsOf: o.inputs.map { URL(fileURLWithPath: $0) })
+                }
             default:
                 break
             }

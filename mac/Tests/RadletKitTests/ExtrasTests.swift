@@ -419,3 +419,49 @@ final class MigrationTests: XCTestCase {
         XCTAssertFalse(LegacyFiles.carriesOver("AppleLanguages"))
     }
 }
+
+final class NeedsTests: XCTestCase {
+    func testSlotsCarryWhatTheyNeed() throws {
+        let json = #"{"id":"to_mp3","label":"MP3","symbol":"music.note","group":"convert","action":{"kind":"steps"},"needs":"ffmpeg","variants":[{"id":"to_mp3.small","label":"Small","hint":"x","action":{"kind":"steps"}}]}"#
+        let slot = try JSONDecoder().decode(Slot.self, from: Data(json.utf8))
+        XCTAssertEqual(slot.need, .ffmpeg)
+        XCTAssertEqual(slot.running(slot.variants[0]).need, .ffmpeg, "a preset needs it too")
+        XCTAssertEqual(slot.with(action: .null).need, .ffmpeg)
+        XCTAssertNil(slot.unlocked.need)
+        XCTAssertEqual(slot.unlocked.variants.count, 1)
+        let plain = try JSONDecoder().decode(Slot.self, from: Data(#"{"id":"a","label":"A","symbol":"x","group":"tool","action":{}}"#.utf8))
+        XCTAssertNil(plain.need)
+        let odd = try JSONDecoder().decode(Slot.self, from: Data(#"{"id":"a","label":"A","symbol":"x","group":"tool","action":{},"needs":"moon"}"#.utf8))
+        XCTAssertEqual(odd.needs, "moon")
+        XCTAssertNil(odd.need, "a need this app doesn't know runs as usual")
+    }
+
+    func testEveryNeedIsExplained() {
+        for need in Need.allCases {
+            XCTAssertFalse(need.title.isEmpty)
+            XCTAssertTrue(need.explanation(task: "Convert to MP3").contains("Convert to MP3"))
+            XCTAssertEqual(need.destination == nil, need == .ffmpeg, "\(need)")
+        }
+        XCTAssertEqual(Need(rawValue: "speech_language"), .speechLanguage)
+        XCTAssertEqual(Need.pages.badge, "Needs Pages")
+    }
+
+    func testRefreshSaysWhatsHereNow() throws {
+        let found = try JSONValue.parse(Data(#"{"ffmpeg":true,"keynote":false,"pages":true,"numbers":false}"#.utf8))
+        XCTAssertEqual(Need.ffmpeg.isMet(by: found), true)
+        XCTAssertEqual(Need.keynote.isMet(by: found), false)
+        XCTAssertEqual(Need.pages.isMet(by: found), true)
+        XCTAssertNil(Need.speechLanguage.isMet(by: found), "only the helper can tell")
+    }
+
+    func testOnlyACompletePinDownloads() {
+        let good = #"{"version":"8.0.1","url":"https://github.com/o/r/releases/download/ffmpeg-8.0.1-1/ffmpeg-8.0.1-macos.zip","sha256":"\#(String(repeating: "a", count: 64))","size":62000000}"#
+        XCTAssertEqual(PinnedFFmpeg.parse(Data(good.utf8))?.version, "8.0.1")
+        let unpinned = #"{"version":"8.0.1","url":"","sha256":"","size":0}"#
+        XCTAssertNil(PinnedFFmpeg.parse(Data(unpinned.utf8)))
+        let plainHTTP = good.replacingOccurrences(of: "https://", with: "http://")
+        XCTAssertNil(PinnedFFmpeg.parse(Data(plainHTTP.utf8)))
+        let shortSum = good.replacingOccurrences(of: String(repeating: "a", count: 64), with: "abc")
+        XCTAssertNil(PinnedFFmpeg.parse(Data(shortSum.utf8)))
+    }
+}

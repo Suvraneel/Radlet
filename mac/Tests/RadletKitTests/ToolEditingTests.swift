@@ -302,3 +302,21 @@ final class JobValueTests: XCTestCase {
         XCTAssertEqual(p.detail, "Codes copied to the clipboard · 1 without")
     }
 }
+
+final class JobNeedsTests: XCTestCase {
+    @MainActor
+    func testFailedItemsSayWhatTheyNeed() throws {
+        let p = JobProgress()
+        p.reset(title: "x", total: 2)
+        let failed = #"{"event":"item_finished","job":1,"outcome":{"index":0,"inputs":["/a.mkv"],"status":"failed","error":{"code":"ffmpeg_missing","message":"FFmpeg isn't installed","need":"ffmpeg"},"bytes_in":1,"millis":1}}"#
+        let event = try XCTUnwrap(JobEvent(message: try JSONValue.parse(Data(failed.utf8))))
+        p.handle(event)
+        p.handle(event)
+        XCTAssertEqual(p.needs, ["ffmpeg"])
+        XCTAssertEqual(p.needing["ffmpeg"]?.map(\.path), ["/a.mkv", "/a.mkv"])
+        XCTAssertNil(p.needing["keynote"], "only the items that needed it")
+        p.reset(title: "y", total: 1)
+        XCTAssertEqual(p.needs, [])
+        XCTAssertEqual(p.needing, [:])
+    }
+}

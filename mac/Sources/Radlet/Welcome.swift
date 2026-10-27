@@ -439,7 +439,16 @@ private struct MediaPage: View {
             case false?:
                 VStack(alignment: .leading, spacing: 12) {
                     Label("FFmpeg isn't installed yet.", systemImage: "info.circle")
-                    Text("If you have Homebrew, paste this into Terminal:")
+                    if FFmpegInstaller.canInstall {
+                        Button("Install FFmpeg…") {
+                            InstallWindowController.shared.offer(.ffmpeg, task: nil) {
+                                model.checkFFmpeg(restart: false)
+                            }
+                        }
+                        Text("Or, with Homebrew, paste this into Terminal:")
+                    } else {
+                        Text("If you have Homebrew, paste this into Terminal:")
+                    }
                     HStack(spacing: 10) {
                         Text(Self.command)
                             .font(.system(.body, design: .monospaced))

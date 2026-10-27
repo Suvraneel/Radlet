@@ -343,6 +343,8 @@ final class AppState: ObservableObject {
         let temporary: Bool
         /// The results stand in for the originals (see Slot.replacesOriginal).
         let replaces: Bool
+        /// What ran, to run again on the files that needed something first.
+        let slot: Slot
     }
 
     func run(_ slot: Slot, files: [URL]) {
@@ -350,6 +352,24 @@ final class AppState: ObservableObject {
         if let quick = QuickAction(slot: slot) {
             Usage.shared.record(slot)
             runQuick(quick, slot: slot, files: files)
+            return
+        }
+        // Something to install first (FFmpeg, Keynote…). It may have been
+        // installed since the wheel was drawn (from the App Store, or with
+        // Homebrew in Terminal), so look again; otherwise offer it, then
+        // carry on as if it had been there all along.
+        if let need = slot.need {
+            Task { [self] in
+                if let found = try? await EngineClient.shared.refresh(), need.isMet(by: found) == true {
+                    Log.app("\(need.rawValue) is here now")
+                    if need == .ffmpeg { await checkEngine() }
+                    run(slot.unlocked, files: files)
+                    return
+                }
+                InstallWindowController.shared.offer(need, task: slot.plainLabel) { [weak self] in
+                    self?.run(slot.unlocked, files: files)
+                }
+            }
             return
         }
         // Tools with options (Crop, Compress, Split…) open their window
@@ -362,7 +382,8 @@ final class AppState: ObservableObject {
         let fromClipboard = clipboardFiles == Set(files.map(\.standardizedFileURL))
         clipboardFiles = nil
         let context = JobContext(generation: UUID(), toClipboard: fromClipboard,
-                                 temporary: ClipboardInput.isTemporary(files), replaces: slot.replacesOriginal)
+                                 temporary: ClipboardInput.isTemporary(files), replaces: slot.replacesOriginal,
+                                 slot: slot)
         let title = slot.jobTitle(files: files)
         let total = slot.isWholeSelection ? 1 : files.count
         let kind: JobProgress.ValueKind = slot.isCopyText ? .text
@@ -443,6 +464,17 @@ final class AppState: ObservableObject {
         if current, let text = record.clipboardText {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
+        }
+        // Items that failed for want of something this Mac can get: offer
+        // each thing, then try again the items that needed it.
+        if current {
+            for need in record.needs.compactMap(Need.init(rawValue:)) {
+                var seen = Set<URL>()
+                let again = (record.needing[need.rawValue] ?? []).filter { seen.insert($0).inserted }
+                InstallWindowController.shared.offer(need, task: context.slot.plainLabel) { [weak self] in
+                    if !again.isEmpty { self?.run(context.slot.unlocked, files: again) }
+                }
+            }
         }
         if Prefs.replaceOriginals && context.replaces && !context.temporary && !record.replaceable.isEmpty {
             // Recorded once the originals are in the Trash, so Undo can put

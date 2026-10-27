@@ -421,7 +421,9 @@ struct SlotLabel: View {
 
     var body: some View {
         let skin = look.skin
-        let color = hot ? look.hotText : look.text
+        // What needs installing first is quieter, with a small badge.
+        let locked = slot.need != nil
+        let color = hot ? look.hotText : locked ? look.textDim : look.text
         let title = Text(slot.label)
             .font(look.font(skin.labelSize))
             .tracking(skin.letterSpacing * skin.labelSize)
@@ -429,15 +431,31 @@ struct SlotLabel: View {
             if skin.labels == .icons {
                 Image(systemName: slot.symbol)
                     .font(.system(size: skin.labelSize + 4, weight: WheelLook.weight(skin.labelWeight)))
+                    .overlay(alignment: .bottomTrailing) {
+                        if let need = slot.need {
+                            Image(systemName: need.symbol)
+                                .font(.system(size: max(skin.labelSize - 2, 8), weight: .semibold))
+                                .foregroundStyle(look.accent)
+                                .offset(x: skin.labelSize * 0.55, y: skin.labelSize * 0.25)
+                        }
+                    }
             }
-            title
-                .textCase(skin.uppercase ? .uppercase : nil)
-                .lineLimit(2)
-                .minimumScaleFactor(0.6)
-                .multilineTextAlignment(.center)
+            HStack(spacing: 3) {
+                if skin.labels != .icons, let need = slot.need {
+                    Image(systemName: need.symbol)
+                        .font(.system(size: max(skin.labelSize - 3, 8), weight: .semibold))
+                        .foregroundStyle(look.accent)
+                }
+                title
+                    .textCase(skin.uppercase ? .uppercase : nil)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.6)
+                    .multilineTextAlignment(.center)
+            }
         }
         .frame(width: width)
         .foregroundStyle(color)
+        .accessibilityLabel(slot.need.map { "\(slot.label), \($0.badge)" } ?? slot.label)
     }
 }
 
@@ -584,6 +602,13 @@ package struct WheelView: View {
                         Text(preset.label)
                             .font(look.font(11, weight: 600))
                             .foregroundStyle(look.accent)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                    if let need = base.need {
+                        Text(need.badge)
+                            .font(look.font(10, weight: 400))
+                            .foregroundStyle(look.textDim)
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
                     }
