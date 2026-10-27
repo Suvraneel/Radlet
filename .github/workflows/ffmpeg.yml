@@ -1,0 +1,205 @@
+name: FFmpeg
+
+# Builds the LGPL FFmpeg and ffprobe that the app downloads for Macs
+# without Homebrew (mac/scripts/build-ffmpeg.sh), for Apple silicon and
+# Intel, signs and notarizes them when the Developer ID secrets are set,
+# and publishes them as a release of their own, such as ffmpeg-8.0.1-1.
+# The release is never marked latest, so app updates and the website's
+# download button don't change. Run it from the Actions tab, then pin the
+# result in the app and commit that:
+#
+#   mac/scripts/pin-ffmpeg.sh ffmpeg-8.0.1-1 <SHA-256 from the run's summary>
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag: ffmpeg-<FFmpeg version>-<build number>, such as ffmpeg-8.0.1-1"
+        required: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ffmpeg-${{ inputs.tag }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Build and publish
+    runs-on: macos-15
+    timeout-minutes: 150
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Check the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ ! "$TAG" =~ ^ffmpeg-([0-9]+(\.[0-9]+)*)-[0-9]+$ ]]; then
+            echo "::error::Use a tag such as ffmpeg-8.0.1-1, not $TAG."
+            exit 1
+          fi
+          version="${BASH_REMATCH[1]}"
+          if ! grep -q "FFmpeg/archive/refs/tags/n$version.tar.gz" mac/scripts/build-ffmpeg.sh; then
+            echo "::error::build-ffmpeg.sh doesn't build FFmpeg $version."
+            exit 1
+          fi
+          # A published build is never replaced: the app pins its SHA-256.
+          # Rebuild under the next build number instead.
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "::error::$TAG is already published. Use the next build number, such as ${TAG%-*}-$((${TAG##*-} + 1))."
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Install the build tools
+        run: |
+          brew install meson ninja nasm pkgconf
+          # To check the Intel build by running it.
+          sudo softwareupdate --install-rosetta --agree-to-license \
+            || echo "::warning::Rosetta didn't install, so the Intel build won't be run."
+
+      - uses: actions/cache@v4
+        with:
+          path: target/ffmpeg-build/src
+          key: ffmpeg-sources-${{ hashFiles('mac/scripts/build-ffmpeg.sh') }}
+
+      - name: Build for Apple silicon
+        run: mac/scripts/build-ffmpeg.sh arm64
+
+      - name: Build for Intel
+        run: mac/scripts/build-ffmpeg.sh x86_64
+
+      - name: Make universal binaries
+        run: |
+          mkdir -p dist/ffmpeg
+          for tool in ffmpeg ffprobe; do
+            lipo -create "target/ffmpeg/arm64/$tool" "target/ffmpeg/x86_64/$tool" -output "dist/ffmpeg/$tool"
+            lipo "dist/ffmpeg/$tool" -verify_arch arm64 x86_64
+          done
+          version_line="$(dist/ffmpeg/ffmpeg -hide_banner -version)"
+          echo "${version_line%%$'\n'*}"
+          if intel="$(arch -x86_64 dist/ffmpeg/ffmpeg -hide_banner -version 2>&1)"; then
+            echo "${intel%%$'\n'*} (Intel)"
+          else
+            echo "::warning::Rosetta isn't here to try the Intel build."
+          fi
+
+      - name: Load the Developer ID certificate
+        env:
+          CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          if [[ -z "$CERTIFICATE_P12" ]]; then
+            echo "::notice::There's no MACOS_CERTIFICATE_P12 secret, so FFmpeg is ad-hoc signed and not notarized."
+            exit 0
+          fi
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          keychain_password="$(uuidgen)"
+          security create-keychain -p "$keychain_password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_password" "$keychain"
+          printf '%s' "$CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain" > /dev/null
+          existing="$(security list-keychains -d user | tr -d '"' | xargs)"
+          # shellcheck disable=SC2086
+          security list-keychains -d user -s "$keychain" $existing
+          identity="$(security find-identity -v -p codesigning "$keychain" \
+            | sed -nE 's/.*"(Developer ID Application: [^"]+)".*/\1/p' | head -1)"
+          if [[ -z "$identity" ]]; then
+            echo "::error::The certificate in MACOS_CERTIFICATE_P12 has no Developer ID Application identity."
+            exit 1
+          fi
+          echo "SIGN_IDENTITY=$identity" >> "$GITHUB_ENV"
+
+      - name: Sign
+        run: |
+          if [[ -n "${SIGN_IDENTITY:-}" ]]; then
+            codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" dist/ffmpeg/ffmpeg dist/ffmpeg/ffprobe
+          else
+            codesign --force --sign - dist/ffmpeg/ffmpeg dist/ffmpeg/ffprobe
+          fi
+          codesign --verify --strict dist/ffmpeg/ffmpeg dist/ffmpeg/ffprobe
+
+      - name: Add the licences and the list of sources
+        run: |
+          cp target/ffmpeg-build/arm64/ffmpeg/COPYING.LGPLv2.1 dist/ffmpeg/LICENSE.txt
+          cp -R target/ffmpeg/arm64/licenses dist/ffmpeg/licenses
+          {
+            echo "FFmpeg $VERSION for Radlet: LGPL v2.1 or later."
+            echo "Built by mac/scripts/build-ffmpeg.sh at $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA"
+            echo "from these sources (name, URL, SHA-256):"
+            echo
+            sed -nE 's/^  "([a-z0-9]+)\|([^|]+)\|([0-9a-f]{64})"$/\1  \2  \3/p' mac/scripts/build-ffmpeg.sh
+          } > dist/ffmpeg/SOURCES.txt
+          cat dist/ffmpeg/SOURCES.txt
+
+      - name: Pack
+        run: |
+          zip="dist/ffmpeg-$VERSION-macos.zip"
+          ditto -c -k dist/ffmpeg "$zip"
+          echo "ZIP=$zip" >> "$GITHUB_ENV"
+
+      - name: Notarize
+        if: env.SIGN_IDENTITY != ''
+        env:
+          NOTARY_KEY_P8: ${{ secrets.NOTARY_KEY_P8 }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          if [[ -z "$NOTARY_KEY_P8" || -z "$NOTARY_KEY_ID" || -z "$NOTARY_ISSUER_ID" ]]; then
+            echo "::error::FFmpeg is Developer ID signed, but NOTARY_KEY_P8, NOTARY_KEY_ID or NOTARY_ISSUER_ID is missing."
+            exit 1
+          fi
+          key="$RUNNER_TEMP/notary.p8"
+          printf '%s\n' "$NOTARY_KEY_P8" > "$key"
+          trap 'rm -f "$key"' EXIT
+          # Plain programs can't be stapled; Gatekeeper finds the ticket online.
+          result="$(xcrun notarytool submit "$ZIP" --key "$key" --key-id "$NOTARY_KEY_ID" \
+            --issuer "$NOTARY_ISSUER_ID" --wait --timeout 1h --output-format json)"
+          echo "$result"
+          status="$(jq -r .status <<< "$result")"
+          if [[ "$status" != Accepted ]]; then
+            id="$(jq -r ".id // empty" <<< "$result")"
+            if [[ -n "$id" ]]; then
+              xcrun notarytool log "$id" --key "$key" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" || true
+            fi
+            echo "::error::Notarization came back $status."
+            exit 1
+          fi
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sum="$(shasum -a 256 "$ZIP" | cut -d' ' -f1)"
+          notes="FFmpeg $VERSION and ffprobe for Radlet, for Apple silicon and Intel Macs (LGPL v2.1 or later). The app downloads this when you choose a conversion that needs FFmpeg and Homebrew isn't installed. SOURCES.txt inside lists every source and its SHA-256.
+
+          SHA-256: \`$sum\`"
+          gh release create "$TAG" "$ZIP" --repo "$GITHUB_REPOSITORY" --title "FFmpeg $VERSION for Radlet" \
+            --notes "$notes" --target "$GITHUB_SHA" --prerelease --latest=false
+          {
+            echo "### FFmpeg $VERSION"
+            echo
+            echo "SHA-256 \`$sum\`, $(stat -f %z "$ZIP") bytes. Pin it in the app with:"
+            echo
+            echo "    mac/scripts/pin-ffmpeg.sh $TAG $sum"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove the signing keychain
+        if: always()
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          if [[ -f "$keychain" ]]; then
+            security delete-keychain "$keychain" || true
+          fi

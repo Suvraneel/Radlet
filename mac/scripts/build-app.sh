@@ -65,6 +65,8 @@ cp "$HELPER" "$APP/Contents/Helpers/radlet"
 cp "$BIN_DIR/radlet-vision" "$APP/Contents/Helpers/radlet-vision"
 cp THIRD_PARTY.md "$APP/Contents/Resources/Licenses/"
 cp mac/Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+# Where the app's Install FFmpeg downloads from, and its SHA-256 (pin-ffmpeg.sh).
+cp mac/Resources/ffmpeg-build.json "$APP/Contents/Resources/ffmpeg-build.json"
 
 if [[ "${SKIP_PDFIUM:-0}" != "1" ]]; then
   libs=()
