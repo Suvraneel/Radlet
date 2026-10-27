@@ -100,8 +100,9 @@ func translate(_ texts: [String], from: String, to: String) throws -> [String] {
     case .installed:
         break
     case .supported:
-        throw Failure.failed("Download \(names.0) and \(names.1) in System Settings → General → "
-                             + "Language & Region → Translation Languages, then try again.")
+        throw Failure.needs("translation_language",
+                            "Download \(names.0) and \(names.1) in System Settings → General → "
+                            + "Language & Region → Translation Languages, then try again.")
     case .unsupported:
         throw Failure.failed("This Mac can't translate \(names.0) into \(names.1).")
     @unknown default:

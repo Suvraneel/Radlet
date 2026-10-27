@@ -36,8 +36,10 @@
 //   radlet-vision selftest                         checks this Mac can do them
 //   radlet-vision --version
 //
-// Exit 0 means done, 3 means nothing was found (no text, no subject), and
-// anything else is a failure. The last line on stderr explains. Lines like
+// Exit 0 means done, 3 means nothing was found (no text, no subject), 4
+// means something must be downloaded first (stderr starts with a line
+// "need speech_language" or "need translation_language"), and anything
+// else is a failure. The last line on stderr explains. Lines like
 // "progress 0.42" on stdout report progress. The engine side of this
 // contract is crates/radlet-core/src/engines/vision.rs.
 
@@ -55,6 +57,9 @@ enum Failure: Error {
     /// Ran fine, found nothing: exit 3.
     case nothingFound(String)
     case failed(String)
+    /// Something must be downloaded first (exit 4): what, for the engine
+    /// ("speech_language", "translation_language"), and why, for people.
+    case needs(String, String)
 }
 
 func report(_ f: Double) {
@@ -495,8 +500,9 @@ func speechRecognizer(_ tag: String) throws -> SFSpeechRecognizer {
     }
     guard let recognizer else { throw Failure.failed("Speech recognition doesn't support \(name) yet.") }
     guard recognizer.supportsOnDeviceRecognition else {
-        throw Failure.failed("On-device speech recognition for \(name) isn't on this Mac yet. "
-                             + "Turn on Dictation for \(name) in System Settings → Keyboard to download it.")
+        throw Failure.needs("speech_language",
+                            "On-device speech recognition for \(name) isn't on this Mac yet. "
+                            + "Turn on Dictation for \(name) in System Settings → Keyboard to download it.")
     }
     return recognizer
 }
@@ -666,6 +672,8 @@ func selftest() throws {
               + (allowed ? "" : " (allow it once with Make Subtitles in Radlet)"))
     } catch Failure.failed(let message) {
         print("speech: unavailable here (\(message))")
+    } catch Failure.needs(_, let message) {
+        print("speech: unavailable here (\(message))")
     }
 }
 
@@ -714,6 +722,9 @@ do {
 } catch Failure.failed(let message) {
     FileHandle.standardError.write(Data((message + "\n").utf8))
     exit(1)
+} catch Failure.needs(let what, let message) {
+    FileHandle.standardError.write(Data(("need \(what)\n" + message + "\n").utf8))
+    exit(4)
 } catch {
     FileHandle.standardError.write(Data((error.localizedDescription + "\n").utf8))
     exit(1)
