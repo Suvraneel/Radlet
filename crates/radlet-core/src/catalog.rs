@@ -7,6 +7,7 @@ use std::sync::OnceLock;
 use serde::Serialize;
 
 use crate::engines::avmedia;
+use crate::error::Need;
 use crate::format::{Category, Format};
 use crate::ops::{Action, CompressLevel, IconKind, Rect, RedactStyle, SplitMode, Step};
 use crate::recipe::Recipe;
@@ -149,9 +150,23 @@ fn find_tool(name: &str, env_key: &str) -> Option<PathBuf> {
     }
     dirs.push("/opt/homebrew/bin".into());
     dirs.push("/usr/local/bin".into());
+    // Where the app installs Radlet's own FFmpeg build, which holds only
+    // these two.
+    if matches!(name, "ffmpeg" | "ffprobe") {
+        if let Some(dir) = installed_tools_dir() {
+            dirs.push(dir);
+        }
+    }
     dirs.into_iter()
         .map(|d| d.join(name))
         .find(|p| is_executable(p))
+}
+
+/// Where the app puts programs it installs for Radlet (its FFmpeg build):
+/// `~/Library/Application Support/Radlet/FFmpeg`.
+pub fn installed_tools_dir() -> Option<PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    Some(Path::new(&home).join("Library/Application Support/Radlet/FFmpeg"))
 }
 
 /// PDFium: `RADLET_PDFIUM`, or next to the running binary (the app bundles
@@ -452,6 +467,11 @@ pub struct Slot {
     /// through a window, and works for every file the slot does.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub variants: Vec<Variant>,
+    /// Set on a slot shown although it can't run yet, because this Mac
+    /// lacks something it can get (FFmpeg, or Keynote, Pages or Numbers).
+    /// The app offers to get it, then runs `action`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub needs: Option<Need>,
 }
 
 /// One preset of a slot: a short label for the wheel ("Q 95", "50 %"), a
@@ -604,6 +624,7 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
             action: Action::convert(t),
             window: None,
             variants,
+            needs: None,
         });
     }
 
@@ -617,6 +638,7 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
             action,
             window,
             variants: Vec::new(),
+            needs: None,
         };
     let pdfs = every(&|f| f == Pdf);
     let single = formats.len() == 1;
@@ -1412,6 +1434,7 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
                     action: r.action(),
                     window: None,
                     variants: Vec::new(),
+                    needs: None,
                 });
             }
         }
@@ -1451,6 +1474,7 @@ pub fn inside_slots(inside: &[Format], caps: &Capabilities) -> Vec<Slot> {
         },
         window: None,
         variants: Vec::new(),
+        needs: None,
     };
     let image = |f: Format| inside_kind(Category::Image, f, caps);
     for to in [Jpeg, Png, Webp] {
@@ -1522,10 +1546,79 @@ pub fn wheel_for(
                 },
                 window: Some("unzip_password"),
                 variants: Vec::new(),
+                needs: None,
             },
         );
     }
     w
+}
+
+/// Capabilities with something more: FFmpeg, or one of Apple's apps.
+fn with_need(caps: &Capabilities, need: Need) -> Capabilities {
+    let mut more = caps.clone();
+    match need {
+        Need::Ffmpeg => {
+            more.ffmpeg = Some("ffmpeg".into());
+            more.ffprobe = Some("ffprobe".into());
+        }
+        Need::Keynote => more.keynote = true,
+        Need::Pages => more.pages = true,
+        Need::Numbers => more.numbers = true,
+        Need::SpeechLanguage | Need::TranslationLanguage => {}
+    }
+    more
+}
+
+/// What, if this Mac got it, would let `step` run on `f`: FFmpeg first,
+/// then (on a Mac) Keynote, Pages or Numbers.
+pub fn would_accept_with(step: &Step, f: Format, caps: &Capabilities) -> Option<Need> {
+    let mut options = Vec::new();
+    if caps.ffmpeg.is_none() {
+        options.push(Need::Ffmpeg);
+    }
+    if cfg!(target_os = "macos") {
+        options.extend([Need::Keynote, Need::Pages, Need::Numbers]);
+    }
+    options
+        .into_iter()
+        .find(|&need| step_accepts(step, f, &with_need(caps, need)))
+}
+
+/// Adds what the selection could do with something this Mac can get: a
+/// slot for each conversion or tool that needs FFmpeg, or (with `mac`)
+/// Keynote, Pages or Numbers, marked with what it needs, after the slots
+/// that work now. The app shows them with a badge and offers the install.
+pub fn add_installable(w: &mut Wheel, formats: &[Option<Format>], caps: &Capabilities, mac: bool) {
+    if formats.is_empty() {
+        return;
+    }
+    let mut options: Vec<Need> = Vec::new();
+    if caps.ffmpeg.is_none() {
+        options.push(Need::Ffmpeg);
+    }
+    if mac {
+        for (need, have) in [
+            (Need::Keynote, caps.keynote),
+            (Need::Pages, caps.pages),
+            (Need::Numbers, caps.numbers),
+        ] {
+            if !have {
+                options.push(need);
+            }
+        }
+    }
+    for need in options {
+        let could = wheel(formats, &with_need(caps, need), &[]);
+        for (have, extra) in [(&mut w.convert, could.convert), (&mut w.tools, could.tools)] {
+            for mut slot in extra {
+                if have.iter().any(|s| s.id == slot.id) {
+                    continue;
+                }
+                slot.needs = Some(need);
+                have.push(slot);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1537,6 +1630,54 @@ mod tests {
             vision: Some("/x/radlet-vision".into()),
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn installable_slots_say_what_they_need() {
+        let mac = Capabilities {
+            vision: Some("/x/radlet-vision".into()),
+            avfoundation: true,
+            ..Default::default()
+        };
+        let need = |w: &Wheel, id: &str| {
+            w.convert
+                .iter()
+                .chain(&w.tools)
+                .find(|s| s.id == id)
+                .map(|s| s.needs)
+        };
+        // Matroska needs FFmpeg for everything.
+        let mut w = wheel(&[Some(Mkv)], &mac, &[]);
+        assert!(w.convert.is_empty());
+        add_installable(&mut w, &[Some(Mkv)], &mac, true);
+        assert_eq!(need(&w, "to_mp4"), Some(Some(Need::Ffmpeg)));
+        // What works now stays as it is; the rest is added after it.
+        let mut w = wheel(&[Some(Mov)], &mac, &[]);
+        let before = w.convert.len();
+        add_installable(&mut w, &[Some(Mov)], &mac, true);
+        assert_eq!(need(&w, "to_mp4"), Some(None));
+        assert_eq!(need(&w, "to_webm"), Some(Some(Need::Ffmpeg)));
+        assert_eq!(need(&w, "make_gif"), Some(Some(Need::Ffmpeg)));
+        assert!(w.convert[..before].iter().all(|s| s.needs.is_none()));
+        assert!(serde_json::to_string(&w)
+            .unwrap()
+            .contains(r#""needs":"ffmpeg""#));
+        // Pages documents need Pages; only a Mac offers it.
+        let mut w = wheel(&[Some(Pages)], &mac, &[]);
+        add_installable(&mut w, &[Some(Pages)], &mac, true);
+        assert_eq!(need(&w, "to_pdf"), Some(Some(Need::Pages)));
+        let mut w = wheel(&[Some(Pages)], &mac, &[]);
+        add_installable(&mut w, &[Some(Pages)], &mac, false);
+        assert_eq!(need(&w, "to_pdf"), None);
+        // With FFmpeg, video has nothing left to install.
+        let both = Capabilities {
+            ffmpeg: Some("/x/ffmpeg".into()),
+            ffprobe: Some("/x/ffprobe".into()),
+            ..mac.clone()
+        };
+        let mut w = wheel(&[Some(Mkv)], &both, &[]);
+        add_installable(&mut w, &[Some(Mkv)], &both, true);
+        assert!(w.convert.iter().chain(&w.tools).all(|s| s.needs.is_none()));
     }
 
     #[test]

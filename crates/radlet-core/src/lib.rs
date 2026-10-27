@@ -22,7 +22,7 @@ pub mod privacy;
 pub mod recipe;
 
 pub use catalog::{Capabilities, Slot, Wheel};
-pub use error::{Error, ErrorInfo, Result};
+pub use error::{Error, ErrorInfo, Need, Result};
 pub use format::{Category, Format};
 pub use job::{Event, Executor, Outcome, RunOptions, Status, Summary, Unit};
 pub use naming::OutputLocation;

@@ -40,6 +40,15 @@ impl App {
         }
     }
 
+    /// What the app offers to get.
+    pub fn need(self) -> crate::error::Need {
+        match self {
+            App::Keynote => crate::error::Need::Keynote,
+            App::Pages => crate::error::Need::Pages,
+            App::Numbers => crate::error::Need::Numbers,
+        }
+    }
+
     pub fn name(self) -> &'static str {
         match self {
             App::Keynote => "Keynote",
@@ -294,11 +303,14 @@ pub fn convert(
         to: to.label().into(),
     })?;
     if !available(caps, app) {
-        return Err(Error::Missing(format!(
-            "{} files need {} on this Mac",
-            from.label(),
-            app.name()
-        )));
+        return Err(Error::Needs {
+            need: app.need(),
+            message: format!(
+                "{} files need {}, free from Apple in the App Store",
+                from.label(),
+                app.name()
+            ),
+        });
     }
     if to == Key || app.exports().iter().any(|(f, _)| *f == to) {
         return export(app, input, to, out, cancel);

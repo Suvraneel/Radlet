@@ -49,11 +49,14 @@ pub fn join_media(inputs: &[PathBuf], ctx: &mut Context<'_>) -> Result<Produced>
             .zip(&formats)
             .find(|(_, f)| !avmedia::reads(**f))
         {
-            return Err(Error::Missing(format!(
-                "joining {} files needs FFmpeg (brew install ffmpeg); {} is one",
-                f.label(),
-                display_name(p)
-            )));
+            return Err(Error::Needs {
+                need: crate::error::Need::Ffmpeg,
+                message: format!(
+                    "joining {} files needs FFmpeg (brew install ffmpeg); {} is one",
+                    f.label(),
+                    display_name(p)
+                ),
+            });
         }
         avmedia::join(
             ctx.caps,
@@ -160,10 +163,13 @@ pub fn burn_subtitles(inputs: &[PathBuf], ctx: &mut Context<'_>) -> Result<Produ
                      Install one that has it (brew install ffmpeg)"
                         .into(),
                 ),
-                None if native => Error::Missing(format!(
-                    "drawing subtitles into {} video needs FFmpeg (brew install ffmpeg)",
-                    vf.label()
-                )),
+                None if native => Error::Needs {
+                    need: crate::error::Need::Ffmpeg,
+                    message: format!(
+                        "drawing subtitles into {} video needs FFmpeg (brew install ffmpeg)",
+                        vf.label()
+                    ),
+                },
                 None => Error::FfmpegMissing,
             });
         }

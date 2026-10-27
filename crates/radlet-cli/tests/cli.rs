@@ -342,8 +342,13 @@ impl Helper {
     }
 
     fn start_with(args: &[&str]) -> Helper {
+        Helper::start_env(args, &[])
+    }
+
+    fn start_env(args: &[&str], env: &[(&str, &str)]) -> Helper {
         let mut child = Command::new(RADLET)
             .args(args)
+            .envs(env.iter().copied())
             .env(
                 "RADLET_LOADOUTS_DIR",
                 std::env::temp_dir().join("radlet-no-recipes"),
@@ -494,6 +499,50 @@ fn serve_protocol_end_to_end() {
         assert!(Instant::now() < deadline, "helper exits after shutdown");
         std::thread::sleep(Duration::from_millis(50));
     }
+}
+
+#[test]
+fn serve_offers_what_needs_installing() {
+    let dir = tempfile::tempdir().unwrap();
+    let mkv = dir.path().join("film.mkv");
+    std::fs::write(&mkv, [0x1A, 0x45, 0xDF, 0xA3, 0, 0, 0, 0]).unwrap();
+    let mut h = Helper::start_env(
+        &["serve"],
+        &[("RADLET_NO_FFMPEG", "1"), ("RADLET_NO_VISION", "1")],
+    );
+    let convert = |v: &Value| v["result"]["wheel"]["convert"].as_array().unwrap().clone();
+
+    // Only when asked: the wheel then lists what FFmpeg would add.
+    h.send(json!({"id": 1, "method": "inspect", "params": {"paths": [mkv]}}));
+    assert!(convert(&h.next()).is_empty());
+    h.send(json!({"id": 2, "method": "inspect", "params": {"paths": [mkv], "installs": true}}));
+    let slots = convert(&h.next());
+    let mp4 = slots
+        .iter()
+        .find(|s| s["id"] == "to_mp4")
+        .expect("MP4 offered");
+    assert_eq!(mp4["needs"], "ffmpeg");
+
+    // Running it anyway fails saying what it needs.
+    h.send(json!({"id": 3, "method": "run", "params": {"paths": [mkv], "action": mp4["action"]}}));
+    let events = h.until(|v| v["event"] == "job_finished");
+    let failed = events
+        .iter()
+        .find(|e| e["event"] == "item_finished")
+        .unwrap();
+    assert_eq!(failed["outcome"]["status"], "failed");
+    assert_eq!(failed["outcome"]["error"]["need"], "ffmpeg");
+
+    // After an install, the helper looks again.
+    h.send(json!({"id": 4, "method": "refresh"}));
+    let refreshed = h.until(|v| v["id"] == 4);
+    let found = &refreshed.last().unwrap()["result"];
+    assert_eq!(found["ffmpeg"], false);
+    for app in ["keynote", "pages", "numbers"] {
+        assert!(found[app].is_boolean(), "{app}");
+    }
+    h.send(json!({"id": 5, "method": "shutdown"}));
+    let _ = h.until(|v| v["id"] == 5);
 }
 
 #[test]

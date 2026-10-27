@@ -35,6 +35,9 @@ struct InspectParams {
     paths: Vec<PathBuf>,
     #[serde(default)]
     recipes_dir: Option<PathBuf>,
+    /// Also list what needs something this Mac can get, marked `needs`.
+    #[serde(default)]
+    installs: bool,
 }
 
 #[derive(Deserialize)]
@@ -115,6 +118,9 @@ pub fn serve(
     caps: &'static Capabilities,
     worker: Option<(PathBuf, Vec<String>)>,
 ) -> i32 {
+    // Replaced by `refresh` after the app installs something; jobs already
+    // running keep the capabilities they started with.
+    let mut caps: &'static Capabilities = caps;
     let out: Out = Arc::new(Mutex::new(output));
     let jobs: Arc<Mutex<HashMap<u64, Arc<AtomicBool>>>> = Arc::default();
     let next_job = AtomicU64::new(1);
@@ -182,7 +188,15 @@ pub fn serve(
                     })
                     .collect();
                 let (recipes, recipe_errors) = all_recipes(p.recipes_dir.as_ref());
-                let wheel = catalog::wheel_for(&p.paths, &detected, caps, &recipes);
+                let mut wheel = catalog::wheel_for(&p.paths, &detected, caps, &recipes);
+                if p.installs {
+                    catalog::add_installable(
+                        &mut wheel,
+                        &detected,
+                        caps,
+                        cfg!(target_os = "macos"),
+                    );
+                }
                 send(
                     &out,
                     &json!({ "id": id, "result": { "files": files, "wheel": wheel, "recipe_errors": recipe_errors } }),
@@ -292,6 +306,19 @@ pub fn serve(
                     .map(|c| c.store(true, Ordering::Relaxed))
                     .is_some();
                 send(&out, &json!({ "id": id, "result": { "cancelled": found } }));
+            }
+            "refresh" => {
+                // Finds programs and apps installed since this started.
+                caps = Box::leak(Box::new(Capabilities::detect()));
+                send(
+                    &out,
+                    &json!({ "id": id, "result": {
+                        "ffmpeg": caps.ffmpeg.is_some(),
+                        "keynote": caps.keynote,
+                        "pages": caps.pages,
+                        "numbers": caps.numbers,
+                    } }),
+                );
             }
             "shutdown" => {
                 send(&out, &json!({ "id": id, "result": {} }));

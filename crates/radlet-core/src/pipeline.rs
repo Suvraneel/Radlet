@@ -163,6 +163,25 @@ fn validate_chain(steps: &[Step], from: Format, caps: &Capabilities) -> Result<F
     let mut fmt = from;
     for step in steps {
         if !catalog::step_accepts(step, fmt, caps) {
+            // Something this Mac can get would do it: say so, so the app
+            // can offer it.
+            if let Some(need) = catalog::would_accept_with(step, fmt, caps) {
+                return Err(match need {
+                    crate::error::Need::Ffmpeg => Error::FfmpegMissing,
+                    need => Error::Needs {
+                        need,
+                        message: format!(
+                            "{} files need {} on this Mac, free from Apple in the App Store",
+                            fmt.label(),
+                            match need {
+                                crate::error::Need::Keynote => "Keynote",
+                                crate::error::Need::Pages => "Pages",
+                                _ => "Numbers",
+                            }
+                        ),
+                    },
+                });
+            }
             return Err(match step {
                 Step::Convert { to, .. } => Error::UnsupportedRoute {
                     from: fmt.label().into(),

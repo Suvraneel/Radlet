@@ -51,6 +51,9 @@ use crate::error::{Error, Result};
 
 /// Exit status meaning "ran fine, found nothing".
 const NOTHING_FOUND: i32 = 3;
+/// The helper's exit code when something must be downloaded first; stderr
+/// then has a line "need <what>" (see [`crate::error::Need::from_id`]).
+const NEEDS: i32 = 4;
 
 /// Recognised text of an image or PDF, ready to save or copy.
 pub fn text(
@@ -310,11 +313,9 @@ pub(crate) fn run_args(
             None => std::thread::sleep(Duration::from_millis(50)),
         }
     };
-    let message = || {
-        stderr_tail
-            .join()
-            .unwrap_or_default()
-            .lines()
+    let tail = move || stderr_tail.join().unwrap_or_default();
+    let last_line = |t: &str| {
+        t.lines()
             .rev()
             .find(|l| !l.trim().is_empty())
             .map(|l| l.trim().to_string())
@@ -327,10 +328,63 @@ pub(crate) fn run_args(
         }
         Some(0) => Err(Error::Helper("the Vision helper wrote nothing".into())),
         Some(NOTHING_FOUND) => Err(Error::NothingToDo(
-            message().unwrap_or_else(|| "nothing found".into()),
+            last_line(&tail()).unwrap_or_else(|| "nothing found".into()),
         )),
-        _ => Err(Error::Helper(message().unwrap_or_else(|| {
+        // Something to download first: a line "need <what>", then why.
+        Some(NEEDS) => {
+            let tail = tail();
+            let mut lines = tail.lines().map(str::trim).filter(|l| !l.is_empty());
+            let need = lines
+                .clone()
+                .find_map(|l| l.strip_prefix("need "))
+                .and_then(crate::error::Need::from_id);
+            let why = lines
+                .rfind(|l| !l.starts_with("need "))
+                .unwrap_or("something needs downloading first")
+                .to_string();
+            Err(match need {
+                Some(need) => Error::Needs { need, message: why },
+                None => Error::Helper(why),
+            })
+        }
+        _ => Err(Error::Helper(last_line(&tail()).unwrap_or_else(|| {
             format!("the Vision helper stopped ({status})")
         }))),
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+
+    fn helper(dir: &Path, body: &str) -> Capabilities {
+        use std::os::unix::fs::PermissionsExt;
+        let script = dir.join("radlet-vision");
+        std::fs::write(&script, format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+        Capabilities {
+            vision: Some(script),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn downloads_come_back_as_needs() {
+        let dir = tempfile::tempdir().unwrap();
+        let out = dir.path().join("out");
+        let cancel = AtomicBool::new(false);
+        let caps = helper(
+            dir.path(),
+            "echo 'need speech_language' >&2\necho 'Turn on Dictation for French.' >&2\nexit 4",
+        );
+        let err = run_args(&caps, &[OsStr::new("x")], &out, &cancel, &mut |_| {}).unwrap_err();
+        assert_eq!(err.need(), Some(crate::error::Need::SpeechLanguage));
+        assert_eq!(err.to_string(), "Turn on Dictation for French.");
+        assert_eq!(err.info().code, "needs");
+        // An unknown need is still a plain failure.
+        let caps = helper(dir.path(), "echo 'need moon' >&2\necho 'odd' >&2\nexit 4");
+        let err = run_args(&caps, &[OsStr::new("x")], &out, &cancel, &mut |_| {}).unwrap_err();
+        assert_eq!(err.need(), None);
+        assert_eq!(err.to_string(), "odd");
     }
 }
