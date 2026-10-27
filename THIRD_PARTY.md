@@ -6,8 +6,14 @@ Radlet's own code is original. It depends on the following open-source component
 
 | Crate | Used for | Licence |
 | --- | --- | --- |
-| image | Decoding and encoding PNG, JPEG, GIF, BMP, TIFF, ICO, TGA, QOI, lossless WebP | MIT OR Apache-2.0 |
-| webp / libwebp-sys (bundles Google libwebp) | Lossy WebP encoding | MIT OR Apache-2.0; libwebp BSD-3-Clause |
+| image | Decoding and encoding PNG, JPEG, GIF, BMP, TIFF, ICO, TGA, QOI, lossless WebP; animation frames | MIT OR Apache-2.0 |
+| ravif / rav1e (through image) | AVIF encoding | BSD-3-Clause; rav1e BSD-2-Clause |
+| rayon | Encoding AVIF on every core | MIT OR Apache-2.0 |
+| webp / libwebp-sys (bundles Google libwebp) | Lossy and animated WebP encoding | MIT OR Apache-2.0 (libwebp-sys MIT); libwebp BSD-3-Clause |
+| zune-jpegxl / zune-core | JPEG XL encoding | MIT OR Apache-2.0 OR Zlib |
+| png | Animated PNG (APNG) encoding | MIT OR Apache-2.0 |
+| brotli | WOFF2 web fonts | BSD-3-Clause AND MIT |
+| rusqlite / libsqlite3-sys (bundles SQLite) | Reading SQLite databases | MIT; SQLite is in the public domain |
 | lopdf | Building, merging and cleaning PDFs; text extraction | MIT |
 | flate2 / miniz_oxide | PDF stream compression | MIT OR Apache-2.0 |
 | pulldown-cmark | Reading Markdown | MIT |
@@ -21,8 +27,10 @@ Radlet's own code is original. It depends on the following open-source component
 | libc | Process-group signalling on macOS and Linux; local time for archive dates | MIT OR Apache-2.0 |
 | resvg / usvg / tiny-skia (with fontdb and rustybuzz for text) | Drawing SVGs into pixels | Apache-2.0 OR MIT; tiny-skia BSD-3-Clause |
 | svg2pdf / pdf-writer | SVG to vector PDF | MIT OR Apache-2.0 |
-| zip | Making and extracting ZIP archives; reading Word files | MIT |
-| quick-xml | Reading Word documents, XML and TTML subtitles | MIT |
+| zip | Making and extracting ZIP archives (with AES encryption); reading Word, PowerPoint and EPUB files | MIT |
+| aes, pbkdf2, hmac, sha1 (through zip) | ZIP passwords | MIT OR Apache-2.0 |
+| lzma-rust2, zstd / zstd-sys (bundles Zstandard), deflate64 (through zip) | LZMA, XZ, Zstandard and Deflate64 ZIP entries | Apache-2.0; BSD-3-Clause; MIT |
+| quick-xml | Reading Word, PowerPoint and EPUB documents, XML and TTML subtitles | MIT |
 | csv | Reading and writing CSV and TSV | Unlicense OR MIT |
 | calamine | Reading Excel workbooks | MIT |
 | rust_xlsxwriter | Writing Excel workbooks | MIT OR Apache-2.0 |
@@ -43,10 +51,11 @@ A shipped app should include these notices in an About → Acknowledgements scre
 ## External programs
 
 - **FFmpeg / FFprobe.** Optional. Radlet runs them as separate programs and doesn't link them. If a release bundles them, it must be an **LGPL** build (no `--enable-gpl` or `--enable-nonfree`), shipped with its licence and a link to its source.
-- **sips.** Part of macOS. Used for HEIC, AVIF, camera RAW, PSD, JPEG XL and JPEG 2000.
+- **sips.** Part of macOS. Used for HEIC, camera RAW, PSD and JPEG 2000.
 - **textutil.** Part of macOS. Used to read Word 97 (.doc) and OpenDocument (.odt) files.
 - **tar (bsdtar).** Part of macOS (libarchive, BSD licence). Used for 7-Zip, RAR, TAR and ISO archives, and to pack .tar.gz.
+- **osascript.** Part of macOS. Asks Keynote, Pages and Numbers (when installed) to export their documents.
 
 ## Apple frameworks
 
-AppKit, SwiftUI, ServiceManagement, UniformTypeIdentifiers, PDFKit, AVFoundation, Core Image, Core Text, Vision, Speech and Translation are part of macOS and aren't redistributed. Text recognition, barcodes and subject masks run on-device through Vision, speech recognition for subtitles through Speech, and audio and video conversion without FFmpeg through AVFoundation.
+AppKit, SwiftUI, ServiceManagement, UniformTypeIdentifiers, PDFKit, AVFoundation, Core Image, Core Text, Vision, Speech and Translation are part of macOS and aren't redistributed. Text recognition, barcodes, subject masks and page finding for scans run on-device through Vision, speech recognition for subtitles through Speech, and audio and video conversion, joining and burned-in subtitles without FFmpeg through AVFoundation and Core Image.

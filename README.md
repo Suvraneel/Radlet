@@ -83,15 +83,17 @@ Radlet is two programs. The **Mac app** (Swift) spots the drag, draws the wheel 
 
 | Kind | What you get |
 | --- | --- |
-| **Images** | JPEG, PNG, WebP, HEIC, TIFF, GIF, BMP, ICO, ICNS, TGA and QOI to each other or to PDF. AVIF, camera RAW (DNG, CR2, CR3, NEF, ARW, RAF, ORF, RW2 and more), Photoshop PSD, JPEG XL and JPEG 2000 read in too, through macOS. A picture converts to **Text** through text recognition. A PDF converted to JPEG, PNG, WebP or TIFF gives one image per page. |
+| **Images** | JPEG, PNG, WebP, HEIC, AVIF, JPEG XL, TIFF, GIF, BMP, ICO, ICNS, TGA and QOI to each other or to PDF. Camera RAW (DNG, CR2, CR3, NEF, ARW, RAF, ORF, RW2 and more), Photoshop PSD and JPEG 2000 read in too, through macOS. Moving pictures keep every frame and its timing between GIF, WebP and PNG (APNG), and a GIF becomes an MP4 or MOV video. A picture converts to **Text** through text recognition. A PDF converted to JPEG, PNG, WebP or TIFF gives one image per page. |
 | **SVG** | Treated as an image: PNG, JPEG, WebP, ICO and the rest, drawn sharp at 1×, 2× or 4× (at least 1024 px on its longest side by default). SVG to PDF stays vector. |
 | **Icons** | Any picture or SVG to a macOS ICNS (16 to 1024 px) or an ICO. |
-| **Documents** | TXT, Markdown, HTML, Word (.docx) and RTF convert to each other and to PDF, keeping headings, lists, quotes, code, tables, bold, italic and links. Word 97 (.doc) and OpenDocument (.odt) files read in too, through macOS. A PDF converts to **Word**, text, Markdown, HTML or RTF; on a Mac, scanned pages are read with text recognition first. |
-| **Data** | CSV, TSV, JSON and Excel (.xlsx) convert to each other (numbers stay numbers, IDs with leading zeros stay text); old Excel (.xls) and OpenDocument (.ods) workbooks read in too. A table also becomes a Markdown or HTML table, or a PDF. A workbook of several sheets becomes one CSV per sheet. JSON converts to and from **YAML**, **TOML** and **XML** (YAML anchors and merge keys are expanded; XML attributes become `@name` keys). |
-| **Audio and video** | Out of the box, through macOS: MP4 ↔ MOV (without re-encoding when the codecs allow), video or sound to M4A, WAV and AIFF, from MP4, MOV, M4A, MP3, WAV, AIFF and FLAC, plus trimming and compressing video. With FFmpeg: MP3, M4A, WAV, FLAC, AIFF, OGG, Opus and WMA; MP4, MOV, WebM, MKV, AVI, WMV and GIF. Video is remuxed without re-encoding when the codecs allow. |
+| **Documents** | TXT, Markdown, HTML, Word (.docx), RTF and **EPUB** e-books convert to each other and to PDF, keeping headings, lists, quotes, code, tables, bold, italic and links. Word 97 (.doc) and OpenDocument (.odt) files read in too, through macOS, and so does the text of **PowerPoint** slides (titles, bullets, tables and speaker notes). A PDF converts to **Word**, text, Markdown, HTML or RTF; on a Mac, scanned pages are read with text recognition first. |
+| **Keynote, Pages, Numbers** | When the apps are installed, Radlet asks them to export: Pages to PDF, Word, EPUB, RTF, text, Markdown or HTML; Numbers to PDF, Excel, CSV or JSON; Keynote to PDF, PowerPoint or text. PowerPoint files go to PDF or Keynote through Keynote too, so slides look as they were made. A document you have open stays open. |
+| **Data** | CSV, TSV, JSON and Excel (.xlsx) convert to each other (numbers stay numbers, IDs with leading zeros stay text); old Excel (.xls) and OpenDocument (.ods) workbooks read in too, and so do **SQLite** databases (a sheet per table, read without changing the file). A table also becomes a Markdown or HTML table, or a PDF. A workbook of several sheets becomes one CSV per sheet. JSON converts to and from **YAML**, **TOML** and **XML** (YAML anchors and merge keys are expanded; XML attributes become `@name` keys). |
+| **Audio and video** | Out of the box, through macOS: MP4 ↔ MOV (without re-encoding when the codecs allow), video or sound to M4A, WAV and AIFF, from MP4, MOV, M4A, MP3, WAV, AIFF and FLAC, plus trimming, compressing (also to fit a size), joining and subtitling video. With FFmpeg: MP3, M4A, WAV, FLAC, AIFF, OGG, Opus and WMA; MP4, MOV, WebM, MKV, AVI, WMV and GIF. Video is remuxed without re-encoding when the codecs allow. |
 | **Subtitles** | SRT, WebVTT, ASS/SSA, SubViewer (SBV) and TTML (DFXP) to each other or to plain text. |
+| **Fonts** | TTF and OTF to WOFF2 or WOFF for the web, and web fonts back to TTF or OTF. |
 | **Folders** | Drop a folder for **Images to JPEG**, **Documents to PDF**, **Audio to MP3** and so on. Results go into a copy of the folder ("Trip (JPEG)") with the same subfolders, and anything that couldn't be converted is listed in "Not converted.txt". |
-| **Archives** | A folder becomes a ZIP (or a .tar.gz) and a ZIP becomes a folder; on a Mac, so do 7-Zip, RAR, TAR (.tar.gz, .tar.bz2, .tar.xz) and ISO disc images. Extraction never writes outside its folder, skips links and `__MACOSX` clutter, and refuses archive bombs. |
+| **Archives** | A folder becomes a ZIP (or a .tar.gz) and a ZIP becomes a folder; on a Mac, so do 7-Zip, RAR, TAR (.tar.gz, .tar.bz2, .tar.xz) and ISO disc images. ZIPs made with Deflate, Deflate64, LZMA, XZ or Zstandard open, and so do locked ones with their password (**Unzip with password…**). Extraction never writes outside its folder, skips links and `__MACOSX` clutter, and refuses archive bombs. |
 
 ### Tools (Command)
 
@@ -101,12 +103,12 @@ Tools ending in "…" open a window first, with a live preview where it helps.
 | --- | --- |
 | **Images** | **Resize…** (percentage, longest side, exact width or height) · **Crop…** with aspect presets · **Redact…** with black boxes, pixelate or blur · Rotate · **Make icons** (favicons with the HTML for `<head>`, a macOS .icns or an iOS app icon set) |
 | **Compress…** | By quality level or to a target size such as 2 MB. **Smart** (the default) finds the smallest JPEG or WebP that still looks the same by measuring visual similarity (SSIM), instead of guessing a quality number. **Fit for** presets fill in sizes that get through email, Discord and WhatsApp. PDFs shrink too. |
-| **PDF** | **Split…** (every page, every few pages, or ranges like `1-3, 5, 8-`) · **Pages…** to reorder, delete and rotate · **Page numbers…** · **Watermark…** · **Password…** (AES-256; passwords are never saved or logged) · Combine into PDF · **Make searchable PDF** |
-| **Audio and video** | **Trim…** · **Make GIF…** · **Save stills** (ten evenly spaced frames) · **Even out volume** (-16 LUFS, as podcasts do) · **Make subtitles…** as SRT, WebVTT or a transcript, with on-device speech recognition |
+| **PDF** | **Split…** (every page, every few pages, or ranges like `1-3, 5, 8-`) · **Pages…** to reorder, delete and rotate · **Page numbers…** · **Watermark…** · **Password…** (AES-256; passwords are never saved or logged) · Combine into PDF · **Make searchable PDF** · **Black out text…**: words, phrases, email addresses, phone and card numbers removed for real, in the text, form fields and pictures of text, so nothing under a box can be copied · **Scan document**: photos of paper pages, each found, squared up and evened out, into one searchable PDF |
+| **Audio and video** | **Trim…** · **Make GIF…** · **Save stills** (ten evenly spaced frames) · **Even out volume** (-16 LUFS, as podcasts do) · **Make subtitles…** as SRT, WebVTT or a transcript, with on-device speech recognition · **Join clips** (videos into one MP4, each fitted into the first one's shape, or sound into one M4A) · **Burn in subtitles** (choose a video and its subtitle file; every player shows them) |
 | **Privacy** | **Privacy check…** shows what a file gives away before you share it: GPS location, camera and serial number, names, dates, editing apps, and hidden content such as earlier versions kept inside PDFs. **Remove Metadata** saves cleaned copies. **Hide faces** pixelates, blurs or blacks out every face Vision finds. |
 | **Text and AI** | **Copy text** from pictures and scanned PDFs · **Remove background** to a transparent PNG · **Translate…** documents and subtitles on device (macOS 26), keeping headings, lists, tables and timings · **Read code** (QR codes, and on a Mac barcodes too: EAN, UPC, Code 128, PDF417, Data Matrix, Aztec and more) / **Make QR code** |
 | **Documents and data** | **Word count** ("1,234 words · 6 min read") · Copy text · **Clean up text** · **Combine into one** · **Format JSON** / **Minify JSON**, keeping key order and numbers exactly · **Combine into workbook** (several tables into one .xlsx, a sheet each) |
-| **Folders** (on copies) | **Zip together** · **Merge folders** (identical files kept once) · **Flatten** · **Sort by kind** · **List contents** (a tree with sizes, or a CSV) · **Find duplicates** |
+| **Folders** (on copies) | **Zip together** · **Zip with password…** (AES-256) · **Merge folders** (identical files kept once) · **Flatten** · **Sort by kind** · **List contents** (a tree with sizes, or a CSV) · **Find duplicates** |
 | **Everyday** | **Rename…** with a pattern such as `Trip {date} {n}`, previewed first · **Copy path** · **Copy name** · **Open in Terminal** · **Share…** (AirDrop, Mail and Messages as presets) · **Copy image** · Copy SHA-256 |
 
 ### Around the wheel
@@ -126,11 +128,11 @@ Tools ending in "…" open a window first, with a live preview where it helps.
 | --- | --- |
 | Mac app | Swift 5.10 as a Swift package (no Xcode project), AppKit + SwiftUI, macOS 14+. It avoids SwiftUI macros so it builds with just the Command Line Tools. |
 | On-device intelligence | Apple's Vision (text, subject masks, faces), Speech (subtitles), Translation (macOS 26) and the system text engine for PDF layout, all in the `radlet-vision` helper |
-| Engine and CLI | Rust 2021 (1.88+): `clap`, `serde`, `image` + `webp`, `lopdf`, `resvg` + `svg2pdf`, `pulldown-cmark`, `calamine` + `rust_xlsxwriter`, `zip`, `qrcode` + `rqrr`, `kamadak-exif`, `yaml-rust2`, `toml`, `quick-xml` |
-| Media | AVFoundation (in the helper) for everyday audio and video, FFmpeg and ffprobe (optional, from Homebrew) for the rest; macOS `sips` for HEIC, AVIF, RAW, PSD, JPEG XL and JPEG 2000, `textutil` for Word 97 and ODT, and `tar` (libarchive) for 7-Zip, RAR, TAR and ISO; PDFium for PDF to image |
+| Engine and CLI | Rust 2021 (1.88+): `clap`, `serde`, `image` (with `ravif` for AVIF) + `webp`, `zune-jpegxl`, `png`, `lopdf`, `resvg` + `svg2pdf`, `pulldown-cmark`, `calamine` + `rust_xlsxwriter`, `rusqlite` (SQLite, built in), `zip`, `brotli`, `qrcode` + `rqrr`, `kamadak-exif`, `yaml-rust2`, `toml`, `quick-xml` |
+| Media | AVFoundation (in the helper) for everyday audio and video, FFmpeg and ffprobe (optional, from Homebrew) for the rest; macOS `sips` for HEIC, RAW, PSD and JPEG 2000, `textutil` for Word 97 and ODT, `tar` (libarchive) for 7-Zip, RAR, TAR and ISO, and AppleScript for Keynote, Pages and Numbers exports; PDFium for PDF to image |
 | Updates | [Sparkle](https://sparkle-project.org) (MIT), from an appcast attached to each GitHub release and checked with an EdDSA key |
 | Protocols | JSON lines between app and engine (`radlet serve`), Model Context Protocol for AI agents (`radlet mcp`) |
-| Quality | 200+ Rust tests and 90+ Swift tests, `rustfmt`, `clippy -D warnings`, `cargo deny` licence checks, GitHub Actions on Linux and macOS |
+| Quality | 240+ Rust tests and 90+ Swift tests, `rustfmt`, `clippy -D warnings`, `cargo deny` licence checks, GitHub Actions on Linux and macOS |
 
 ## Install
 
@@ -176,7 +178,9 @@ The PDF-to-image tests are skipped unless `RADLET_PDFIUM` points at a PDFium lib
 | `RADLET_VISION` | Path to the `radlet-vision` helper, when the engine isn't running inside the app |
 | `RADLET_HELPER` | Run the Swift app against this `radlet` binary, such as a debug build |
 | `RADLET_LOADOUTS_DIR` | Where loadouts live (default `~/Library/Application Support/Radlet/Loadouts/`) |
-| `RADLET_PASSWORD` | The password for `radlet protect` and `radlet unlock`, kept out of `ps` |
+| `RADLET_PASSWORD` | The password for `radlet protect`, `radlet unlock` and `radlet unzip`, kept out of `ps` |
+| `RADLET_ZIP_PASSWORD` | The password `radlet zip` locks a new ZIP with |
+| `RADLET_NO_IWORK` | Set to `1` to act as if Keynote, Pages and Numbers weren't installed |
 
 ### Working on the Mac app
 
@@ -282,6 +286,8 @@ radlet resize photos/*.jpg --max 1600 --out ~/Desktop/small
 radlet resize banner.png --width 1200       # exact width, keeps the aspect ratio
 radlet crop photo.jpg --rect 0.1,0.1,0.8,0.8 # fractions x,y,w,h: keeps the middle 80%
 radlet redact scan.png --rect 0.6,0.05,0.35,0.1 --style black
+radlet redact contract.pdf --text "Jane Doe" --emails --phones # removed for real; macOS app
+radlet scan page1.jpg page2.jpg             # "page1 (scanned).pdf"; macOS app
 radlet strip IMG_0042.jpg                   # lossless: drops GPS/EXIF, keeps orientation and colour profile
 radlet compress clip.mov --level strong
 radlet compress photo.jpg --target 500KB
@@ -294,6 +300,9 @@ RADLET_PASSWORD=secret radlet protect statement.pdf # env keeps the password out
 RADLET_PASSWORD=secret radlet unlock "statement (protected).pdf"
 radlet trim interview.m4a --start 1:30 --end 12:05
 radlet gif clip.mov --start 3 --end 6.5
+radlet join intro.mp4 talk.mov outro.mp4    # "intro (joined).mp4"; sound files join into M4A
+radlet burn talk.mp4 talk.srt               # "talk (subtitled).mp4"
+radlet convert loop.gif --to webp           # keeps every frame; or png (APNG), mp4
 radlet frames talk.mp4 --count 12 --format png
 radlet normalize podcast.wav
 radlet privacy IMG_0042.jpg report.pdf      # what they reveal; radlet strip removes it
@@ -304,6 +313,11 @@ radlet convert notes.md --to docx           # or pdf, html, rtf, txt; and back a
 radlet convert logo.svg --to png            # at least 1024 px; radlet resize logo.svg --max 4096
 radlet convert orders.csv --to json         # csv, tsv, json, md and html tables
 radlet convert orders.csv --to xlsx         # and back: radlet convert book.xlsx --to csv
+radlet convert app.sqlite --to xlsx         # a sheet per table
+radlet convert Brand.ttf --to woff2         # and back: radlet convert Brand.woff2 --to ttf
+radlet convert book.md --to epub            # and back, or to pdf, docx, txt
+radlet convert deck.pptx --to md            # slide text; --to pdf goes through Keynote
+radlet convert Report.pages --to docx       # through Pages; Numbers and Keynote too
 radlet workbook jan.csv feb.csv mar.csv     # "jan (combined).xlsx", a sheet each
 radlet convert Photos --to jpeg             # "Photos (JPEG)": the pictures inside, converted
 radlet codes poster.jpg                     # prints what its QR code says
@@ -316,7 +330,8 @@ radlet join week1.md week2.md               # "week1 (combined).md"
 radlet json data.json --minify              # or without --minify to re-indent
 radlet clean notes.txt                      # UTF-8, \n line endings, no trailing spaces
 radlet zip Photos notes.txt                 # Archive.zip; radlet convert Photos --to zip for one each
-radlet unzip Archive.zip
+RADLET_ZIP_PASSWORD=secret radlet zip Photos # every file locked with AES-256
+radlet unzip Archive.zip                    # RADLET_PASSWORD=secret for a locked one
 radlet merge "Photos 2023" "Photos 2024"    # "Photos 2023 (merged)"
 radlet flatten Downloads                    # or: radlet sort, radlet list --csv, radlet duplicates
 radlet checksum installer.dmg
