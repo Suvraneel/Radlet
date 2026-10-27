@@ -418,7 +418,7 @@ JSON, one object per line. Every request gets exactly one reply with the same `i
 
 ## Current status
 
-Version 0.1.0, working towards 1.0.
+Version 0.2.0, working towards 1.0.
 
 - **Releases come from tags.** Each `v*` tag builds a universal `.dmg` and publishes it on the Releases page, with an appcast for installed copies once the update key is set up. Until the Developer ID secrets are added, builds are ad-hoc signed and not notarized, so the first open needs **Open Anyway**.
 - **What CI checks.** On Linux: formatting, clippy, every engine test (including the end-to-end, protocol, FFmpeg and PDFium tests) and the licence policy. On macOS: the engine tests again, the Swift tests, a live protocol contract against the freshly built engine, the app bundle build, and a smoke test of the bundled helpers, including `radlet-vision selftest`.
