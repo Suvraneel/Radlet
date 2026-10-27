@@ -119,6 +119,7 @@ Tools ending in "…" open a window first, with a live preview where it helps.
 - **Replace originals** (Settings → Output, off by default): originals go to the Trash, and a same-format result takes the original's name.
 - **Watch folders** (Settings → Watch): files added to a folder are converted, compressed or run through a loadout automatically, into a `Converted` folder inside.
 - **Loadouts** (Control wheel): your own sets of steps, like a game loadout for your files. **Save as Loadout…** in a tool window keeps its settings, and **Settings → Loadouts** edits them.
+- **What a conversion needs, offered.** Slots that need something this Mac doesn't have yet show a badge: FFmpeg for more audio and video, Keynote, Pages or Numbers for their documents. Choosing one explains what's missing and helps get it: Radlet installs FFmpeg with Homebrew (or, once one is published, its own FFmpeg build), and opens the App Store page for Apple's free apps. Anything installed meanwhile, in Terminal or the App Store, is found the next time you choose it. A job that needs a speech or translation language download offers to open the right settings pane.
 - **Other ways in.** Finder's right-click **Services → Convert with Radlet** (or **Radlet Tools**), **Open With → Radlet**, **⌃⌥V** in Finder for the selected files, and the menu bar (**Convert Files…**, **Tools for Files…**, **Run a Loadout…**, **Convert Finder Selection**). Each opens the wheel for the keyboard: arrow keys to choose, Return to run, Tab to switch wheels, Escape to cancel.
 - **Command line, Shortcuts and AI agents.** The same engine is the `radlet` command. `radlet mcp` is a Model Context Protocol server, so Claude and other AI apps can inspect, convert, compress, clean, subtitle and run loadouts on your files, locally. Password tools aren't offered to agents. See [Reference](#reference).
 
@@ -136,7 +137,7 @@ Tools ending in "…" open a window first, with a live preview where it helps.
 
 ## Install
 
-Download the `.dmg` from the [latest release](https://github.com/Suvraneel/radlet/releases/latest), open it and drag **Radlet** into **Applications**. It runs on macOS 14 or later, on Apple silicon and Intel Macs. Everyday audio and video (MP4, MOV, M4A, MP3, WAV, AIFF, FLAC) work as they are; for MP3 output, WebM, MKV, GIFs, loudness and subtitles, also install FFmpeg: `brew install ffmpeg`. Radlet checks for updates once a day and asks before installing one (**Settings → General**).
+Download the `.dmg` from the [latest release](https://github.com/Suvraneel/radlet/releases/latest), open it and drag **Radlet** into **Applications**. It runs on macOS 14 or later, on Apple silicon and Intel Macs. Everyday audio and video (MP4, MOV, M4A, MP3, WAV, AIFF, FLAC) work as they are. Conversions that need FFmpeg (MP3 output, WebM, MKV, GIFs, loudness, making subtitles) are on the wheel too, marked with a small badge: choose one and Radlet offers to install FFmpeg with Homebrew if you have it, then carries on. Without Homebrew it explains how to get FFmpeg (or, once a build is published, downloads Radlet's own). Radlet checks for updates once a day and asks before installing one (**Settings → General**).
 
 Radlet isn't notarized by Apple yet, so macOS blocks it the first time you open it. On macOS 15 or later, open **System Settings → Privacy & Security** and click **Open Anyway**. On macOS 14, Control-click Radlet in Applications and choose **Open**.
 
@@ -182,6 +183,8 @@ The PDF-to-image tests are skipped unless `RADLET_PDFIUM` points at a PDFium lib
 | `RADLET_ZIP_PASSWORD` | The password `radlet zip` locks a new ZIP with |
 | `RADLET_NO_IWORK` | Set to `1` to act as if Keynote, Pages and Numbers weren't installed |
 
+The engine also finds an FFmpeg the app installed, in `~/Library/Application Support/Radlet/FFmpeg`.
+
 ### Working on the Mac app
 
 ```sh
@@ -221,6 +224,14 @@ git push origin v0.2.0
 | `MACOS_CERTIFICATE_PASSWORD` | The password you gave the .p12 |
 | `NOTARY_KEY_P8` | An App Store Connect API key (Users and Access → Integrations, with the Developer role): the contents of its `AuthKey_….p8` |
 | `NOTARY_KEY_ID`, `NOTARY_ISSUER_ID` | That key's ID and your issuer ID, from the same page |
+
+**FFmpeg for Macs without Homebrew (once per FFmpeg version).** Run the [FFmpeg workflow](.github/workflows/ffmpeg.yml) from the Actions tab with a tag such as `ffmpeg-8.0.1-1`. It builds an LGPL FFmpeg and ffprobe from pinned sources with [mac/scripts/build-ffmpeg.sh](mac/scripts/build-ffmpeg.sh), for Apple silicon and Intel, signs and notarizes them with the secrets above, and publishes them as a release that's never marked latest. Then pin it in the app and commit the result:
+
+```sh
+mac/scripts/pin-ffmpeg.sh ffmpeg-8.0.1-1 <SHA-256 from the run's summary>
+```
+
+That checks the download is the one the run built, shows who signed it, and writes its URL, size and SHA-256 into `mac/Resources/ffmpeg-build.json`; the app refuses any download that doesn't match. A published build is never replaced: to rebuild, run the workflow with the next build number (`ffmpeg-8.0.1-2`). The release carries every source's licence and `SOURCES.txt`. Until a build is pinned, Install FFmpeg uses Homebrew, or explains how to get it.
 
 ### Upgrading from a Veer build
 
@@ -394,8 +405,9 @@ JSON, one object per line. Every request gets exactly one reply with the same `i
 | Method | Params | Result |
 | --- | --- | --- |
 | `hello` | none | `version`, `protocol` (1), `capabilities` |
-| `inspect` | `paths`, `recipes_dir?` | `files` (detected formats), `wheel` (`convert`, `tools`, `recipes` slots). A slot may carry `variants`: presets with a short `label`, a `hint` and their own `action`, shown by the Orbit and Bloom styles. |
-| `run` | `paths`, `action`, `options?`, `isolate?` | `job`, `units`, then events: `item_started`, `item_progress`, `item_finished`, `job_finished`. An outcome lists everything it created in `outputs` (several page images, or one folder). |
+| `inspect` | `paths`, `recipes_dir?`, `installs?` | `files` (detected formats), `wheel` (`convert`, `tools`, `recipes` slots). A slot may carry `variants`: presets with a short `label`, a `hint` and their own `action`, shown by the Orbit and Bloom styles. With `installs`, slots that need something this Mac can get come after the rest, with `needs`: `ffmpeg`, `keynote`, `pages` or `numbers`. |
+| `run` | `paths`, `action`, `options?`, `isolate?` | `job`, `units`, then events: `item_started`, `item_progress`, `item_finished`, `job_finished`. An outcome lists everything it created in `outputs` (several page images, or one folder). A failed outcome's `error` may carry `need` (the four above, `speech_language` or `translation_language`). |
+| `refresh` | none | `ffmpeg`, `keynote`, `pages`, `numbers`. Looks again for FFmpeg and the iWork apps, after one was installed. |
 | `cancel` | `job` | `cancelled` |
 | `recipes` | `recipes_dir?` | `recipes` (built-ins marked `builtin`, the user's with their `path`), `errors` |
 | `privacy` | `paths` | `reports`: per file, `findings` (`kind`, `label`, `detail`, `removable`, `latitude`/`longitude` for places) or an `error` |
@@ -416,12 +428,12 @@ Version 0.1.0, working towards 1.0.
 <details>
 <summary><strong>Known limits</strong></summary>
 
-- Resize and rotate refuse animated GIFs rather than flatten them. Converting an animated GIF to a still format keeps the first frame. Removing metadata from a GIF is lossless and keeps every frame.
-- Word files are read for their text and structure: headings, lists, quotes, code, tables, bold, italic and links. Pictures, comments, footnotes, headers and footers aren't carried over, and Word output uses Calibri and simple styles. Word 97 and ODT files go through macOS's `textutil`, which keeps the text and simple formatting (paragraphs, lists, tables, bold and italic) but usually not heading levels. PowerPoint files aren't handled yet.
+- Resize, rotate and crop refuse moving pictures (animated GIF, WebP and PNG) rather than flatten them. Converting one to a still format keeps the first frame. Removing metadata from a GIF is lossless and keeps every frame.
+- Word files are read for their text and structure: headings, lists, quotes, code, tables, bold, italic and links. Pictures, comments, footnotes, headers and footers aren't carried over, and Word output uses Calibri and simple styles. Word 97 and ODT files go through macOS's `textutil`, which keeps the text and simple formatting (paragraphs, lists, tables, bold and italic) but usually not heading levels. PowerPoint files give their text, not their layout, unless Keynote is installed to make the PDF.
 - PDF to Word keeps the text, in paragraphs and lists, not the page layout, columns or pictures.
-- Without FFmpeg, a Mac converts only what AVFoundation reads (MP4, MOV, M4A, MP3, WAV, AIFF, FLAC) into MP4, MOV, M4A, WAV or AIFF. More than two sound channels are mixed to stereo in WAV and AIFF. Compressing video then means a smaller picture (1080p, 720p or 540p), with no size targets.
+- Without FFmpeg, a Mac converts only what AVFoundation reads (MP4, MOV, M4A, MP3, WAV, AIFF, FLAC) into MP4, MOV, M4A, WAV or AIFF, plus GIFs into video. More than two sound channels are mixed to stereo in WAV and AIFF.
 - Camera RAW files are developed with macOS's default settings, as Preview shows them.
-- Password-protected 7-Zip and RAR archives can't be opened yet. An XML file converted to JSON and back keeps its elements, attributes and text, but not comments or the order of mixed text and elements.
+- Password-protected 7-Zip and RAR archives can't be opened (macOS's libarchive doesn't decrypt them); locked ZIPs can. An XML file converted to JSON and back keeps its elements, attributes and text, but not comments or the order of mixed text and elements.
 - Excel workbooks are read for their values: a formula gives the result Excel last saved, and formatting, charts and merged cells aren't carried over. Workbooks are refused if they'd unpack to more than 512 MB.
 - Hide faces finds the faces Vision detects; very small, turned-away or covered faces can be missed, so check the result before sharing. Read code reads QR codes everywhere, and barcodes too on a Mac (through Vision).
 - Translate needs macOS 26 and the two languages downloaded in System Settings → General → Language & Region → Translation Languages. Each paragraph is translated as a whole, so bold or italic words inside one come out plain.
