@@ -2,7 +2,8 @@
 // installed. It covers what Macs make and play: MP4 and MOV video (H.264,
 // HEVC, ProRes), and M4A, MP3, WAV, AIFF and FLAC sound.
 //
-//   radlet-vision media <input> <output> <to> [start=<s>] [end=<s>] [size=<preset>] [reencode]
+//   radlet-vision media <input> <output> <to> [start=<s>] [end=<s>] [size=<preset>]
+//                       [target=<bytes>] [reencode] [frames]
 //
 //   to       mp4 | mov        video (a picture track is needed)
 //            m4a              AAC sound, from sound or video
@@ -11,7 +12,10 @@
 //                             so the cuts are exact)
 //   size     1920x1080 | 1280x720 | 960x540
 //                             H.264 no larger than this (for compressing)
+//   target   H.264 sized to about this many bytes (Video.swift)
 //   reencode                  never copy streams unchanged
+//   frames                    the input is a GIF: its frames become the
+//                             video (Video.swift)
 //
 // Without start, end, size or reencode, MP4 ↔ MOV copies the streams
 // unchanged when the new container can hold them. Exit 3 means there was
@@ -27,7 +31,9 @@ struct MediaRequest {
     var start: Double?
     var end: Double?
     var size: String?
+    var target: Int64?
     var reencode = false
+    var frames = false
 
     init(_ words: [String]) throws {
         guard let first = words.first else { throw Failure.failed("no output format given") }
@@ -38,7 +44,9 @@ struct MediaRequest {
             case ("start", 2): start = Double(parts[1])
             case ("end", 2): end = Double(parts[1])
             case ("size", 2): size = parts[1]
+            case ("target", 2): target = Int64(parts[1])
             case ("reencode", 1): reencode = true
+            case ("frames", 1): frames = true
             default: throw Failure.failed("unknown media option \(word)")
             }
         }
@@ -79,6 +87,14 @@ func media(_ args: [String]) throws {
     guard let fileType = request.fileType else {
         throw Failure.failed("macOS can't write \(request.to.uppercased()) without FFmpeg")
     }
+    if request.frames {
+        guard fileType == .mp4 || fileType == .mov else {
+            throw Failure.failed("a moving picture becomes MP4 or MOV video")
+        }
+        try? FileManager.default.removeItem(at: output)
+        try framesToVideo(input, output, fileType: fileType)
+        return
+    }
     let asset = AVURLAsset(url: input)
     let (duration, videoTracks, audioTracks) = try blocking {
         (try await asset.load(.duration),
@@ -100,8 +116,12 @@ func media(_ args: [String]) throws {
         guard !audioTracks.isEmpty else { throw Failure.nothingFound("this file has no sound") }
         try exportAsset(asset, preset: AVAssetExportPresetAppleM4A, to: output, fileType: fileType, range: range)
     default:
-        guard !videoTracks.isEmpty else { throw Failure.failed("there's no picture to make a video from") }
-        if let size = request.size {
+        guard let picture = videoTracks.first else { throw Failure.failed("there's no picture to make a video from") }
+        if let target = request.target {
+            guard target > 0 else { throw Failure.failed("the size to fit under must be more than nothing") }
+            try compressToSize(asset, video: picture, audio: audioTracks.first, input: input, to: output,
+                               fileType: fileType, bytes: target, duration: duration)
+        } else if let size = request.size {
             let preset: String
             switch size {
             case "1920x1080": preset = AVAssetExportPreset1920x1080

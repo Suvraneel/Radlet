@@ -23,6 +23,16 @@
 //                                                AVFoundation (Media.swift)
 //   radlet-vision codes <input> <output.json>      barcodes and QR codes as
 //                                                [{"kind","value"}] (Codes.swift)
+//   radlet-vision join <output> <to> <input>...     clips one after another
+//                                                (Video.swift)
+//   radlet-vision burn <video> <cues.json> <output> <to>
+//                                                subtitles drawn into the
+//                                                picture (Video.swift)
+//   radlet-vision scan <output.pdf> <photo>...      photos of pages as a
+//                                                scanned PDF (Scan.swift)
+//   radlet-vision redact-pdf <input> <output> <terms.json>
+//                                                text blacked out for real
+//                                                (Scan.swift)
 //   radlet-vision selftest                         checks this Mac can do them
 //   radlet-vision --version
 //
@@ -611,6 +621,7 @@ func selftest() throws {
         throw Failure.failed("the searchable PDF has no text")
     }
     print("searchable: ok")
+    print(try pagesSelftest(photo: png, pdf: pdf, in: dir))
 
     // Vision may not call a plain test picture a "subject", and some
     // virtual Macs can't run the model; neither fails the self-test.
@@ -635,6 +646,7 @@ func selftest() throws {
 
     // A Mac's own codecs: what Radlet does without FFmpeg.
     print(try mediaSelftest(in: dir))
+    print(try videoSelftest(in: dir))
 
     do {
         try codes(png, dir.appendingPathComponent("codes.json"))
@@ -680,12 +692,20 @@ do {
         try media(Array(args.dropFirst()))
     case "codes" where args.count == 3:
         try codes(URL(fileURLWithPath: args[1]), URL(fileURLWithPath: args[2]))
+    case "join" where args.count >= 5:
+        try join(Array(args.dropFirst()))
+    case "burn" where args.count == 5:
+        try burn(Array(args.dropFirst()))
+    case "scan" where args.count >= 3:
+        try scan(Array(args.dropFirst()))
+    case "redact-pdf" where args.count == 4:
+        try redactPDF(Array(args.dropFirst()))
     case "selftest":
         try selftest()
     case "--version":
-        print("radlet-vision 3")
+        print("radlet-vision 4")
     default:
-        FileHandle.standardError.write(Data("usage: radlet-vision text|mask|searchable|document-pdf|faces <input> <output>, transcribe <language> <output.json> <chunk>..., translate <to> <from|auto> <input.json> <output.json>, media <input> <output> <to> [options], codes <input> <output.json>, or selftest\n".utf8))
+        FileHandle.standardError.write(Data("usage: radlet-vision text|mask|searchable|document-pdf|faces <input> <output>, transcribe <language> <output.json> <chunk>..., translate <to> <from|auto> <input.json> <output.json>, media <input> <output> <to> [options], codes <input> <output.json>, join <output> <to> <input>..., burn <video> <cues.json> <output> <to>, scan <output.pdf> <photo>..., redact-pdf <input> <output> <terms.json>, or selftest\n".utf8))
         exit(2)
     }
 } catch Failure.nothingFound(let message) {
