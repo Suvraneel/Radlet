@@ -26,7 +26,7 @@ URL="https://github.com/$REPO/releases/download/$TAG/ffmpeg-$VERSION-macos.zip"
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
-echo "Downloading $URL…"
+echo "Downloading ${URL}…"
 curl -fsSL --retry 3 -o "$WORK/ffmpeg.zip" "$URL"
 if command -v sha256sum > /dev/null; then
   SUM="$(sha256sum "$WORK/ffmpeg.zip" | cut -d' ' -f1)"

@@ -92,7 +92,7 @@ unpack() {
   sum="${pinned##*|}"
   file="$SRC/$name-${url##*/}"
   if [[ ! -f "$file" ]]; then
-    echo "Downloading $name…"
+    echo "Downloading ${name}…"
     curl -fsSL --retry 3 -o "$file.part" "$url"
     mv "$file.part" "$file"
   fi
@@ -119,7 +119,7 @@ build() {
     return
   fi
   unpack "$name"
-  echo "Building $name for $ARCH…"
+  echo "Building ${name} for ${ARCH}…"
   "build_$name"
   echo "$sum" > "$WORK/$name.built"
   cd "$ROOT"
