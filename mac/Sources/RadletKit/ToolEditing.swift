@@ -408,6 +408,29 @@ extension ToolAction {
         .object(["kind": .string("unlock_pdf"), "password": .string(password)])
     }
 
+    /// Everything chosen in one ZIP locked with `password` (AES-256).
+    public static func zipLocked(password: String) -> JSONValue {
+        .object(["kind": .string("zip_locked"), "password": .string(password)])
+    }
+
+    /// Each locked ZIP extracted with `password`.
+    public static func unzipLocked(password: String) -> JSONValue {
+        .object(["kind": .string("unzip_locked"), "password": .string(password)])
+    }
+
+    /// Text blacked out of PDFs for real: each phrase in `words` (blank
+    /// lines dropped), and every email address, phone or card number when
+    /// asked.
+    public static func redactText(words: [String], emails: Bool, phones: Bool, cards: Bool) -> JSONValue {
+        var step: [String: JSONValue] = ["op": .string("redact_text")]
+        let kept = words.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        if !kept.isEmpty { step["words"] = .array(kept.map { .string($0) }) }
+        if emails { step["emails"] = .bool(true) }
+        if phones { step["phones"] = .bool(true) }
+        if cards { step["cards"] = .bool(true) }
+        return steps([.object(step)])
+    }
+
     static func trimStep(start: Double, end: Double?) -> JSONValue {
         func r(_ v: Double) -> JSONValue { .double((v * 1000).rounded() / 1000) }
         var step: [String: JSONValue] = ["op": .string("trim"), "start": r(start)]

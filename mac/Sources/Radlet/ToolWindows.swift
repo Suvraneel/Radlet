@@ -87,9 +87,13 @@ final class ToolWindowController: NSObject, NSWindowDelegate {
         case "watermark":
             let m = WatermarkModel(files: files, finish: finish)
             return Tool(view: AnyView(WatermarkView(model: m)), resizable: true, stop: { m.stop() })
-        case "pdf_password":
-            let m = PasswordModel(files: files, finish: finish)
+        case "pdf_password", "zip_password", "unzip_password":
+            let purpose: PasswordModel.Purpose = kind == "zip_password" ? .zip : kind == "unzip_password" ? .unzip : .pdf
+            let m = PasswordModel(files: files, purpose: purpose, finish: finish)
             return Tool(view: AnyView(PasswordView(model: m)), resizable: false, stop: {})
+        case "redact_text":
+            let m = RedactTextModel(files: files, finish: finish)
+            return Tool(view: AnyView(RedactTextView(model: m)), resizable: false, stop: {})
         case "trim", "make_gif":
             let m = TrimModel(files: files, gif: kind == "make_gif", finish: finish)
             return Tool(view: AnyView(TrimView(model: m)), resizable: true, stop: { m.stop() })

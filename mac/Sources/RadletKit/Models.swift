@@ -195,7 +195,8 @@ public struct Slot: Codable, Identifiable, Equatable, Sendable {
     /// Runs once over the whole selection (one item in the HUD), rather
     /// than once per file.
     public var isWholeSelection: Bool {
-        ["combine_pdf", "combine_text", "combine_workbook", "zip_all", "merge_folders", "find_duplicates"]
+        ["combine_pdf", "combine_text", "combine_workbook", "zip_all", "zip_locked", "merge_folders",
+         "find_duplicates", "join_media", "burn_subtitles", "scan_documents"]
             .contains(action["kind"]?.string ?? "")
     }
 }

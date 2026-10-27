@@ -336,6 +336,9 @@ struct WatermarkView: View {
 
 // MARK: - Password
 
+/// Adds or removes a PDF's password, locks a new ZIP, or opens a locked
+/// one. The password goes to the engine for this one job and is never
+/// saved.
 @MainActor
 final class PasswordModel: ObservableObject {
     enum Mode: String, CaseIterable, Identifiable {
@@ -343,20 +346,35 @@ final class PasswordModel: ObservableObject {
         var id: String { rawValue }
     }
 
+    enum Purpose {
+        case pdf, zip, unzip
+    }
+
     @Published var mode: Mode
     @Published var password = ""
     @Published var confirm = ""
     let files: [URL]
-    /// Some files are locked and some aren't, so let the user choose.
+    let purpose: Purpose
+    /// Some PDFs are locked and some aren't, so let the user choose.
     let mixed: Bool
     private let finish: (JSONValue?) -> Void
 
-    init(files: [URL], finish: @escaping (JSONValue?) -> Void) {
+    init(files: [URL], purpose: Purpose = .pdf, finish: @escaping (JSONValue?) -> Void) {
         self.files = files
+        self.purpose = purpose
         self.finish = finish
-        let locked = files.map { PDFDocument(url: $0)?.isLocked == true }
-        mode = locked.allSatisfy { $0 } ? .unlock : .protect
-        mixed = locked.contains(true) && locked.contains(false)
+        switch purpose {
+        case .pdf:
+            let locked = files.map { PDFDocument(url: $0)?.isLocked == true }
+            mode = locked.allSatisfy { $0 } ? .unlock : .protect
+            mixed = locked.contains(true) && locked.contains(false)
+        case .zip:
+            mode = .protect
+            mixed = false
+        case .unzip:
+            mode = .unlock
+            mixed = false
+        }
     }
 
     var problem: String? {
@@ -374,20 +392,47 @@ final class PasswordModel: ObservableObject {
         !password.isEmpty && problem == nil && (mode == .unlock || password == confirm)
     }
 
+    var title: String {
+        switch (purpose, mode) {
+        case (.zip, _): return "Zip with a password"
+        case (.unzip, _): return "Unzip with the password"
+        case (.pdf, .protect): return "Lock with a password"
+        case (.pdf, .unlock): return "Remove the password"
+        }
+    }
+
     var note: String {
         if let problem { return problem }
-        switch mode {
-        case .protect:
+        switch (purpose, mode) {
+        case (.zip, _):
+            return "Saves one ZIP with every file locked (AES-256); names stay visible. "
+                + "Keep the password safe: there's no way to recover it."
+        case (.unzip, _):
+            return "Extracts the files next to the ZIP."
+        case (.pdf, .protect):
             return "Saves a locked copy (AES-256). Keep the password safe: there's no way to recover it."
-        case .unlock:
+        case (.pdf, .unlock):
             return "Saves a copy that opens without a password."
+        }
+    }
+
+    var applyTitle: String {
+        switch purpose {
+        case .zip: return "Zip"
+        case .unzip: return "Unzip"
+        case .pdf: return mode == .protect ? "Lock" : "Unlock"
         }
     }
 
     func cancel() { finish(nil) }
     func apply() {
         guard canApply else { return }
-        finish(mode == .protect ? ToolAction.protectPDF(password: password) : ToolAction.unlockPDF(password: password))
+        switch (purpose, mode) {
+        case (.zip, _): finish(ToolAction.zipLocked(password: password))
+        case (.unzip, _): finish(ToolAction.unzipLocked(password: password))
+        case (.pdf, .protect): finish(ToolAction.protectPDF(password: password))
+        case (.pdf, .unlock): finish(ToolAction.unlockPDF(password: password))
+        }
     }
 }
 
@@ -405,11 +450,10 @@ struct PasswordView: View {
                     .pickerStyle(.segmented)
                     .labelsHidden()
                 } else {
-                    Label(model.mode == .protect ? "Lock with a password" : "Remove the password",
-                          systemImage: model.mode == .protect ? "lock" : "lock.open")
+                    Label(model.title, systemImage: model.mode == .protect ? "lock" : "lock.open")
                         .font(.headline)
                 }
-                SecureField(model.mode == .protect ? "New password" : "Current password", text: $model.password)
+                SecureField(model.mode == .protect ? "New password" : "Password", text: $model.password)
                     .textFieldStyle(.roundedBorder)
                 if model.mode == .protect {
                     SecureField("Confirm password", text: $model.confirm)
@@ -418,10 +462,79 @@ struct PasswordView: View {
             }
             .padding(20)
             Divider()
-            ToolFooter(note: model.note, applyTitle: model.mode == .protect ? "Lock" : "Unlock",
+            ToolFooter(note: model.note, applyTitle: model.applyTitle,
                        canApply: model.canApply, cancel: { model.cancel() }, apply: { model.apply() })
         }
         .frame(width: 460)
+    }
+}
+
+// MARK: - Black out text
+
+/// Words, phrases and kinds of details to remove from PDFs for real.
+@MainActor
+final class RedactTextModel: ObservableObject {
+    @Published var words = ""
+    @Published var emails = false
+    @Published var phones = false
+    @Published var cards = false
+    let files: [URL]
+    private let finish: (JSONValue?) -> Void
+
+    init(files: [URL], finish: @escaping (JSONValue?) -> Void) {
+        self.files = files
+        self.finish = finish
+    }
+
+    var phrases: [String] {
+        words.components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    var canApply: Bool { !phrases.isEmpty || emails || phones || cards }
+
+    var note: String {
+        guard canApply else { return "Type what to black out, one word or phrase a line, or tick a kind of detail." }
+        return "Pages with a match become pictures with black boxes and fresh searchable text, so nothing under "
+            + "a box can be copied. Other pages stay as they are."
+    }
+
+    var action: JSONValue {
+        ToolAction.redactText(words: phrases, emails: emails, phones: phones, cards: cards)
+    }
+
+    func cancel() { finish(nil) }
+    func apply() {
+        guard canApply else { return }
+        finish(action)
+    }
+}
+
+struct RedactTextView: View {
+    @ObservedObject var model: RedactTextModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 12) {
+                Label("Black out text", systemImage: "eye.slash")
+                    .font(.headline)
+                Text("Words and phrases, one a line (any case):")
+                    .foregroundStyle(.secondary)
+                TextEditor(text: $model.words)
+                    .font(.body)
+                    .frame(minHeight: 90)
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.secondary.opacity(0.3)))
+                Toggle("Every email address", isOn: $model.emails)
+                Toggle("Every phone number", isOn: $model.phones)
+                Toggle("Every card number", isOn: $model.cards)
+            }
+            .padding(20)
+            Divider()
+            ToolFooter(note: model.note, applyTitle: "Black Out", canApply: model.canApply,
+                       cancel: { model.cancel() }, apply: { model.apply() })
+        }
+        .frame(width: 480)
     }
 }
 

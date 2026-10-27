@@ -17,6 +17,11 @@ final class ExtraActionTests: XCTestCase {
                        #"{"kind":"steps","steps":[{"diagonal":true,"op":"watermark","opacity":0.2,"text":"DRAFT"}]}"#)
         XCTAssertEqual(try json(ToolAction.protectPDF(password: "pw")), #"{"kind":"protect_pdf","password":"pw"}"#)
         XCTAssertEqual(try json(ToolAction.unlockPDF(password: "pw")), #"{"kind":"unlock_pdf","password":"pw"}"#)
+        XCTAssertEqual(try json(ToolAction.zipLocked(password: "pw")), #"{"kind":"zip_locked","password":"pw"}"#)
+        XCTAssertEqual(try json(ToolAction.unzipLocked(password: "pw")), #"{"kind":"unzip_locked","password":"pw"}"#)
+        XCTAssertEqual(try json(ToolAction.redactText(words: [" Jane Doe ", "", "  "], emails: true, phones: false,
+                                                      cards: false)),
+                       #"{"kind":"steps","steps":[{"emails":true,"op":"redact_text","words":["Jane Doe"]}]}"#)
         XCTAssertEqual(try json(ToolAction.trim(start: 1.5, end: 4)),
                        #"{"kind":"steps","steps":[{"end":4,"op":"trim","start":1.5}]}"#)
         XCTAssertEqual(try json(ToolAction.gif(start: 1, end: 2)),
@@ -133,6 +138,15 @@ final class WheelLayoutTests: XCTestCase {
         let book = Slot(id: "combine_workbook", label: "Combine into workbook", symbol: "tablecells", group: "tool",
                         action: .object(["kind": .string("combine_workbook")]))
         XCTAssertTrue(book.isWholeSelection)
+        for kind in ["join_media", "burn_subtitles", "scan_documents", "zip_locked"] {
+            let slot = Slot(id: kind, label: kind, symbol: "x", group: "tool", action: .object(["kind": .string(kind)]))
+            XCTAssertTrue(slot.isWholeSelection, kind)
+        }
+        XCTAssertEqual(StepText.describe(.object(["op": .string("redact_text"),
+                                                  "words": .array(["a", "b", "c"].map { .string($0) }),
+                                                  "cards": .bool(true)])),
+                       "Black out \u{201C}a\u{201D}, \u{201C}b\u{201D}, 1 more, card numbers")
+        XCTAssertEqual(StepText.formatName("jxl"), "JPEG XL")
         let codes = Slot(id: "read_codes", label: "Read QR code", symbol: "qrcode", group: "tool",
                          action: .object(["kind": .string("read_codes")]))
         XCTAssertTrue(codes.isReadCodes)

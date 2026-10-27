@@ -11,7 +11,9 @@ public enum StepText {
         "svg": "SVG", "docx": "Word", "rtf": "RTF", "csv": "CSV", "tsv": "TSV", "json": "JSON",
         "zip": "ZIP", "folder": "Folder", "xlsx": "Excel", "icns": "ICNS", "ico": "ICO",
         "aiff": "AIFF", "yaml": "YAML", "toml": "TOML", "xml": "XML", "ass": "ASS", "sbv": "SBV",
-        "ttml": "TTML", "tar": "TAR (.tar.gz)",
+        "ttml": "TTML", "tar": "TAR (.tar.gz)", "jxl": "JPEG XL", "epub": "EPUB", "ttf": "TTF",
+        "otf": "OTF", "woff": "WOFF", "woff2": "WOFF2", "pptx": "PowerPoint", "key": "Keynote",
+        "pages": "Pages", "numbers": "Numbers", "sqlite": "SQLite",
     ]
 
     public static func formatName(_ id: String) -> String {
@@ -97,6 +99,17 @@ public enum StepText {
                 return "Translate \(languageName(from)) into \(to)"
             }
             return "Translate into \(to)"
+        case "redact_text":
+            var parts: [String] = []
+            if case .array(let words)? = step["words"] {
+                let shown = words.compactMap(\.string).map { "\u{201C}\($0)\u{201D}" }
+                parts.append(contentsOf: shown.prefix(2))
+                if shown.count > 2 { parts.append("\(shown.count - 2) more") }
+            }
+            if step["emails"]?.bool == true { parts.append("emails") }
+            if step["phones"]?.bool == true { parts.append("phone numbers") }
+            if step["cards"]?.bool == true { parts.append("card numbers") }
+            return parts.isEmpty ? "Black out text" : "Black out " + parts.joined(separator: ", ")
 
         default:
             return op.replacingOccurrences(of: "_", with: " ").capitalized
