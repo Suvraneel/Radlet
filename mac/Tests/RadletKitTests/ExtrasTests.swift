@@ -464,4 +464,13 @@ final class NeedsTests: XCTestCase {
         let shortSum = good.replacingOccurrences(of: String(repeating: "a", count: 64), with: "abc")
         XCTAssertNil(PinnedFFmpeg.parse(Data(shortSum.utf8)))
     }
+
+    func testThePinLeadsToItsSource() throws {
+        let sum = String(repeating: "b", count: 64)
+        let pin = PinnedFFmpeg(version: "8.0.1", url: "https://github.com/o/r/releases/download/ffmpeg-8.0.1-1/ffmpeg-8.0.1-macos.zip",
+                               sha256: sum, size: 1)
+        XCTAssertEqual(pin.releasePage?.absoluteString, "https://github.com/o/r/releases/tag/ffmpeg-8.0.1-1")
+        let elsewhere = PinnedFFmpeg(version: "8.0.1", url: "https://example.com/ffmpeg.zip", sha256: sum, size: 1)
+        XCTAssertNil(elsewhere.releasePage)
+    }
 }

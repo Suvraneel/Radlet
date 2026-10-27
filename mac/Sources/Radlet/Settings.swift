@@ -344,9 +344,44 @@ private struct AdvancedSettings: View {
                 Text(state.engineStatus).font(.callout)
                 Button("Check Again") { Task { await state.checkEngine() } }
             }
+            Section("Open source") {
+                Text(OpenSource.notice)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                HStack {
+                    Button("Show Licences") { OpenSource.showLicences() }
+                    if let source = FFmpegInstaller.pinned?.releasePage {
+                        Link("FFmpeg Source", destination: source)
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
         .onAppear { cli.refresh() }
+    }
+}
+
+/// What Radlet owes the open-source projects it uses: a notice users can
+/// see, and the licences that ship inside the app.
+@MainActor
+enum OpenSource {
+    static var notice: String {
+        var text = "Radlet includes open-source software, such as Sparkle for updates and PDFium for PDF pages; "
+            + "their licences are inside the app. For more audio and video it uses FFmpeg (ffmpeg.org), "
+            + "a separate program."
+        if let pin = FFmpegInstaller.pinned {
+            text += " The FFmpeg Radlet downloads on a Mac without Homebrew is FFmpeg \(pin.version), "
+                + "licensed under the LGPL v2.1 or later. Its complete source, with the script that builds it, "
+                + "is on its release page."
+        }
+        return text
+    }
+
+    /// Opens the folder of licences inside the app in Finder.
+    static func showLicences() {
+        guard let folder = Bundle.main.resourceURL?.appendingPathComponent("Licenses", isDirectory: true) else { return }
+        NSWorkspace.shared.open(folder)
     }
 }
 

@@ -125,4 +125,14 @@ public struct PinnedFFmpeg: Codable, Equatable, Sendable {
     public var sizeText: String {
         ByteCountFormatter.string(fromByteCount: size, countStyle: .file)
     }
+
+    /// The GitHub release the download comes from, which also has its
+    /// complete source: .../releases/download/<tag>/<file> becomes
+    /// .../releases/tag/<tag>.
+    public var releasePage: URL? {
+        guard let url = URL(string: url), let host = url.host else { return nil }
+        let parts = url.path.split(separator: "/").map(String.init)
+        guard parts.count == 6, parts[2] == "releases", parts[3] == "download" else { return nil }
+        return URL(string: "https://\(host)/\(parts[0])/\(parts[1])/releases/tag/\(parts[4])")
+    }
 }

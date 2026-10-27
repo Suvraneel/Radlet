@@ -225,13 +225,13 @@ git push origin v0.2.0
 | `NOTARY_KEY_P8` | An App Store Connect API key (Users and Access → Integrations, with the Developer role): the contents of its `AuthKey_….p8` |
 | `NOTARY_KEY_ID`, `NOTARY_ISSUER_ID` | That key's ID and your issuer ID, from the same page |
 
-**FFmpeg for Macs without Homebrew (once per FFmpeg version).** Run the [FFmpeg workflow](.github/workflows/ffmpeg.yml) from the Actions tab with a tag such as `ffmpeg-8.0.1-1`. It builds an LGPL FFmpeg and ffprobe from pinned sources with [mac/scripts/build-ffmpeg.sh](mac/scripts/build-ffmpeg.sh), for Apple silicon and Intel, signs and notarizes them with the secrets above, and publishes them as a release that's never marked latest. Then pin it in the app and commit the result:
+**FFmpeg for Macs without Homebrew (once per FFmpeg version).** Run the [FFmpeg workflow](.github/workflows/ffmpeg.yml) from the Actions tab with a tag such as `ffmpeg-8.0.1-1`. It builds an LGPL FFmpeg and ffprobe from pinned sources with [mac/scripts/build-ffmpeg.sh](mac/scripts/build-ffmpeg.sh), for Apple silicon and Intel, signs and notarizes them with the secrets above (until there's a Developer ID they're ad-hoc signed, like Homebrew's own programs, which is enough because the app downloads them itself rather than through a browser), and publishes them as a release that's never marked latest. Then pin it in the app and commit the result:
 
 ```sh
 mac/scripts/pin-ffmpeg.sh ffmpeg-8.0.1-1 <SHA-256 from the run's summary>
 ```
 
-That checks the download is the one the run built, shows who signed it, and writes its URL, size and SHA-256 into `mac/Resources/ffmpeg-build.json`; the app refuses any download that doesn't match. A published build is never replaced: to rebuild, run the workflow with the next build number (`ffmpeg-8.0.1-2`). The release carries every source's licence and `SOURCES.txt`. Until a build is pinned, Install FFmpeg uses Homebrew, or explains how to get it.
+That checks the download is the one the run built, shows who signed it, and writes its URL, size and SHA-256 into `mac/Resources/ffmpeg-build.json`; the app refuses any download that doesn't match. A published build is never replaced: to rebuild, run the workflow with the next build number (`ffmpeg-8.0.1-2`). The release carries every source's licence and `SOURCES.txt`, and next to the download, `ffmpeg-<version>-source.tar`: every archive the build used, unchanged, with the build script, as the LGPL asks. Settings → Advanced → Open source links to that release. Until a build is pinned, Install FFmpeg uses Homebrew, or explains how to get it.
 
 ### Upgrading from a Veer build
 

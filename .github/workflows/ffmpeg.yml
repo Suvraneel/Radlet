@@ -141,8 +141,52 @@ jobs:
             echo "from these sources (name, URL, SHA-256):"
             echo
             sed -nE 's/^  "([a-z0-9]+)\|([^|]+)\|([0-9a-f]{64})"$/\1  \2  \3/p' mac/scripts/build-ffmpeg.sh
+            echo
+            echo "Every one of those archives, unchanged, with the script that builds them:"
+            echo "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/download/$TAG/ffmpeg-$VERSION-source.tar"
           } > dist/ffmpeg/SOURCES.txt
           cat dist/ffmpeg/SOURCES.txt
+
+      # The LGPL asks for the source to be offered from the same place as
+      # the programs, so it goes on the same release: the exact archives
+      # the build used and the script, laid out so the script runs as is.
+      - name: Pack the sources
+        run: |
+          name="ffmpeg-$VERSION-source"
+          dir="dist/source/$name"
+          mkdir -p "$dir/mac/scripts" "$dir/target/ffmpeg-build/src"
+          cp mac/scripts/build-ffmpeg.sh "$dir/mac/scripts/"
+          while IFS='|' read -r part url _; do
+            archive="target/ffmpeg-build/src/$part-${url##*/}"
+            if [[ ! -f "$archive" ]]; then
+              echo "::error::The source archive $archive is missing."
+              exit 1
+            fi
+            cp "$archive" "$dir/target/ffmpeg-build/src/"
+          done < <(sed -nE 's/^  "([a-z0-9]+\|[^|]+\|[0-9a-f]{64})"$/\1/p' mac/scripts/build-ffmpeg.sh)
+          cp dist/ffmpeg/SOURCES.txt dist/ffmpeg/LICENSE.txt "$dir/"
+          cat > "$dir/README.txt" << EOF
+          FFmpeg $VERSION for Radlet ($TAG): the complete source.
+
+          This is everything the build was made from: the unchanged source archive
+          of every part (FFmpeg, LAME, Opus, libogg, libvorbis, libvpx, dav1d,
+          FreeType, FriBidi, HarfBuzz and libass) and the script that builds them.
+          SOURCES.txt lists where each archive comes from and its SHA-256.
+          LICENSE.txt is FFmpeg's licence, the LGPL v2.1 or later; each archive
+          carries its own.
+
+          To build it on a Mac, install the tools (brew install meson ninja nasm
+          pkgconf), then, in this folder:
+
+            mac/scripts/build-ffmpeg.sh arm64
+            mac/scripts/build-ffmpeg.sh x86_64
+
+          The script checks each archive against its SHA-256 and leaves ffmpeg and
+          ffprobe in target/ffmpeg/arm64 and target/ffmpeg/x86_64.
+          EOF
+          tar -cf "dist/$name.tar" -C dist/source "$name"
+          tar -tvf "dist/$name.tar"
+          echo "SOURCE_TAR=dist/$name.tar" >> "$GITHUB_ENV"
 
       - name: Pack
         run: |
@@ -183,10 +227,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           sum="$(shasum -a 256 "$ZIP" | cut -d' ' -f1)"
-          notes="FFmpeg $VERSION and ffprobe for Radlet, for Apple silicon and Intel Macs (LGPL v2.1 or later). The app downloads this when you choose a conversion that needs FFmpeg and Homebrew isn't installed. SOURCES.txt inside lists every source and its SHA-256.
+          notes="FFmpeg $VERSION and ffprobe for Radlet, for Apple silicon and Intel Macs (LGPL v2.1 or later). The app downloads this when you choose a conversion that needs FFmpeg and Homebrew isn't installed. ffmpeg-$VERSION-source.tar is the complete source: every archive the build used, unchanged, with the script that builds them. SOURCES.txt lists each one and its SHA-256.
 
           SHA-256: \`$sum\`"
-          gh release create "$TAG" "$ZIP" --repo "$GITHUB_REPOSITORY" --title "FFmpeg $VERSION for Radlet" \
+          gh release create "$TAG" "$ZIP" "$SOURCE_TAR" --repo "$GITHUB_REPOSITORY" --title "FFmpeg $VERSION for Radlet" \
             --notes "$notes" --target "$GITHUB_SHA" --prerelease --latest=false
           {
             echo "### FFmpeg $VERSION"
