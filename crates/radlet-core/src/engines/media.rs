@@ -4,6 +4,7 @@
 //! `concat:...` or `http:...` can't be interpreted as FFmpeg protocols.
 
 use std::collections::HashSet;
+use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
@@ -624,6 +625,26 @@ pub fn run(
         _ => probe.duration_s,
     };
     let (args, to) = plan_args(job, from, &probe, encoders(ffmpeg))?;
+    let mut all: Vec<OsString> = pre.into_iter().map(OsString::from).collect();
+    all.push("-i".into());
+    all.push(file_url(input).into());
+    all.extend(args.into_iter().map(OsString::from));
+    all.extend(["-f".into(), muxer(to).into(), file_url(out).into()]);
+    run_ffmpeg(ffmpeg, &all, length, None, cancel, progress)?;
+    Ok(to)
+}
+
+/// Runs FFmpeg with `args` (after its own quiet, overwrite and progress
+/// flags), reporting progress against `length` seconds of output. `cwd`
+/// is where relative names in filters are found.
+pub(crate) fn run_ffmpeg(
+    ffmpeg: &Path,
+    args: &[OsString],
+    length: Option<f64>,
+    cwd: Option<&Path>,
+    cancel: &AtomicBool,
+    progress: &mut dyn FnMut(f32),
+) -> Result<()> {
     let mut cmd = Command::new(ffmpeg);
     cmd.args([
         "-hide_banner",
@@ -635,15 +656,13 @@ pub fn run(
         "pipe:1",
         "-nostats",
     ])
-    .args(&pre)
-    .arg("-i")
-    .arg(file_url(input))
-    .args(&args)
-    .args(["-f", muxer(to)])
-    .arg(file_url(out))
+    .args(args)
     .stdin(Stdio::null())
     .stdout(Stdio::piped())
     .stderr(Stdio::piped());
+    if let Some(dir) = cwd {
+        cmd.current_dir(dir);
+    }
     let mut child = cmd
         .spawn()
         .map_err(|e| Error::Ffmpeg(format!("couldn't start FFmpeg: {e}")))?;
@@ -689,7 +708,267 @@ pub fn run(
         return Err(Error::Ffmpeg(msg));
     }
     progress(1.0);
-    Ok(to)
+    Ok(())
+}
+
+/// A video's picture size as it shows (turned upright) and its frame rate
+/// (at most 60), from FFprobe.
+pub fn video_shape(caps: &Capabilities, input: &Path) -> Option<(u32, u32, f64)> {
+    #[derive(Deserialize)]
+    struct Shape {
+        #[serde(default)]
+        streams: Vec<ShapeStream>,
+    }
+    #[derive(Deserialize)]
+    struct ShapeStream {
+        width: Option<u32>,
+        height: Option<u32>,
+        r_frame_rate: Option<String>,
+        #[serde(default)]
+        side_data_list: Vec<SideData>,
+        #[serde(default)]
+        tags: std::collections::BTreeMap<String, serde_json::Value>,
+    }
+    #[derive(Deserialize)]
+    struct SideData {
+        rotation: Option<f64>,
+    }
+    let ffprobe = caps.ffprobe.as_ref()?;
+    let out = Command::new(ffprobe)
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height,r_frame_rate:stream_side_data=rotation:stream_tags=rotate",
+            "-of",
+            "json",
+        ])
+        .arg(file_url(input))
+        .stderr(Stdio::null())
+        .output()
+        .ok()?;
+    let shape: Shape = serde_json::from_slice(&out.stdout).ok()?;
+    let s = shape.streams.into_iter().next()?;
+    let (w, h) = (s.width?, s.height?);
+    let rotation = s
+        .side_data_list
+        .iter()
+        .find_map(|d| d.rotation)
+        .or_else(|| s.tags.get("rotate")?.as_str()?.parse().ok())
+        .unwrap_or(0.0);
+    let turned = (rotation.round() as i64).rem_euclid(180) == 90;
+    let fps = s
+        .r_frame_rate
+        .and_then(|r| {
+            let (n, d) = r.split_once('/')?;
+            let (n, d): (f64, f64) = (n.parse().ok()?, d.parse().ok()?);
+            (d > 0.0).then(|| n / d)
+        })
+        .filter(|f| f.is_finite() && *f >= 1.0)
+        .unwrap_or(30.0)
+        .min(60.0);
+    Some(if turned { (h, w, fps) } else { (w, h, fps) })
+}
+
+/// Whether the FFmpeg we found has a filter (`subtitles` needs libass).
+pub fn has_filter(ffmpeg: &Path, name: &str) -> bool {
+    static FILTERS: OnceLock<HashSet<String>> = OnceLock::new();
+    FILTERS
+        .get_or_init(|| {
+            let out = Command::new(ffmpeg)
+                .args(["-hide_banner", "-filters"])
+                .stderr(Stdio::null())
+                .output();
+            let text = out
+                .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+                .unwrap_or_default();
+            text.lines()
+                .filter_map(|l| l.split_whitespace().nth(1).map(str::to_string))
+                .collect()
+        })
+        .contains(name)
+}
+
+/// One clip to join: what it has, and how long its part lasts.
+#[derive(Debug, Clone, Copy)]
+pub struct JoinPart {
+    pub has_audio: bool,
+    pub seconds: f64,
+}
+
+/// The filter graph that puts clips one after another. With `video`
+/// (width, height, frame rate), each picture is fitted into that shape,
+/// centred on black. Each sound becomes 48 kHz stereo, padded or cut to
+/// its clip's length so the next clip stays in step; a clip without sound
+/// gets silence. Returns the graph and whether it has sound.
+pub fn join_graph(parts: &[JoinPart], video: Option<(u32, u32, f64)>) -> (String, bool) {
+    let sound = parts.iter().any(|p| p.has_audio);
+    let mut graph = String::new();
+    let mut inputs = String::new();
+    for (i, p) in parts.iter().enumerate() {
+        if let Some((w, h, fps)) = video {
+            graph.push_str(&format!(
+                "[{i}:v:0]scale={w}:{h}:force_original_aspect_ratio=decrease,\
+                 pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,fps={fps:.3},format=yuv420p[v{i}];"
+            ));
+            inputs.push_str(&format!("[v{i}]"));
+        }
+        if sound {
+            let seconds = p.seconds;
+            if p.has_audio {
+                graph.push_str(&format!(
+                    "[{i}:a:0]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,\
+                     apad,atrim=duration={seconds:.3}[a{i}];"
+                ));
+            } else {
+                graph.push_str(&format!(
+                    "anullsrc=r=48000:cl=stereo,atrim=duration={seconds:.3}[a{i}];"
+                ));
+            }
+            inputs.push_str(&format!("[a{i}]"));
+        }
+    }
+    graph.push_str(&format!(
+        "{inputs}concat=n={}:v={}:a={}",
+        parts.len(),
+        u8::from(video.is_some()),
+        u8::from(sound)
+    ));
+    if video.is_some() {
+        graph.push_str("[v]");
+    }
+    if sound {
+        graph.push_str("[a]");
+    }
+    (graph, sound)
+}
+
+/// Joins `inputs` (all video, or all sound) into `out`: H.264 and AAC in
+/// MP4, or AAC in M4A for sound.
+pub fn join(
+    caps: &Capabilities,
+    inputs: &[std::path::PathBuf],
+    video: bool,
+    out: &Path,
+    cancel: &AtomicBool,
+    progress: &mut dyn FnMut(f32),
+) -> Result<()> {
+    let ffmpeg = caps.ffmpeg.as_ref().ok_or(Error::FfmpegMissing)?;
+    if caps.ffprobe.is_none() {
+        return Err(Error::Missing(
+            "joining clips needs FFprobe to read their lengths".into(),
+        ));
+    }
+    let mut parts = Vec::with_capacity(inputs.len());
+    for p in inputs {
+        let probe = probe(caps, p);
+        let seconds = if video {
+            probe.video_duration_s.or(probe.duration_s)
+        } else {
+            probe.duration_s
+        }
+        .filter(|d| d.is_finite() && *d > 0.0)
+        .ok_or_else(|| {
+            Error::Invalid(format!(
+                "couldn't read how long {} is",
+                crate::format::display_name(p)
+            ))
+        })?;
+        parts.push(JoinPart {
+            has_audio: probe.audio_codec.is_some(),
+            seconds,
+        });
+    }
+    let shape = if video {
+        let (w, h, fps) = video_shape(caps, &inputs[0])
+            .ok_or_else(|| Error::Invalid("couldn't read the first clip's picture size".into()))?;
+        // Even sides for H.264, and no larger than 4K.
+        let scale = (3840.0 / f64::from(w.max(h))).min(1.0);
+        let even = |x: u32| ((f64::from(x) * scale / 2.0).round() as u32 * 2).max(2);
+        Some((even(w), even(h), fps))
+    } else {
+        None
+    };
+    let (graph, sound) = join_graph(&parts, shape);
+    if !video && !sound {
+        return Err(Error::NothingToDo("these files have no sound".into()));
+    }
+    let enc = encoders(ffmpeg);
+    let mut args: Vec<OsString> = Vec::new();
+    for p in inputs {
+        args.push("-i".into());
+        args.push(file_url(p).into());
+    }
+    let mut push = |xs: &[&str]| args.extend(xs.iter().map(OsString::from));
+    push(&["-filter_complex", &graph]);
+    if video {
+        let v = pick(enc, &["libx264", "h264_videotoolbox"], "H.264")?;
+        push(&["-map", "[v]", "-c:v", v]);
+        if v == "libx264" {
+            push(&["-preset", "medium", "-crf", "20"]);
+        } else {
+            push(&["-q:v", "65"]);
+        }
+        push(&["-pix_fmt", "yuv420p"]);
+    }
+    if sound {
+        let a = pick(enc, &["aac_at", "aac"], "AAC")?;
+        push(&["-map", "[a]", "-c:a", a, "-b:a", "192k"]);
+    }
+    push(&[
+        "-movflags",
+        "+faststart",
+        "-f",
+        if video { "mp4" } else { "ipod" },
+    ]);
+    args.push(file_url(out).into());
+    let total: f64 = parts.iter().map(|p| p.seconds).sum();
+    run_ffmpeg(ffmpeg, &args, Some(total), None, cancel, progress)
+}
+
+/// Draws the subtitles in `dir`/`subs` into the picture of `input`, as
+/// H.264 and AAC in MP4. FFmpeg runs in `dir`, so the subtitle file's name
+/// needs no escaping in the filter.
+pub fn burn(
+    caps: &Capabilities,
+    input: &Path,
+    dir: &Path,
+    subs: &str,
+    out: &Path,
+    cancel: &AtomicBool,
+    progress: &mut dyn FnMut(f32),
+) -> Result<()> {
+    let ffmpeg = caps.ffmpeg.as_ref().ok_or(Error::FfmpegMissing)?;
+    debug_assert!(subs.chars().all(|c| c.is_ascii_alphanumeric() || c == '.'));
+    let enc = encoders(ffmpeg);
+    let v = pick(enc, &["libx264", "h264_videotoolbox"], "H.264")?;
+    let a = pick(enc, &["aac_at", "aac"], "AAC")?;
+    let filter = format!("subtitles={subs}");
+    let mut args: Vec<OsString> = vec!["-i".into(), file_url(input).into()];
+    let mut push = |xs: &[&str]| args.extend(xs.iter().map(OsString::from));
+    push(&["-map", "0:v:0", "-map", "0:a:0?", "-vf", &filter, "-c:v", v]);
+    if v == "libx264" {
+        push(&["-preset", "medium", "-crf", "20"]);
+    } else {
+        push(&["-q:v", "65"]);
+    }
+    push(&[
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        a,
+        "-b:a",
+        "192k",
+        "-movflags",
+        "+faststart",
+        "-f",
+        "mp4",
+    ]);
+    args.push(file_url(out).into());
+    let length = probe(caps, input).duration_s;
+    run_ffmpeg(ffmpeg, &args, length, Some(dir), cancel, progress)
 }
 
 fn kill(child: &mut Child) {

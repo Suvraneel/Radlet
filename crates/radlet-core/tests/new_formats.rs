@@ -286,3 +286,146 @@ fn archives_through_bsdtar() {
         "a"
     );
 }
+
+#[test]
+fn sqlite_tables_become_spreadsheets() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("shop.db");
+    {
+        let conn = rusqlite::Connection::open(&db).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE orders (id INTEGER PRIMARY KEY, item TEXT, qty REAL, photo BLOB);
+             INSERT INTO orders (item, qty, photo) VALUES ('Tea', 2, x'00010203'), ('Coffee', 10.5, NULL);
+             CREATE TABLE people (name TEXT);
+             INSERT INTO people VALUES ('Ada');",
+        )
+        .unwrap();
+    }
+    assert_eq!(detect(&db).unwrap(), Format::Sqlite);
+    let caps = Capabilities::none();
+    let o = one_with(&caps, &[db.clone()], Action::convert(Format::Csv));
+    assert_eq!(o.status, Status::Done, "{:?}", o.error);
+    let orders = o
+        .outputs
+        .iter()
+        .find(|p| name(p).contains("orders"))
+        .expect("a CSV for the orders table");
+    assert_eq!(
+        std::fs::read_to_string(orders).unwrap(),
+        "id,item,qty,photo\n1,Tea,2,\"(binary, 4 bytes)\"\n2,Coffee,10.5,\n"
+    );
+    let xlsx = done(&one_with(
+        &caps,
+        &[db.clone()],
+        Action::convert(Format::Xlsx),
+    ));
+    assert_eq!(name(&xlsx), "shop.xlsx");
+    // Reading never changes the database.
+    let before = std::fs::read(&db).unwrap();
+    let _ = one_with(&caps, &[db.clone()], Action::convert(Format::Json));
+    assert_eq!(std::fs::read(&db).unwrap(), before);
+
+    // A database copied with its write-ahead log keeps its latest rows;
+    // columns worked out on reading are left out.
+    let live = dir.path().join("live.db");
+    let conn = rusqlite::Connection::open(&live).unwrap();
+    conn.execute_batch(
+        "PRAGMA journal_mode = WAL; PRAGMA wal_autocheckpoint = 0;
+         CREATE TABLE t (a TEXT, b TEXT GENERATED ALWAYS AS (upper(a)) VIRTUAL);
+         INSERT INTO t (a) VALUES ('x');",
+    )
+    .unwrap();
+    let copy = dir.path().join("copy.db");
+    std::fs::copy(&live, &copy).unwrap();
+    std::fs::copy(
+        dir.path().join("live.db-wal"),
+        dir.path().join("copy.db-wal"),
+    )
+    .unwrap();
+    drop(conn);
+    let csv = done(&one_with(
+        &caps,
+        &[copy.clone()],
+        Action::convert(Format::Csv),
+    ));
+    assert_eq!(std::fs::read_to_string(&csv).unwrap(), "a\nx\n");
+    assert!(
+        dir.path().join("copy.db-wal").exists(),
+        "the log is left as it was"
+    );
+}
+
+#[test]
+fn fonts_for_the_web_and_back() {
+    let fixtures = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/fonts");
+    let dir = tempfile::tempdir().unwrap();
+    let caps = Capabilities::none();
+    for (file, fmt) in [
+        ("radlet-test.ttf", Format::Ttf),
+        ("radlet-test.otf", Format::Otf),
+        ("radlet-test.woff", Format::Woff),
+        ("radlet-test.woff2", Format::Woff2),
+    ] {
+        let src = dir.path().join(file);
+        std::fs::copy(fixtures.join(file), &src).unwrap();
+        assert_eq!(detect(&src).unwrap(), fmt, "{file}");
+    }
+    let ttf = dir.path().join("radlet-test.ttf");
+    let woff2 = dir.path().join("web.woff2");
+    std::fs::copy(&ttf, dir.path().join("web.ttf")).unwrap();
+    let made = done(&one_with(
+        &caps,
+        &[dir.path().join("web.ttf")],
+        Action::convert(Format::Woff2),
+    ));
+    assert_eq!(name(&made), "web.woff2");
+    std::fs::rename(&made, &woff2).unwrap();
+    std::fs::remove_file(dir.path().join("web.ttf")).unwrap();
+    let back = done(&one_with(&caps, &[woff2], Action::convert(Format::Ttf)));
+    assert_eq!(detect(&back).unwrap(), Format::Ttf);
+    // The same tables come back (the checksum adjustment aside).
+    let a = std::fs::read(&ttf).unwrap();
+    let b = std::fs::read(&back).unwrap();
+    assert_eq!(a.len(), b.len());
+    // A font with PostScript outlines can't pretend to be a TTF.
+    let otf_woff = done(&one_with(
+        &caps,
+        &[dir.path().join("radlet-test.otf")],
+        Action::convert(Format::Woff),
+    ));
+    let o = one_with(&caps, &[otf_woff], Action::convert(Format::Ttf));
+    assert_ne!(o.status, Status::Done);
+}
+
+#[test]
+fn epub_books_both_ways() {
+    let dir = tempfile::tempdir().unwrap();
+    let md = dir.path().join("book.md");
+    std::fs::write(
+        &md,
+        "# The Engine\n\nIt *works*.\n\n# The Cards\n\nPunched, in order.\n\n- one\n- two\n",
+    )
+    .unwrap();
+    let caps = Capabilities::none();
+    let epub = done(&one_with(&caps, &[md], Action::convert(Format::Epub)));
+    assert_eq!(name(&epub), "book.epub");
+    assert_eq!(detect(&epub).unwrap(), Format::Epub);
+    // The mimetype comes first, stored, as readers require.
+    let bytes = std::fs::read(&epub).unwrap();
+    assert_eq!(&bytes[30..38], b"mimetype");
+    assert_eq!(&bytes[38..58], b"application/epub+zip");
+    let txt = done(&one_with(
+        &caps,
+        &[epub.clone()],
+        Action::convert(Format::Txt),
+    ));
+    let text = std::fs::read_to_string(&txt).unwrap();
+    assert!(text.contains("The Engine"), "{text}");
+    assert!(text.contains("Punched, in order."), "{text}");
+    assert!(
+        text.find("The Engine").unwrap() < text.find("The Cards").unwrap(),
+        "chapters in order"
+    );
+    let pdf = done(&one_with(&caps, &[epub], Action::convert(Format::Pdf)));
+    assert_eq!(detect(&pdf).unwrap(), Format::Pdf);
+}

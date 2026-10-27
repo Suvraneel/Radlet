@@ -234,14 +234,30 @@ enum Command {
         #[arg(long, value_parser = parse_rect)]
         rect: Rect,
     },
-    /// Cover areas of images or videos. Repeat --rect for several areas.
+    /// Cover areas of images or videos (repeat --rect for several), or
+    /// black out text in PDFs for real (--text, --emails, --phones,
+    /// --cards; macOS app).
     Redact {
         #[command(flatten)]
         run: RunArgs,
-        #[arg(long = "rect", value_parser = parse_rect, required = true)]
+        /// An area to cover, as fractions x,y,w,h.
+        #[arg(long = "rect", value_parser = parse_rect, required_unless_present_any = ["text", "emails", "phones", "cards"])]
         rects: Vec<Rect>,
         #[arg(long, value_enum, default_value = "black")]
         style: Style,
+        /// A word or phrase to black out of PDFs, in any case. Repeat for
+        /// several.
+        #[arg(long, conflicts_with = "rects")]
+        text: Vec<String>,
+        /// Black out every email address in PDFs.
+        #[arg(long, conflicts_with = "rects")]
+        emails: bool,
+        /// Black out every phone number in PDFs.
+        #[arg(long, conflicts_with = "rects")]
+        phones: bool,
+        /// Black out every card number in PDFs.
+        #[arg(long, conflicts_with = "rects")]
+        cards: bool,
     },
     /// Split PDFs: every page (default), every N pages, or ranges.
     Split {
@@ -406,8 +422,21 @@ enum Command {
         run: RunArgs,
     },
     /// Join documents (TXT, Markdown, HTML, Word, RTF), in order, into one
-    /// file in the first one's format.
+    /// file in the first one's format; or videos into one MP4, or sound
+    /// into one M4A.
     Join {
+        #[command(flatten)]
+        run: RunArgs,
+    },
+    /// Draw subtitles into videos so every player shows them. Give each
+    /// video and the subtitle file named after it (or one of each).
+    Burn {
+        #[command(flatten)]
+        run: RunArgs,
+    },
+    /// Make photos of paper pages into one scanned PDF: each page cut out,
+    /// squared up and evened out, with searchable text (macOS app).
+    Scan {
         #[command(flatten)]
         run: RunArgs,
     },
@@ -433,11 +462,20 @@ enum Command {
     Zip {
         #[command(flatten)]
         run: RunArgs,
+        /// Lock every file in the ZIP with this password (AES-256). Prefer
+        /// setting RADLET_ZIP_PASSWORD instead: other programs can see
+        /// command-line arguments, and shells keep them in history.
+        #[arg(long, env = "RADLET_ZIP_PASSWORD", hide_env_values = true)]
+        password: Option<String>,
     },
-    /// Extract ZIP archives beside them.
+    /// Extract archives (ZIP, 7-Zip, RAR, TAR, disc images) beside them.
     Unzip {
         #[command(flatten)]
         run: RunArgs,
+        /// The password of a locked ZIP. Prefer setting RADLET_PASSWORD
+        /// instead.
+        #[arg(long, env = "RADLET_PASSWORD", hide_env_values = true)]
+        password: Option<String>,
     },
     /// Copy two or more folders into one new folder.
     Merge {
@@ -830,6 +868,10 @@ fn install_signal_handlers() {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+    // Passwords read from the environment aren't passed on to the programs
+    // Radlet runs (workers, FFmpeg, the Mac helper).
+    std::env::remove_var("RADLET_PASSWORD");
+    std::env::remove_var("RADLET_ZIP_PASSWORD");
     match dispatch(cli) {
         Ok(code) => code,
         Err(e) => {
@@ -911,7 +953,12 @@ fn dispatch(cli: Cli) -> Result<ExitCode> {
             let to = Format::parse(&to).with_context(|| format!("unknown format \"{to}\""))?;
             // Folders: convert what's inside (a folder to ZIP or TAR is
             // packed as it is).
-            let folders = !r.files.is_empty() && r.files.iter().all(|f| f.is_dir());
+            // (A Keynote, Pages or Numbers package is a folder too, but a
+            // document.)
+            let folders = !r.files.is_empty()
+                && r.files
+                    .iter()
+                    .all(|f| radlet_core::format::detect(f).is_ok_and(|k| k == Format::Folder));
             if folders && !matches!(to, Format::Zip | Format::Tar) {
                 // PDF means documents made into PDFs; otherwise files of
                 // the target's own kind (images to JPEG, audio to MP3...).
@@ -958,9 +1005,25 @@ fn dispatch(cli: Cli) -> Result<ExitCode> {
             run: r,
             rects,
             style,
+            text,
+            emails,
+            phones,
+            cards,
         } => {
-            let style = style.redact();
-            run(&r, Action::single(Step::Redact { rects, style }), json_out)
+            let step = if rects.is_empty() {
+                Step::RedactText {
+                    words: text,
+                    emails,
+                    phones,
+                    cards,
+                }
+            } else {
+                Step::Redact {
+                    rects,
+                    style: style.redact(),
+                }
+            };
+            run(&r, Action::single(step), json_out)
         }
         Command::Split {
             run: r,
@@ -1127,14 +1190,43 @@ fn dispatch(cli: Cli) -> Result<ExitCode> {
             )
         }
         Command::Combine { run: r } => run(&r, Action::CombinePdf, json_out),
-        Command::Join { run: r } => run(&r, Action::CombineText, json_out),
+        Command::Join { run: r } => {
+            let media = r.files.iter().all(|p| {
+                radlet_core::format::detect(p).is_ok_and(|f| {
+                    matches!(
+                        f.category(),
+                        radlet_core::format::Category::Audio | radlet_core::format::Category::Video
+                    )
+                })
+            });
+            let action = if media {
+                Action::JoinMedia
+            } else {
+                Action::CombineText
+            };
+            run(&r, action, json_out)
+        }
+        Command::Burn { run: r } => run(&r, Action::BurnSubtitles, json_out),
+        Command::Scan { run: r } => run(&r, Action::ScanDocuments, json_out),
         Command::Words { run: r } => run(&r, Action::WordCount, json_out),
         Command::Clean { run: r } => run(&r, Action::single(Step::CleanText), json_out),
         Command::Json { run: r, minify } => {
             run(&r, Action::single(Step::FormatJson { minify }), json_out)
         }
-        Command::Zip { run: r } => run(&r, Action::ZipAll, json_out),
-        Command::Unzip { run: r } => run(&r, Action::convert(Format::Folder), json_out),
+        Command::Zip { run: r, password } => {
+            let action = match password {
+                Some(p) => Action::ZipLocked { password: p.into() },
+                None => Action::ZipAll,
+            };
+            run(&r, action, json_out)
+        }
+        Command::Unzip { run: r, password } => {
+            let action = match password {
+                Some(p) => Action::UnzipLocked { password: p.into() },
+                None => Action::convert(Format::Folder),
+            };
+            run(&r, action, json_out)
+        }
         Command::Merge { run: r } => run(&r, Action::MergeFolders, json_out),
         Command::Flatten { run: r } => run(&r, Action::Flatten, json_out),
         Command::Sort { run: r } => run(&r, Action::SortByKind, json_out),

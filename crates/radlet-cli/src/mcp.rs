@@ -256,7 +256,8 @@ crop {rect: {x, y, w, h} as fractions}; redact {rects, style?: black|pixelate|bl
 compress {level?: light|balanced|strong|smart, target_bytes?}; pages {pages: [numbers], rotate?: [{page, degrees}]}; \
 page_numbers {position?, style?: number|page|page_of_total|fraction, start?, skip_first?}; \
 watermark {text, opacity?, diagonal?}; trim {start?, end?} in seconds; normalize_audio; \
-remove_background {crop?}; make_searchable; transcribe {to?: srt|vtt|txt, language?}. \
+remove_background {crop?}; make_searchable; transcribe {to?: srt|vtt|txt, language?}; \
+redact_text {words?: [phrases], emails?, phones?, cards?} blacks out text in PDFs for real (Mac). \
 Steps run in order on each file, for example [{\"op\":\"resize\",\"max\":1600},{\"op\":\"convert\",\"to\":\"webp\"}].";
 
 fn tools(caps: &Capabilities) -> Vec<Value> {
@@ -395,6 +396,37 @@ fn tools(caps: &Capabilities) -> Vec<Value> {
             false,
         ),
     ];
+    if caps.media() || caps.native_media() {
+        list.push(tool(
+            "join_clips",
+            "Join clips",
+            "Put videos, in the order given, one after another into one MP4 (each fitted into the \
+             first one's shape), or sound files into one M4A.",
+            json!({ "paths": paths_schema(), "output_dir": output_dir_schema() }),
+            &["paths"],
+            false,
+        ));
+        list.push(tool(
+            "burn_subtitles",
+            "Burn in subtitles",
+            "Draw subtitles into videos' pictures so every player shows them. Give each video \
+             with the subtitle file (SRT, VTT, ASS, SBV, TTML) named after it, or one of each.",
+            json!({ "paths": paths_schema(), "output_dir": output_dir_schema() }),
+            &["paths"],
+            false,
+        ));
+    }
+    if caps.vision.is_some() {
+        list.push(tool(
+            "scan_documents",
+            "Scan documents",
+            "Make photos of paper pages, in the order given, into one scanned PDF: each page cut \
+             out, squared up and evened out, with searchable text.",
+            json!({ "paths": paths_schema(), "output_dir": output_dir_schema() }),
+            &["paths"],
+            false,
+        ));
+    }
     if caps.media() {
         list.push(tool(
             "extract_frames",
@@ -560,6 +592,9 @@ fn call(
             )
         }
         "combine_into_pdf" => run(args, Action::CombinePdf, ctx, cancel, progress),
+        "join_clips" => run(args, Action::JoinMedia, ctx, cancel, progress),
+        "burn_subtitles" => run(args, Action::BurnSubtitles, ctx, cancel, progress),
+        "scan_documents" => run(args, Action::ScanDocuments, ctx, cancel, progress),
         "split_pdf" => {
             let mode = match (
                 args.get("ranges").and_then(Value::as_str),

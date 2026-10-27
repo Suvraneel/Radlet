@@ -315,7 +315,7 @@ pub fn convert(input: &Path, from: Format, to: Format, out: &Path) -> Result<()>
             let d = crate::engines::sheet::doc(input, f)?;
             return doc::write(&d, t, &doc::title_of(input), out);
         }
-        (Format::Xls | Format::Ods, Format::Xlsx) => {
+        (Format::Xls | Format::Ods | Format::Sqlite, Format::Xlsx) => {
             let sheets = crate::engines::sheet::read_book(input, from)?;
             if sheets.is_empty() {
                 return Err(Error::NothingToDo("the workbook is empty".into()));

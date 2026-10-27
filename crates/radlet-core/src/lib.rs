@@ -9,6 +9,7 @@
 //! 3. Run them with [`job::run_batch`], inline or in isolated worker
 //!    processes, and stream [`job::Event`]s back to the UI.
 
+pub mod assemble;
 pub mod catalog;
 pub mod engines;
 pub mod error;

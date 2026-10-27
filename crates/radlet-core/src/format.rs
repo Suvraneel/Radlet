@@ -48,6 +48,15 @@ pub enum Format {
     Doc,
     /// OpenDocument text, read through macOS's `textutil`.
     Odt,
+    /// An e-book.
+    Epub,
+    /// PowerPoint slides.
+    Pptx,
+    /// Keynote, Pages and Numbers (single files or packages), converted
+    /// through Apple's own apps when they're installed.
+    Key,
+    Pages,
+    Numbers,
     // Audio
     Mp3,
     M4a,
@@ -89,6 +98,13 @@ pub enum Format {
     Xls,
     /// An OpenDocument spreadsheet.
     Ods,
+    /// A SQLite database, read like a workbook: a sheet per table.
+    Sqlite,
+    // Fonts
+    Ttf,
+    Otf,
+    Woff,
+    Woff2,
     // Archives
     Zip,
     /// 7-Zip, extracted with macOS's `tar` (libarchive).
@@ -115,6 +131,7 @@ pub enum Category {
     Subtitle,
     Data,
     Archive,
+    Font,
     Folder,
 }
 
@@ -130,6 +147,7 @@ impl Category {
             Category::Subtitle => "captions.bubble",
             Category::Data => "tablecells",
             Category::Archive => "doc.zipper",
+            Category::Font => "textformat",
             Category::Folder => "folder",
         }
     }
@@ -140,9 +158,10 @@ use Format::*;
 impl Format {
     pub const ALL: &'static [Format] = &[
         Png, Jpeg, Webp, Gif, Bmp, Tiff, Ico, Icns, Tga, Qoi, Heic, Avif, Raw, Psd, Jxl, Jp2, Svg,
-        Pdf, Docx, Rtf, Doc, Odt, Mp3, M4a, Wav, Flac, Ogg, Opus, Aiff, Wma, Mp4, Mov, Mkv, Webm,
-        Avi, Wmv, Txt, Md, Html, Srt, Vtt, Ass, Sbv, Ttml, Csv, Tsv, Json, Yaml, Toml, Xml, Xlsx,
-        Xls, Ods, Zip, SevenZ, Rar, Tar, Iso, Folder,
+        Pdf, Docx, Rtf, Doc, Odt, Epub, Pptx, Key, Pages, Numbers, Mp3, M4a, Wav, Flac, Ogg, Opus,
+        Aiff, Wma, Mp4, Mov, Mkv, Webm, Avi, Wmv, Txt, Md, Html, Srt, Vtt, Ass, Sbv, Ttml, Csv,
+        Tsv, Json, Yaml, Toml, Xml, Xlsx, Xls, Ods, Sqlite, Ttf, Otf, Woff, Woff2, Zip, SevenZ,
+        Rar, Tar, Iso, Folder,
     ];
 
     /// Stable identifier used on the wire and in recipes.
@@ -170,6 +189,11 @@ impl Format {
             Rtf => "rtf",
             Doc => "doc",
             Odt => "odt",
+            Epub => "epub",
+            Pptx => "pptx",
+            Key => "key",
+            Pages => "pages",
+            Numbers => "numbers",
             Mp3 => "mp3",
             M4a => "m4a",
             Wav => "wav",
@@ -201,6 +225,11 @@ impl Format {
             Xlsx => "xlsx",
             Xls => "xls",
             Ods => "ods",
+            Sqlite => "sqlite",
+            Ttf => "ttf",
+            Otf => "otf",
+            Woff => "woff",
+            Woff2 => "woff2",
             Zip => "zip",
             SevenZ => "7z",
             Rar => "rar",
@@ -235,6 +264,11 @@ impl Format {
             Rtf => "RTF",
             Doc => "Word 97",
             Odt => "ODT",
+            Epub => "EPUB",
+            Pptx => "PowerPoint",
+            Key => "Keynote",
+            Pages => "Pages",
+            Numbers => "Numbers",
             Mp3 => "MP3",
             M4a => "M4A",
             Wav => "WAV",
@@ -266,6 +300,11 @@ impl Format {
             Xlsx => "Excel",
             Xls => "Excel 97",
             Ods => "ODS",
+            Sqlite => "SQLite",
+            Ttf => "TTF",
+            Otf => "OTF",
+            Woff => "WOFF",
+            Woff2 => "WOFF2",
             Zip => "ZIP",
             SevenZ => "7z",
             Rar => "RAR",
@@ -291,12 +330,15 @@ impl Format {
         match self {
             Png | Jpeg | Webp | Gif | Bmp | Tiff | Ico | Icns | Tga | Qoi | Heic | Avif | Raw
             | Psd | Jxl | Jp2 | Svg => Category::Image,
-            Pdf | Docx | Rtf | Doc | Odt => Category::Document,
+            Pdf | Docx | Rtf | Doc | Odt | Epub | Pptx | Key | Pages | Numbers => {
+                Category::Document
+            }
             Mp3 | M4a | Wav | Flac | Ogg | Opus | Aiff | Wma => Category::Audio,
             Mp4 | Mov | Mkv | Webm | Avi | Wmv => Category::Video,
             Txt | Md | Html => Category::Text,
             Srt | Vtt | Ass | Sbv | Ttml => Category::Subtitle,
-            Csv | Tsv | Json | Yaml | Toml | Xml | Xlsx | Xls | Ods => Category::Data,
+            Csv | Tsv | Json | Yaml | Toml | Xml | Xlsx | Xls | Ods | Sqlite => Category::Data,
+            Ttf | Otf | Woff | Woff2 => Category::Font,
             Zip | SevenZ | Rar | Tar | Iso => Category::Archive,
             Folder => Category::Folder,
         }
@@ -322,6 +364,9 @@ impl Format {
             "geojson" => Json,
             "excel" => Xlsx,
             "yml" => Yaml,
+            "sqlite3" | "db3" => Sqlite,
+            "powerpoint" => Pptx,
+            "keynote" => Key,
             "ssa" => Ass,
             "dfxp" => Ttml,
             "j2k" | "jpf" | "jpx" | "j2c" => Jp2,
@@ -363,7 +408,7 @@ impl Format {
     /// paragraphs, lists). All but Word 97 and ODT can be written too
     /// (see `doc::writable`).
     pub fn is_document_text(self) -> bool {
-        matches!(self, Txt | Md | Html | Docx | Rtf | Doc | Odt)
+        matches!(self, Txt | Md | Html | Docx | Rtf | Doc | Odt | Epub | Pptx)
     }
 
     /// Documents read through macOS's `textutil`.
@@ -371,9 +416,20 @@ impl Format {
         matches!(self, Doc | Odt)
     }
 
-    /// Spreadsheets with sheets: Excel, old Excel and OpenDocument.
+    /// Spreadsheets with sheets: Excel, old Excel and OpenDocument, and
+    /// SQLite databases (a sheet per table).
     pub fn is_workbook(self) -> bool {
-        matches!(self, Xlsx | Xls | Ods)
+        matches!(self, Xlsx | Xls | Ods | Sqlite)
+    }
+
+    /// Keynote, Pages and Numbers documents.
+    pub fn is_iwork(self) -> bool {
+        matches!(self, Key | Pages | Numbers)
+    }
+
+    /// Fonts Radlet repackages.
+    pub fn is_font(self) -> bool {
+        matches!(self, Ttf | Otf | Woff | Woff2)
     }
 
     /// Subtitle formats Radlet reads and writes.
@@ -423,7 +479,11 @@ const SNIFF_LEN: usize = 4096;
 pub fn detect(path: &Path) -> Result<Format> {
     let meta = std::fs::metadata(path)?;
     if meta.is_dir() {
-        return Ok(Folder);
+        // Keynote, Pages and Numbers documents can be packages.
+        return Ok(match Format::from_path(path) {
+            Some(f) if f.is_iwork() => f,
+            _ => Folder,
+        });
     }
     let mut header = Vec::with_capacity(SNIFF_LEN);
     File::open(path)?
@@ -471,6 +531,14 @@ fn classify_zip(path: &Path, by_ext: Option<Format>) -> Option<Format> {
     if has("word/document.xml") {
         return Some(Docx);
     }
+    if has("ppt/presentation.xml") {
+        return Some(Pptx);
+    }
+    // Keynote, Pages and Numbers save their single-file documents as ZIPs
+    // of their own; only the name tells which.
+    if (has("Index/Document.iwa") || has("Index.zip")) && by_ext.is_some_and(Format::is_iwork) {
+        return by_ext;
+    }
     if has("xl/workbook.xml") {
         return Some(Xlsx);
     }
@@ -487,6 +555,18 @@ fn classify_zip(path: &Path, by_ext: Option<Format>) -> Option<Format> {
             "application/vnd.oasis.opendocument.text" => return Some(Odt),
             "application/vnd.oasis.opendocument.spreadsheet" => return Some(Ods),
             _ => {}
+        }
+    }
+    if has("mimetype") && has("META-INF/container.xml") {
+        let mut kind = String::new();
+        if let Ok(f) = zip::ZipArchive::new(File::open(path).ok()?)
+            .ok()?
+            .by_name("mimetype")
+        {
+            let _ = f.take(100).read_to_string(&mut kind);
+        }
+        if kind.trim() == "application/epub+zip" {
+            return Some(Epub);
         }
     }
     let container = has("[Content_Types].xml")
@@ -585,6 +665,25 @@ pub fn sniff(h: &[u8], hint: Option<Format>) -> Option<Format> {
     }
     if starts(&[0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C]) {
         return Some(SevenZ);
+    }
+    if starts(b"SQLite format 3\0") {
+        return Some(Sqlite);
+    }
+    if starts(b"wOFF") {
+        return Some(Woff);
+    }
+    if starts(b"wOF2") {
+        return Some(Woff2);
+    }
+    if starts(b"OTTO") {
+        return Some(Otf);
+    }
+    // TrueType: version 1.0 or "true", named as a font.
+    if (starts(&[0, 1, 0, 0]) || starts(b"true"))
+        && matches!(hint, None | Some(Ttf) | Some(Otf))
+        && h.len() >= 12
+    {
+        return Some(if hint == Some(Otf) { Otf } else { Ttf });
     }
     if starts(b"Rar!\x1a\x07") {
         return Some(Rar);
@@ -857,7 +956,11 @@ mod tests {
         assert_eq!(Format::parse("yml"), Some(Yaml));
         assert_eq!(Format::parse("CR3"), Some(Raw));
         assert_eq!(Format::parse("tgz"), Some(Tar));
-        assert_eq!(Format::parse("pptx"), None);
+        assert_eq!(Format::parse("pptx"), Some(Pptx));
+        assert_eq!(Format::parse("powerpoint"), Some(Pptx));
+        assert_eq!(Format::parse("sqlite3"), Some(Sqlite));
+        assert_eq!(Format::parse("woff2"), Some(Woff2));
+        assert_eq!(Format::parse("ppt"), None);
         assert_eq!(
             Format::from_path(Path::new("site backup.tar.gz")),
             Some(Tar)

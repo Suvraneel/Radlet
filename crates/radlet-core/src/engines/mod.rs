@@ -1,6 +1,7 @@
 //! Format-specific engines. Each one is a set of plain functions over paths
 //! and decoded data; orchestration lives in [`crate::pipeline`].
 
+pub mod anim;
 pub mod archive;
 pub mod avmedia;
 pub mod bsdtar;
@@ -9,15 +10,19 @@ pub mod data;
 pub mod doc;
 pub mod docpdf;
 pub mod docx;
+pub mod epub;
 pub mod folder;
+pub mod font;
 pub mod htmlread;
 pub mod icons;
 pub mod image;
+pub mod iwork;
 pub mod media;
 pub mod meta;
 pub mod pdf;
 pub mod pdfedit;
 pub mod pdfium;
+pub mod pptx;
 pub mod rtf;
 pub mod sheet;
 pub mod sips;

@@ -288,7 +288,7 @@ fn usage_errors_exit_2() {
     let dir = tempfile::tempdir().unwrap();
     png(dir.path(), "a.png", 2, 2);
     assert_eq!(
-        radlet(&["convert", "a.png", "--to", "pptx"], dir.path()).0,
+        radlet(&["convert", "a.png", "--to", "ppt"], dir.path()).0,
         2
     );
     assert_eq!(

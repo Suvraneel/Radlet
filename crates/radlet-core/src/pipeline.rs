@@ -11,8 +11,8 @@ use crate::catalog::{self, Capabilities};
 use crate::engines::image::{self as img, EncodeOptions, Picture, ResizeSpec};
 use crate::engines::media::{self, MediaJob};
 use crate::engines::{
-    archive, data, doc, docpdf, folder, meta, pdf, pdfedit, pdfium, sheet, speech, svg, text,
-    vision,
+    anim, archive, data, doc, docpdf, folder, font, iwork, meta, pdf, pdfedit, pdfium, sheet,
+    speech, svg, text, vision,
 };
 use crate::error::{Error, Result};
 use crate::format::{self, display_name, Category, Format};
@@ -52,7 +52,7 @@ pub struct Produced {
 }
 
 impl Produced {
-    fn one(path: PathBuf) -> Produced {
+    pub(crate) fn one(path: PathBuf) -> Produced {
         Produced {
             output: Some(path.clone()),
             outputs: vec![path],
@@ -60,7 +60,7 @@ impl Produced {
         }
     }
 
-    fn many(paths: Vec<PathBuf>) -> Produced {
+    pub(crate) fn many(paths: Vec<PathBuf>) -> Produced {
         Produced {
             output: paths.first().cloned(),
             outputs: paths,
@@ -209,7 +209,7 @@ pub fn run_steps(
         // Folders and archives aren't files to pass along a chain.
         match (from, *to) {
             (Format::Folder, Format::Zip) => {
-                return zip_all(std::slice::from_ref(&input.to_path_buf()), ctx)
+                return zip_all(std::slice::from_ref(&input.to_path_buf()), None, ctx)
             }
             (Format::Folder, Format::Tar) => return tar_folder(input, ctx),
             (Format::Zip, Format::Folder) => return unzip(input, ctx),
@@ -483,6 +483,7 @@ fn step_name(step: &Step) -> &'static str {
         Step::BlurFaces { .. } => "Hide faces",
         Step::Translate { .. } => "Translate",
         Step::FormatJson { .. } => "Format JSON",
+        Step::RedactText { .. } => "Black out text",
     }
 }
 
@@ -529,6 +530,27 @@ fn apply(
             let to = *to;
             if to == cur && quality.is_none() {
                 return Ok(state);
+            }
+            // Keynote, Pages and Numbers export their own documents (and
+            // PowerPoint's slides, through Keynote).
+            if let State::File { path, fmt } = &state {
+                if iwork::handles(caps, *fmt, to) {
+                    iwork::convert(caps, path, *fmt, to, title, scratch, dst, cancel)?;
+                    return Ok(State::File {
+                        path: dst.to_path_buf(),
+                        fmt: to,
+                    });
+                }
+            }
+            // Moving pictures keep every frame between GIF, WebP and PNG.
+            if let State::File { path, fmt } = &state {
+                if anim::animatable(*fmt) && anim::animatable(to) && anim::is_animated(path, *fmt) {
+                    anim::convert(path, *fmt, to, *quality, dst)?;
+                    return Ok(State::File {
+                        path: dst.to_path_buf(),
+                        fmt: to,
+                    });
+                }
             }
             if caps.can_decode_raster(cur) && caps.can_encode_raster(to) {
                 let px = pixels(state, caps)?;
@@ -602,6 +624,7 @@ fn apply(
                         retitle_html(dst, title)?;
                     }
                 }
+                (f, t) if f.is_font() && t.is_font() => font::convert(&path, fmt, to, dst)?,
                 (f, _) if f.is_subtitles() => text::convert(&path, fmt, to, dst)?,
                 (Format::Txt, t) if t.is_subtitles() => text::convert(&path, fmt, to, dst)?,
                 (f, _)
@@ -729,6 +752,35 @@ fn apply(
             Ok(px.with_img(redacted).into_state())
         }
         Step::StripMetadata => strip(state, dst, caps, cancel, progress),
+        Step::RedactText {
+            words,
+            emails,
+            phones,
+            cards,
+        } => {
+            let words: Vec<String> = words
+                .iter()
+                .map(|w| w.trim().to_string())
+                .filter(|w| !w.is_empty())
+                .collect();
+            let kinds: Vec<&'static str> =
+                [(*emails, "emails"), (*phones, "phones"), (*cards, "cards")]
+                    .into_iter()
+                    .filter_map(|(on, kind)| on.then_some(kind))
+                    .collect();
+            if words.is_empty() && kinds.is_empty() {
+                return Err(Error::Invalid(
+                    "say which words, or which kinds of details, to black out".into(),
+                ));
+            }
+            let (path, _) = materialize(state, scratch, caps)?;
+            let terms = vision::RedactTerms { words, kinds };
+            vision::redact_pdf(caps, &path, &terms, scratch, dst, cancel, progress)?;
+            Ok(State::File {
+                path: dst.to_path_buf(),
+                fmt: Format::Pdf,
+            })
+        }
         Step::Compress {
             level,
             target_bytes,
@@ -1100,17 +1152,18 @@ fn strip(
 }
 
 /// Pixel steps work on one frame; refuse rather than silently drop the
-/// rest of an animated GIF.
+/// rest of an animation.
 fn reject_animation(state: &State) -> Result<()> {
-    if let State::File {
-        path,
-        fmt: Format::Gif,
-    } = state
-    {
-        if meta::gif_frames(&std::fs::read(path)?).unwrap_or(1) > 1 {
-            return Err(Error::UnsupportedInput(
-                "animated GIFs can't be edited frame by frame yet. Convert to MP4 first".into(),
-            ));
+    if let State::File { path, fmt } = state {
+        if anim::animatable(*fmt) && anim::is_animated(path, *fmt) {
+            let hint = if *fmt == Format::Gif {
+                ". Convert it to MP4 first"
+            } else {
+                ""
+            };
+            return Err(Error::UnsupportedInput(format!(
+                "moving pictures can't be edited frame by frame yet{hint}"
+            )));
         }
     }
     Ok(())
@@ -1772,13 +1825,17 @@ fn require_folder(input: &Path) -> Result<()> {
 
 /// Zips everything selected into one archive: "Name.zip" for one item,
 /// "Archive.zip" for several, beside the first.
-pub fn zip_all(inputs: &[PathBuf], ctx: &mut Context<'_>) -> Result<Produced> {
+pub fn zip_all(
+    inputs: &[PathBuf],
+    password: Option<&str>,
+    ctx: &mut Context<'_>,
+) -> Result<Produced> {
     let first = inputs
         .first()
         .ok_or_else(|| Error::Invalid("nothing to zip".into()))?;
     let dir = ctx.output.dir_for(first);
     let tmp = naming::temp_in(&dir, ctx.temp_tag, "zip")?;
-    archive::zip(inputs, tmp.path(), ctx.cancel, &mut *ctx.progress)?;
+    archive::zip(inputs, tmp.path(), password, ctx.cancel, &mut *ctx.progress)?;
     if inputs.len() == 1 && !first.is_dir() {
         naming::inherit_permissions(first, tmp.path());
     }
@@ -1807,10 +1864,17 @@ pub fn tar_folder(input: &Path, ctx: &mut Context<'_>) -> Result<Produced> {
 /// as it is, or everything in a folder named after the archive. ZIPs are
 /// opened here; 7-Zip, RAR, TAR and disc images through `bsdtar`.
 pub fn unzip(input: &Path, ctx: &mut Context<'_>) -> Result<Produced> {
+    unzip_with(input, None, ctx)
+}
+
+/// [`unzip`], decrypting a locked ZIP with `password`.
+pub fn unzip_with(input: &Path, password: Option<&str>, ctx: &mut Context<'_>) -> Result<Produced> {
     let dir = ctx.output.dir_for(input);
     let tmp = naming::temp_dir_in(&dir, ctx.temp_tag)?;
-    if format::detect(input)? == Format::Zip {
-        archive::extract(input, tmp.path(), ctx.cancel, &mut *ctx.progress)?;
+    let fmt = format::detect(input)?;
+    // Only ZIP passwords can be used; other archives open as usual.
+    if fmt == Format::Zip {
+        archive::extract(input, tmp.path(), password, ctx.cancel, &mut *ctx.progress)?;
     } else {
         crate::engines::bsdtar::extract(
             ctx.caps,

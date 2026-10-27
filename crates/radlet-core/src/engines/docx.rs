@@ -25,26 +25,29 @@ fn bad(path: &Path, why: impl std::fmt::Display) -> Error {
     ))
 }
 
-fn part<R: Read + std::io::Seek>(zip: &mut ZipArchive<R>, name: &str) -> Result<Option<String>> {
+pub(crate) fn part<R: Read + std::io::Seek>(
+    zip: &mut ZipArchive<R>,
+    name: &str,
+) -> Result<Option<String>> {
     let mut f = match zip.by_name(name) {
         Ok(f) => f,
         Err(zip::result::ZipError::FileNotFound) => return Ok(None),
         Err(e) => return Err(Error::UnsupportedInput(format!("can't read {name} ({e})"))),
     };
     if f.size() > MAX_PART {
-        return Err(Error::TooLarge("this Word document is too large".into()));
+        return Err(Error::TooLarge("this document is too large".into()));
     }
     let mut bytes = Vec::new();
     (&mut f).take(MAX_PART + 1).read_to_end(&mut bytes)?;
     Ok(Some(String::from_utf8_lossy(&bytes).into_owned()))
 }
 
-fn local(e: &BytesStart) -> String {
+pub(crate) fn local(e: &BytesStart) -> String {
     e.local_name().as_ref().to_string()
 }
 
 /// An attribute by local name ("val" finds `w:val`).
-fn get(e: &BytesStart, name: &str) -> Option<String> {
+pub(crate) fn get(e: &BytesStart, name: &str) -> Option<String> {
     e.attributes().flatten().find_map(|a| {
         (a.key.local_name().as_ref() == name)
             .then(|| {
@@ -56,7 +59,7 @@ fn get(e: &BytesStart, name: &str) -> Option<String> {
     })
 }
 
-fn entity(r: &BytesRef) -> String {
+pub(crate) fn entity(r: &BytesRef) -> String {
     if let Ok(Some(c)) = r.resolve_char_ref() {
         return c.to_string();
     }
@@ -183,7 +186,7 @@ fn parse_numbering(xml: &str) -> HashMap<String, HashMap<u8, bool>> {
 }
 
 /// Relationship id → target, for hyperlinks.
-fn parse_rels(xml: &str) -> HashMap<String, String> {
+pub(crate) fn parse_rels(xml: &str) -> HashMap<String, String> {
     let mut map = HashMap::new();
     let mut r = Reader::from_str(xml);
     loop {
@@ -220,7 +223,7 @@ fn main_part_name(rels: Option<&str>) -> String {
     }
 }
 
-fn core_title(xml: &str) -> Option<String> {
+pub(crate) fn core_title(xml: &str) -> Option<String> {
     let mut r = Reader::from_str(xml);
     let mut in_title = false;
     let mut title = String::new();

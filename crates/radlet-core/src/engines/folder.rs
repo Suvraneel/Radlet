@@ -397,6 +397,7 @@ pub fn kind_folder(path: &Path) -> &'static str {
             Category::Text | Category::Subtitle => "Text",
             Category::Data => "Data",
             Category::Archive => "Archives",
+            Category::Font => "Fonts",
             Category::Folder => "Folders",
         };
     }

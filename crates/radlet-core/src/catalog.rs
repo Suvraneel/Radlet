@@ -37,6 +37,14 @@ pub struct Capabilities {
     /// libarchive's `bsdtar` (macOS's `tar`), for 7-Zip, RAR, TAR and ISO.
     #[serde(default)]
     pub bsdtar: Option<PathBuf>,
+    /// Keynote, Pages and Numbers, which export their own documents (and
+    /// PowerPoint, for Keynote).
+    #[serde(default)]
+    pub keynote: bool,
+    #[serde(default)]
+    pub pages: bool,
+    #[serde(default)]
+    pub numbers: bool,
 }
 
 impl Capabilities {
@@ -72,6 +80,9 @@ impl Capabilities {
             Some(PathBuf::from("/usr/bin/tar"))
                 .filter(|p| cfg!(target_os = "macos") && is_executable(p))
         });
+        use crate::engines::iwork::App;
+        let no_iwork = std::env::var_os("RADLET_NO_IWORK").is_some_and(|v| v == "1");
+        let iwork = |app: App| !no_iwork && app.installed();
         Capabilities {
             ffmpeg,
             ffprobe,
@@ -81,6 +92,9 @@ impl Capabilities {
             avfoundation,
             textutil,
             bsdtar,
+            keynote: iwork(App::Keynote),
+            pages: iwork(App::Pages),
+            numbers: iwork(App::Numbers),
         }
     }
 
@@ -116,7 +130,9 @@ impl Capabilities {
 
     /// Formats that pixels can be encoded into.
     pub fn can_encode_raster(&self, f: Format) -> bool {
-        f.is_builtin_raster() || f == Format::Icns || (self.sips.is_some() && f == Format::Heic)
+        f.is_builtin_raster()
+            || matches!(f, Format::Icns | Format::Avif | Format::Jxl)
+            || (self.sips.is_some() && f == Format::Heic)
     }
 }
 
@@ -181,11 +197,11 @@ fn is_executable(p: &Path) -> bool {
 use Format::*;
 
 const IMAGE_TARGETS: &[Format] = &[
-    Jpeg, Png, Webp, Heic, Pdf, Tiff, Gif, Bmp, Ico, Icns, Tga, Qoi,
+    Jpeg, Png, Webp, Heic, Avif, Pdf, Tiff, Gif, Jxl, Bmp, Ico, Icns, Tga, Qoi,
 ];
 /// A drawing keeps its transparency best as PNG; its PDF stays vector.
 const SVG_TARGETS: &[Format] = &[
-    Png, Jpeg, Webp, Pdf, Ico, Icns, Tiff, Gif, Bmp, Tga, Qoi, Heic,
+    Png, Jpeg, Webp, Pdf, Ico, Icns, Tiff, Gif, Avif, Jxl, Bmp, Tga, Qoi, Heic,
 ];
 const AUDIO_TARGETS: &[Format] = &[Mp3, M4a, Wav, Flac, Aiff, Ogg, Opus, Wma];
 const VIDEO_TARGETS: &[Format] = &[Mp4, Mov, Webm, Mkv, Gif, Mp3, M4a, Avi, Wmv];
@@ -219,6 +235,8 @@ pub fn targets(from: Format, caps: &Capabilities) -> Vec<Format> {
     }
     if from == Gif && caps.media() {
         out.extend_from_slice(&[Mp4, Webm, Mov]);
+    } else if from == Gif && caps.native_media() {
+        out.extend_from_slice(avmedia::FROM_GIF);
     }
     match from {
         Pdf => {
@@ -230,13 +248,19 @@ pub fn targets(from: Format, caps: &Capabilities) -> Vec<Format> {
         }
         Srt | Vtt | Ass | Sbv | Ttml => out.extend_from_slice(&[Srt, Vtt, Txt, Ass, Ttml, Sbv]),
         Doc | Odt if caps.textutil.is_some() => {
-            out.extend_from_slice(&[Pdf, Docx, Md, Txt, Html, Rtf])
+            out.extend_from_slice(&[Pdf, Docx, Md, Txt, Html, Rtf, Epub])
         }
-        Txt => out.extend_from_slice(&[Pdf, Docx, Md, Html, Rtf, Srt, Vtt]),
-        Md => out.extend_from_slice(&[Pdf, Html, Docx, Txt, Rtf]),
-        Html => out.extend_from_slice(&[Pdf, Md, Docx, Txt, Rtf]),
-        Docx => out.extend_from_slice(&[Pdf, Md, Txt, Html, Rtf]),
-        Rtf => out.extend_from_slice(&[Pdf, Docx, Md, Txt, Html]),
+        Txt => out.extend_from_slice(&[Pdf, Docx, Md, Html, Rtf, Epub, Srt, Vtt]),
+        Md => out.extend_from_slice(&[Pdf, Html, Docx, Txt, Rtf, Epub]),
+        Html => out.extend_from_slice(&[Pdf, Md, Docx, Txt, Rtf, Epub]),
+        Docx => out.extend_from_slice(&[Pdf, Md, Txt, Html, Rtf, Epub]),
+        Rtf => out.extend_from_slice(&[Pdf, Docx, Md, Txt, Html, Epub]),
+        Epub => out.extend_from_slice(&[Pdf, Docx, Md, Txt, Html, Rtf]),
+        Pptx => {
+            out.extend_from_slice(&[Pdf, Docx, Md, Txt, Html, Rtf, Epub]);
+            out.extend(crate::engines::iwork::targets(caps, Pptx));
+        }
+        Key | Pages | Numbers => out.extend(crate::engines::iwork::targets(caps, from)),
         Csv => out.extend_from_slice(&[Xlsx, Json, Tsv, Md, Html, Pdf]),
         Tsv => out.extend_from_slice(&[Xlsx, Csv, Json, Md, Html, Pdf]),
         Json => out.extend_from_slice(&[Csv, Xlsx, Tsv, Yaml, Toml, Xml]),
@@ -244,7 +268,9 @@ pub fn targets(from: Format, caps: &Capabilities) -> Vec<Format> {
         Toml => out.extend_from_slice(&[Json, Yaml]),
         Xml => out.push(Json),
         Xlsx => out.extend_from_slice(&[Csv, Json, Tsv, Pdf, Html, Md]),
-        Xls | Ods => out.extend_from_slice(&[Xlsx, Csv, Json, Tsv, Pdf, Html, Md]),
+        Xls | Ods | Sqlite => out.extend_from_slice(&[Xlsx, Csv, Json, Tsv, Pdf, Html, Md]),
+        Ttf | Otf => out.extend_from_slice(&[Woff2, Woff]),
+        Woff | Woff2 => out.extend_from_slice(&[Ttf, Otf, Woff2, Woff]),
         Folder => {
             out.push(Zip);
             if caps.bsdtar.is_some() {
@@ -320,8 +346,8 @@ pub fn step_accepts(step: &Step, f: Format, caps: &Capabilities) -> bool {
                 || (caps.media()
                     && f.category() == Category::Video
                     && (target_bytes.is_none() || caps.ffprobe.is_some()))
-                // A Mac compresses to a smaller picture, with no size target.
-                || (caps.native_media() && target_bytes.is_none() && avmedia::compresses(f))
+                // A Mac compresses to a smaller picture or to a size itself.
+                || (caps.native_media() && avmedia::compresses(f))
         }
         Step::RemoveBackground { .. } => {
             caps.vision.is_some() && caps.can_decode_raster(f) && f != Svg
@@ -354,6 +380,7 @@ pub fn step_accepts(step: &Step, f: Format, caps: &Capabilities) -> bool {
                 && matches!(f, Txt | Md | Html | Docx | Rtf | Srt | Vtt)
         }
         Step::FormatJson { .. } => f == Json,
+        Step::RedactText { .. } => caps.vision.is_some() && f == Pdf,
     }
 }
 
@@ -873,6 +900,39 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
             None,
         ));
     }
+    // Clips end to end: all videos, or all sound. Joining reads each clip's
+    // length, so FFmpeg needs FFprobe; a Mac joins what it plays.
+    let joins = |f: Format| {
+        (caps.media() && caps.ffprobe.is_some()) || (caps.native_media() && avmedia::reads(f))
+    };
+    let all_video = every(&|f| f.category() == Category::Video);
+    let all_audio = every(&|f| f.category() == Category::Audio);
+    if formats.len() >= 2 && (all_video || all_audio) && every(&joins) {
+        w.tools.push(tool(
+            "join_media",
+            "Join clips",
+            "plus.rectangle.on.rectangle",
+            Action::JoinMedia,
+            None,
+        ));
+    }
+    // Videos with their subtitle files.
+    if let Some(k) = known.as_deref() {
+        let is_video = |f: &&Format| f.category() == Category::Video;
+        let videos = k.iter().filter(is_video).count();
+        let subs = k.iter().filter(|f| f.is_subtitles()).count();
+        let draws = caps.media()
+            || (caps.native_media() && k.iter().filter(is_video).all(|f| avmedia::reads(*f)));
+        if videos >= 1 && subs >= 1 && videos + subs == k.len() && draws {
+            w.tools.push(tool(
+                "burn_subtitles",
+                "Burn in subtitles",
+                "captions.bubble.fill",
+                Action::BurnSubtitles,
+                None,
+            ));
+        }
+    }
     if pdfs {
         let split = |mode: SplitMode| Action::SplitPdf { mode };
         w.tools.push(
@@ -973,6 +1033,31 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
                 password: Default::default(),
             },
             Some("pdf_password"),
+        ));
+    }
+    let redact_text = Step::RedactText {
+        words: vec![],
+        emails: false,
+        phones: false,
+        cards: false,
+    };
+    if all(&redact_text) {
+        w.tools.push(tool(
+            "redact_text",
+            "Black out text…",
+            "eye.slash",
+            Action::single(redact_text),
+            Some("redact_text"),
+        ));
+    }
+    // Photos of paper pages, as a scanner would make them.
+    if caps.vision.is_some() && images && !svgs && every(&|f| f != Svg) {
+        w.tools.push(tool(
+            "scan_document",
+            "Scan document",
+            "doc.viewfinder",
+            Action::ScanDocuments,
+            None,
         ));
     }
     // Documents.
@@ -1282,6 +1367,18 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
             None,
         ));
     }
+    // A folder, or several items, into a ZIP that needs a password.
+    if folders || formats.len() >= 2 {
+        w.tools.push(tool(
+            "zip_password",
+            "Zip with password…",
+            "lock.rectangle.stack",
+            Action::ZipLocked {
+                password: Default::default(),
+            },
+            Some("zip_password"),
+        ));
+    }
     if !any_folder {
         w.tools.push(tool(
             "checksum",
@@ -1408,6 +1505,26 @@ pub fn wheel_for(
         let inside = crate::engines::folder::formats_inside(paths, 20_000);
         w.convert.extend(inside_slots(&inside, caps));
     }
+    // A locked ZIP is opened with its password; Unzip alone would fail.
+    if !paths.is_empty()
+        && formats.iter().all(|f| *f == Some(Zip))
+        && paths.iter().any(|p| crate::engines::archive::is_locked(p))
+    {
+        w.tools.insert(
+            0,
+            Slot {
+                id: "unzip_password".into(),
+                label: "Unzip with password…".into(),
+                symbol: "lock.open".into(),
+                group: SlotGroup::Tool,
+                action: Action::UnzipLocked {
+                    password: Default::default(),
+                },
+                window: Some("unzip_password"),
+                variants: Vec::new(),
+            },
+        );
+    }
     w
 }
 
@@ -1520,11 +1637,22 @@ mod tests {
                 "make_icons",
                 "combine_pdf",
                 "zip_all",
+                "zip_password",
                 "checksum"
             ]
         );
         let windows: Vec<_> = w.tools.iter().filter_map(|s| s.window).collect();
-        assert_eq!(windows, ["resize", "crop", "redact", "compress", "privacy"]);
+        assert_eq!(
+            windows,
+            [
+                "resize",
+                "crop",
+                "redact",
+                "compress",
+                "privacy",
+                "zip_password"
+            ]
+        );
         assert!(w.convert.iter().any(|s| s.id == "to_webp"));
     }
 
@@ -1751,7 +1879,7 @@ mod tests {
         let w = wheel(&[Some(Md)], &caps, &[]);
         assert_eq!(
             ids(&w.convert),
-            ["to_pdf", "to_html", "to_docx", "to_txt", "to_rtf"]
+            ["to_pdf", "to_html", "to_docx", "to_txt", "to_rtf", "to_epub"]
         );
         assert_eq!(
             ids(&w.tools),
@@ -1770,6 +1898,7 @@ mod tests {
                 "combine_text",
                 "combine_pdf",
                 "zip_all",
+                "zip_password",
                 "checksum"
             ]
         );
@@ -1869,7 +1998,8 @@ mod tests {
                 "find_duplicates",
                 "list_contents",
                 "flatten",
-                "sort_by_kind"
+                "sort_by_kind",
+                "zip_password"
             ]
         );
         assert_eq!(labels(&one.tools, "list_contents"), ["CSV"]);
@@ -1883,13 +2013,14 @@ mod tests {
                 "find_duplicates",
                 "list_contents",
                 "flatten",
-                "sort_by_kind"
+                "sort_by_kind",
+                "zip_password"
             ]
         );
         // A folder with files: zip them together, nothing else.
         let mixed = wheel(&[Some(Folder), Some(Png)], &caps, &[]);
         assert!(mixed.convert.is_empty());
-        assert_eq!(ids(&mixed.tools), ["zip_all"]);
+        assert_eq!(ids(&mixed.tools), ["zip_all", "zip_password"]);
         let zip = wheel(&[Some(Zip)], &caps, &[]);
         assert_eq!(ids(&zip.convert), ["to_folder"]);
         assert_eq!(zip.convert[0].label, "Unzip");
@@ -1963,8 +2094,24 @@ mod tests {
         let w = wheel(&[Some(Mp4)], &mac, &[]);
         let compress = w.tools.iter().find(|s| s.id == "compress").unwrap();
         assert!(
-            compress.variants.iter().all(|v| v.id != "compress.discord"),
-            "no size targets without FFprobe"
+            compress.variants.iter().any(|v| v.id == "compress.discord"),
+            "a Mac fits video to a size itself"
+        );
+        assert_eq!(
+            targets(Gif, &mac),
+            [Jpeg, Png, Webp, Avif, Pdf, Tiff, Jxl, Bmp, Ico, Icns, Tga, Qoi, Txt, Mp4, Mov]
+        );
+        let clips = ids(&wheel(&[Some(Mov), Some(Mp4)], &mac, &[]));
+        assert!(clips.contains(&"join_media".to_string()), "{clips:?}");
+        let subtitled = ids(&wheel(&[Some(Mov), Some(Srt)], &mac, &[]));
+        assert!(
+            subtitled.contains(&"burn_subtitles".to_string()),
+            "{subtitled:?}"
+        );
+        let mkv = ids(&wheel(&[Some(Mkv), Some(Srt)], &mac, &[]));
+        assert!(
+            !mkv.contains(&"burn_subtitles".to_string()),
+            "Matroska needs FFmpeg"
         );
         let audio = ids(&wheel(&[Some(Mp3)], &mac, &[]));
         assert!(
@@ -1993,7 +2140,7 @@ mod tests {
             assert!(targets(f, &mac).starts_with(&[Jpeg, Png]), "{f}");
             assert!(targets(f, &Capabilities::none()).is_empty(), "{f}");
         }
-        assert_eq!(targets(Doc, &mac), [Pdf, Docx, Md, Txt, Html, Rtf]);
+        assert_eq!(targets(Doc, &mac), [Pdf, Docx, Md, Txt, Html, Rtf, Epub]);
         assert!(targets(Odt, &Capabilities::none()).is_empty());
         for f in [SevenZ, Rar, Tar, Iso] {
             assert_eq!(targets(f, &mac), [Folder], "{f}");

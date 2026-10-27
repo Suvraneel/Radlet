@@ -100,6 +100,7 @@ pub struct EncodeOptions {
 pub const DEFAULT_JPEG_QUALITY: u8 = 88;
 pub const DEFAULT_WEBP_QUALITY: u8 = 82;
 pub const DEFAULT_HEIC_QUALITY: u8 = 80;
+pub const DEFAULT_AVIF_QUALITY: u8 = 72;
 
 /// Encodes pixels into `format` at `out`.
 pub fn encode(
@@ -221,6 +222,52 @@ pub fn encode(
             w.flush()?;
         }
         Format::Icns => std::fs::write(out, crate::engines::icons::icns(img)?)?,
+        Format::Avif => {
+            let q = opts.quality.unwrap_or(DEFAULT_AVIF_QUALITY).clamp(1, 100);
+            let img = if img.color().has_alpha() && !is_opaque(img) {
+                DynamicImage::ImageRgba8(img.to_rgba8())
+            } else {
+                DynamicImage::ImageRgb8(img.to_rgb8())
+            };
+            let mut w = file()?;
+            // Faster settings for bigger pictures (10 is fastest), on every
+            // core, so a large photo takes seconds rather than a minute.
+            let pixels = u64::from(img.width()) * u64::from(img.height());
+            let speed = if pixels > 4_000_000 { 9 } else { 8 };
+            image::codecs::avif::AvifEncoder::new_with_speed_quality(&mut w, speed, q)
+                .write_image(
+                    img.as_bytes(),
+                    img.width(),
+                    img.height(),
+                    img.color().into(),
+                )?;
+            w.flush()?;
+        }
+        Format::Jxl => {
+            // Lossless: the permissively licensed JPEG XL encoder there is.
+            use zune_core::bit_depth::BitDepth;
+            use zune_core::colorspace::ColorSpace;
+            use zune_core::options::EncoderOptions;
+            let (w, h) = (img.width() as usize, img.height() as usize);
+            if w < 2 || h < 2 {
+                return Err(Error::Invalid(
+                    "JPEG XL needs a picture at least 2 pixels a side".into(),
+                ));
+            }
+            let (data, space) = if img.color().has_alpha() && !is_opaque(img) {
+                (img.to_rgba8().into_raw(), ColorSpace::RGBA)
+            } else if img.color().has_color() {
+                (img.to_rgb8().into_raw(), ColorSpace::RGB)
+            } else {
+                (img.to_luma8().into_raw(), ColorSpace::Luma)
+            };
+            let options = EncoderOptions::new(w, h, space, BitDepth::Eight);
+            let mut bytes = Vec::new();
+            zune_jpegxl::JxlSimpleEncoder::new(&data, options)
+                .encode(&mut bytes)
+                .map_err(|e| Error::Invalid(format!("JPEG XL encoding failed: {e:?}")))?;
+            std::fs::write(out, bytes)?;
+        }
         Format::Heic => {
             let scratch = tempfile::tempdir()?;
             let png = scratch.path().join("source.png");

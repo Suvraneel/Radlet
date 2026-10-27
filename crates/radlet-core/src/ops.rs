@@ -202,6 +202,20 @@ pub enum Step {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         minify: bool,
     },
+    /// Black out text in a PDF for real (Mac helper): every `words` phrase
+    /// (any case), and with the flags every email address, phone number or
+    /// card number. Pages with a match become pictures with black boxes
+    /// and a fresh text layer, so nothing under a box can be copied.
+    RedactText {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        words: Vec<String>,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        emails: bool,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        phones: bool,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        cards: bool,
+    },
 }
 
 fn pixelate() -> RedactStyle {
@@ -293,6 +307,7 @@ impl Step {
             Step::Translate { .. } => Some("translated"),
             Step::FormatJson { minify: false } => Some("formatted"),
             Step::FormatJson { minify: true } => Some("minified"),
+            Step::RedactText { .. } => Some("redacted"),
         }
     }
 }
@@ -453,6 +468,23 @@ pub enum Action {
     ProtectPdf { password: Secret },
     /// Remove the password from each PDF.
     UnlockPdf { password: Secret },
+    /// Put everything selected into one ZIP locked with a password
+    /// (AES-256). Not available in loadouts.
+    ZipLocked { password: Secret },
+    /// Extract each locked ZIP with its password. Not available in
+    /// loadouts.
+    UnzipLocked { password: Secret },
+    /// Put the selected clips one after another in one file: videos into
+    /// an MP4 (each fitted into the first one's shape), sound into an M4A.
+    JoinMedia,
+    /// Draw subtitles into each selected video's picture, so every player
+    /// shows them. Each video takes the subtitle file with its name, or
+    /// the only one selected.
+    BurnSubtitles,
+    /// Make the selected photos of paper pages into one scanned PDF: each
+    /// page cut out, squared up, evened out, with searchable text (Mac
+    /// helper).
+    ScanDocuments,
 }
 
 /// Which icons [`Action::IconSet`] makes. (A macOS icon is a conversion
@@ -525,8 +557,12 @@ impl Action {
                 | Action::CombineText
                 | Action::CombineWorkbook
                 | Action::ZipAll
+                | Action::ZipLocked { .. }
                 | Action::MergeFolders
                 | Action::FindDuplicates
+                | Action::JoinMedia
+                | Action::BurnSubtitles
+                | Action::ScanDocuments
         )
     }
 }
@@ -714,6 +750,12 @@ mod tests {
             r#"{"kind":"steps","steps":[{"diagonal":true,"op":"watermark","opacity":0.2,"text":"DRAFT"}]}"#,
             r#"{"kind":"protect_pdf","password":"pw"}"#,
             r#"{"kind":"unlock_pdf","password":"pw"}"#,
+            r#"{"kind":"zip_locked","password":"pw"}"#,
+            r#"{"kind":"unzip_locked","password":"pw"}"#,
+            r#"{"kind":"steps","steps":[{"emails":true,"op":"redact_text","words":["Jane Doe"]}]}"#,
+            r#"{"kind":"join_media"}"#,
+            r#"{"kind":"burn_subtitles"}"#,
+            r#"{"kind":"scan_documents"}"#,
             r#"{"kind":"steps","steps":[{"end":4,"op":"trim","start":1.5}]}"#,
             r#"{"kind":"steps","steps":[{"end":2,"op":"trim","start":1},{"op":"convert","to":"gif"}]}"#,
             r#"{"kind":"steps","steps":[{"op":"pages","pages":[2,1],"rotate":[{"degrees":90,"page":2}]}]}"#,

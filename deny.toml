@@ -2,6 +2,14 @@
 # Run with `cargo deny check licenses`.
 [graph]
 all-features = false
+# The platforms Radlet is built for. Dependencies behind other cfgs (such
+# as rav1e's fuzzing-only libfuzzer-sys) are never compiled.
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-gnu",
+    "aarch64-unknown-linux-gnu",
+]
 
 [licenses]
 allow = [
@@ -28,6 +36,8 @@ private = { ignore = true }
 ignore = [
     { id = "RUSTSEC-2026-0206", reason = "rustybuzz, via usvg 0.45 for svg2pdf" },
     { id = "RUSTSEC-2026-0192", reason = "ttf-parser, via usvg 0.45 and svg2pdf" },
+    # paste is a compile-time macro crate; rav1e (the AVIF encoder) uses it.
+    { id = "RUSTSEC-2024-0436", reason = "paste, a build-time macro in rav1e for AVIF output" },
 ]
 
 [bans]

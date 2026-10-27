@@ -299,10 +299,162 @@ where
     Ok(out)
 }
 
-/// Every sheet with something in it, from Excel, old Excel or OpenDocument.
+/// A path as a SQLite URI path: everything but plain characters escaped.
+fn uri_path(path: &Path) -> String {
+    let abs = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+    let mut out = String::new();
+    for b in abs.to_string_lossy().bytes() {
+        if b.is_ascii_alphanumeric() || b"-._~/".contains(&b) {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
+        }
+    }
+    out
+}
+
+/// Most bytes of text read out of a database.
+const MAX_SQLITE_TEXT: usize = 256 << 20;
+/// Longest value SQLite may make or return (16 MB).
+const MAX_SQLITE_VALUE: i32 = 16 << 20;
+
+/// Opens a database to read. Normally read-only and immutable, so nothing
+/// is written beside it, whatever state it's in. One with a write-ahead log
+/// beside it is read from a private copy of both, so its latest changes
+/// are seen; the original is still never written.
+fn open_sqlite(path: &Path) -> Result<(rusqlite::Connection, Option<tempfile::TempDir>)> {
+    use rusqlite::{Connection, OpenFlags};
+    let mut wal = path.as_os_str().to_owned();
+    wal.push("-wal");
+    let wal = std::path::PathBuf::from(wal);
+    let has_wal = std::fs::metadata(&wal).is_ok_and(|m| m.is_file() && m.len() > 0);
+    if has_wal {
+        let dir = tempfile::tempdir()?;
+        let copy = dir.path().join("db");
+        std::fs::copy(path, &copy)?;
+        std::fs::copy(&wal, dir.path().join("db-wal"))?;
+        let db = Connection::open_with_flags(
+            &copy,
+            OpenFlags::SQLITE_OPEN_READ_WRITE | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+        )
+        .map_err(|e| bad(path, e))?;
+        return Ok((db, Some(dir)));
+    }
+    let uri = format!("file:{}?mode=ro&immutable=1", uri_path(path));
+    let db = Connection::open_with_flags(
+        &uri,
+        OpenFlags::SQLITE_OPEN_READ_ONLY
+            | OpenFlags::SQLITE_OPEN_URI
+            | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(|e| bad(path, e))?;
+    Ok((db, None))
+}
+
+/// A SQLite database's tables, a sheet each: the column names, then the
+/// rows. Columns worked out when read (generated, or hidden) are left out,
+/// so the file's schema runs no code; so are tables that can't be read
+/// here (virtual tables from extensions).
+fn read_sqlite(path: &Path) -> Result<Vec<Sheet>> {
+    use rusqlite::config::DbConfig;
+    use rusqlite::limits::Limit;
+    use rusqlite::types::ValueRef;
+    let (db, _copy) = open_sqlite(path)?;
+    let setup = || -> rusqlite::Result<()> {
+        db.set_db_config(DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true)?;
+        db.set_limit(Limit::SQLITE_LIMIT_LENGTH, MAX_SQLITE_VALUE)?;
+        // Views and triggers can't run code from the file's schema.
+        db.execute_batch("PRAGMA trusted_schema = OFF; PRAGMA query_only = ON;")
+    };
+    setup().map_err(|e| bad(path, e))?;
+    let names: Vec<String> = {
+        let mut stmt = db
+            .prepare(
+                "SELECT name FROM sqlite_master WHERE type = 'table' \
+                 AND name NOT LIKE 'sqlite\\_%' ESCAPE '\\' ORDER BY rowid",
+            )
+            .map_err(|e| bad(path, e))?;
+        let rows = stmt
+            .query_map([], |r| r.get::<_, String>(0))
+            .map_err(|e| bad(path, e))?;
+        rows.collect::<std::result::Result<_, _>>()
+            .map_err(|e| bad(path, e))?
+    };
+    let quote = |n: &str| format!("\"{}\"", n.replace('"', "\"\""));
+    let mut budget = MAX_CELLS;
+    let mut text_left = MAX_SQLITE_TEXT;
+    let mut out = Vec::new();
+    for name in names {
+        // Stored columns only: 0 is plain, 3 a generated column whose
+        // values are stored; 1 (hidden) and 2 (worked out on reading) aren't.
+        let Ok(columns) = db
+            .prepare(&format!("PRAGMA table_xinfo({})", quote(&name)))
+            .and_then(|mut stmt| {
+                stmt.query_map([], |r| Ok((r.get::<_, String>(1)?, r.get::<_, i64>(6)?)))?
+                    .collect::<rusqlite::Result<Vec<_>>>()
+            })
+        else {
+            continue;
+        };
+        let columns: Vec<String> = columns
+            .into_iter()
+            .filter(|(_, hidden)| matches!(hidden, 0 | 3))
+            .map(|(c, _)| c)
+            .collect();
+        if columns.is_empty() {
+            continue;
+        }
+        let list = columns
+            .iter()
+            .map(|c| quote(c))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let Ok(mut stmt) = db.prepare(&format!("SELECT {list} FROM {}", quote(&name))) else {
+            continue;
+        };
+        let width = columns.len();
+        let mut rows = vec![columns];
+        let Ok(mut query) = stmt.query([]) else {
+            continue;
+        };
+        loop {
+            let row = match query.next() {
+                Ok(Some(row)) => row,
+                Ok(None) => break,
+                Err(e) => return Err(bad(path, e)),
+            };
+            if budget < width {
+                return Err(too_big("has over 10 million values"));
+            }
+            budget -= width;
+            let mut cells = Vec::with_capacity(width);
+            for i in 0..width {
+                let value = match row.get_ref(i).map_err(|e| bad(path, e))? {
+                    ValueRef::Null => String::new(),
+                    ValueRef::Integer(v) => v.to_string(),
+                    ValueRef::Real(v) => cell(&Data::Float(v)),
+                    ValueRef::Text(t) => String::from_utf8_lossy(t).into_owned(),
+                    ValueRef::Blob(b) => format!("(binary, {} bytes)", b.len()),
+                };
+                text_left = text_left
+                    .checked_sub(value.len())
+                    .ok_or_else(|| too_big("holds more than 256 MB of text"))?;
+                cells.push(value);
+            }
+            // A table's rows all have its columns, empty or not.
+            rows.push(cells);
+        }
+        out.push((name, rows));
+    }
+    Ok(out)
+}
+
+/// Every sheet with something in it, from Excel, old Excel or OpenDocument,
+/// or every table of a SQLite database.
 pub fn read_book(path: &Path, fmt: Format) -> Result<Vec<Sheet>> {
     match fmt {
         Format::Xlsx => read(path),
+        Format::Sqlite => read_sqlite(path),
         Format::Xls => {
             if std::fs::metadata(path)?.len() > MAX_XLS {
                 return Err(Error::TooLarge(

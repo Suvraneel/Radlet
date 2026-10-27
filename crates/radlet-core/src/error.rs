@@ -27,6 +27,9 @@ pub enum Error {
     Invalid(String),
     #[error("{0}")]
     TooLarge(String),
+    /// A password is needed, or the one given is wrong.
+    #[error("{0}")]
+    PasswordNeeded(String),
     /// A helper program (the Vision helper) failed.
     #[error("{0}")]
     Helper(String),
@@ -54,6 +57,7 @@ impl Error {
             Error::Missing(_) => "missing_tool",
             Error::Invalid(_) => "invalid",
             Error::TooLarge(_) => "too_large",
+            Error::PasswordNeeded(_) => "password_needed",
             Error::Helper(_) => "helper",
             Error::Cancelled => "cancelled",
             Error::Timeout(_) => "timeout",

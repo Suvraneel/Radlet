@@ -1,5 +1,8 @@
-//! ZIP archives: made from files and folders, and extracted safely (no
-//! paths outside the destination, no links, bounded size).
+//! ZIP archives: made from files and folders (optionally locked with a
+//! password, AES-256), and extracted safely (no paths outside the
+//! destination, no links, bounded size). Deflate, Deflate64, LZMA, XZ and
+//! Zstandard entries are read, and AES or traditional ZIP encryption with
+//! the password given.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufReader, BufWriter, Read, Write};
@@ -8,7 +11,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 
 use zip::write::SimpleFileOptions;
-use zip::{CompressionMethod, DateTime, ZipArchive, ZipWriter};
+use zip::{AesMode, CompressionMethod, DateTime, ZipArchive, ZipWriter};
 
 use crate::engines::folder::{self, from_local_time, local_time, slash_path, Entry};
 use crate::error::{Error, Result};
@@ -84,17 +87,24 @@ fn zip_time(t: Option<SystemTime>) -> DateTime {
         .unwrap_or_default()
 }
 
-fn options(entry: &Entry) -> SimpleFileOptions {
+fn options<'k>(
+    entry: &Entry,
+    password: Option<&'k str>,
+) -> zip::write::FileOptions<'k, 'static, ()> {
     let method = if entry.dir || stored(&entry.path) {
         CompressionMethod::Stored
     } else {
         CompressionMethod::Deflated
     };
-    SimpleFileOptions::default()
+    let options = SimpleFileOptions::default()
         .compression_method(method)
         .last_modified_time(zip_time(entry.modified))
         .unix_permissions(entry.mode & 0o777)
-        .large_file(entry.len >= u32::MAX as u64)
+        .large_file(entry.len >= u32::MAX as u64);
+    match password {
+        Some(p) if !entry.dir => options.with_aes_encryption(AesMode::Aes256, p),
+        _ => options,
+    }
 }
 
 fn zip_err(e: zip::result::ZipError) -> Error {
@@ -102,13 +112,18 @@ fn zip_err(e: zip::result::ZipError) -> Error {
 }
 
 /// Writes `items` (files and folders, each under its own name) into a
-/// new ZIP at `out`.
+/// new ZIP at `out`. With `password`, every file in it is locked with
+/// AES-256 (names stay visible, as in any ZIP).
 pub fn zip(
     items: &[PathBuf],
     out: &Path,
+    password: Option<&str>,
     cancel: &AtomicBool,
     progress: &mut dyn FnMut(f32),
 ) -> Result<()> {
+    if password.is_some_and(str::is_empty) {
+        return Err(Error::Invalid("the password is empty".into()));
+    }
     // Everything to write: (name in the archive, entry).
     let mut plan: Vec<(String, Entry)> = Vec::new();
     let mut tops: Vec<String> = Vec::new();
@@ -182,11 +197,12 @@ pub fn zip(
             return Err(Error::Cancelled);
         }
         if e.dir {
-            zw.add_directory(name.trim_end_matches('/'), options(e))
+            zw.add_directory(name.trim_end_matches('/'), options(e, None))
                 .map_err(zip_err)?;
             continue;
         }
-        zw.start_file(name.as_str(), options(e)).map_err(zip_err)?;
+        zw.start_file(name.as_str(), options(e, password))
+            .map_err(zip_err)?;
         let mut f = File::open(&e.path)?;
         loop {
             if cancel.load(Ordering::Relaxed) {
@@ -213,24 +229,43 @@ fn open_err(path: &Path, e: zip::result::ZipError) -> Error {
     ))
 }
 
-/// Extracts `archive` into the empty folder `into`. Entries that would
-/// land outside it, links, and Finder's resource-fork folders are
-/// skipped; an archive that would expand beyond reason is refused.
+/// Extracts `archive` into the empty folder `into`, decrypting with
+/// `password` when it's locked. Entries that would land outside it, links,
+/// and Finder's resource-fork folders are skipped; an archive that would
+/// expand beyond reason is refused.
 pub fn extract(
     archive: &Path,
     into: &Path,
+    password: Option<&str>,
     cancel: &AtomicBool,
     progress: &mut dyn FnMut(f32),
 ) -> Result<()> {
     // A generous ratio: real archives rarely shrink below a thousandth.
-    extract_bounded(archive, into, 1 << 30, 1000, cancel, progress)
+    extract_bounded(archive, into, password, 1 << 30, 1000, cancel, progress)
+}
+
+/// Whether any file in the ZIP at `path` is locked with a password.
+pub fn is_locked(path: &Path) -> bool {
+    let Ok(file) = File::open(path) else {
+        return false;
+    };
+    let Ok(mut z) = ZipArchive::new(BufReader::new(file)) else {
+        return false;
+    };
+    (0..z.len().min(MAX_ENTRIES)).any(|i| z.by_index_raw(i).is_ok_and(|f| f.encrypted()))
+}
+
+fn locked() -> Error {
+    Error::PasswordNeeded("this ZIP is locked with a password".into())
 }
 
 /// [`extract`] writing at most `ratio` times the archive's size (but
 /// always allowing `floor` bytes, and never more than 64 GB).
+#[allow(clippy::too_many_arguments)]
 fn extract_bounded(
     archive: &Path,
     into: &Path,
+    password: Option<&str>,
     floor: u64,
     ratio: u64,
     cancel: &AtomicBool,
@@ -266,17 +301,25 @@ fn extract_bounded(
         if cancel.load(Ordering::Relaxed) {
             return Err(Error::Cancelled);
         }
-        let mut f = match z.by_index(i) {
+        let opened = match password {
+            Some(p) => z.by_index_decrypt(i, p.as_bytes()),
+            None => z.by_index(i),
+        };
+        let mut f = match opened {
             Ok(f) => f,
             Err(zip::result::ZipError::UnsupportedArchive(msg)) => {
-                return Err(Error::UnsupportedInput(if msg.contains("assword") {
-                    "password-protected ZIP files can't be opened yet".into()
+                return Err(if msg == zip::result::ZipError::PASSWORD_REQUIRED {
+                    locked()
                 } else {
-                    format!("this archive uses something Radlet can't open ({msg})")
-                }))
+                    Error::UnsupportedInput(format!(
+                        "this archive uses something Radlet can't open ({msg})"
+                    ))
+                })
             }
+            Err(zip::result::ZipError::InvalidPassword) => return Err(wrong_password()),
             Err(e) => return Err(open_err(archive, e)),
         };
+        let encrypted = f.encrypted();
         let Some(rel) = f.enclosed_name() else {
             continue;
         };
@@ -313,10 +356,16 @@ fn extract_bounded(
             .open(&dest)?;
         loop {
             let n = f.read(&mut buf).map_err(|e| {
-                Error::UnsupportedInput(format!(
-                    "couldn't read {} from the archive ({e})",
-                    slash_path(&rel)
-                ))
+                // The old ZIP encryption lets some wrong passwords through;
+                // the checksum then fails.
+                if encrypted && password.is_some() {
+                    wrong_password()
+                } else {
+                    Error::UnsupportedInput(format!(
+                        "couldn't read {} from the archive ({e})",
+                        slash_path(&rel)
+                    ))
+                }
             })?;
             if n == 0 {
                 break;
@@ -353,6 +402,10 @@ fn extract_bounded(
     Ok(())
 }
 
+fn wrong_password() -> Error {
+    Error::PasswordNeeded("that password doesn't open this ZIP".into())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -369,7 +422,7 @@ mod tests {
         fs::write(&lone, "another readme").unwrap();
         let cancel = AtomicBool::new(false);
         let out = dir.path().join("a.zip");
-        zip(&[src.clone(), lone], &out, &cancel, &mut |_| {}).unwrap();
+        zip(&[src.clone(), lone], &out, None, &cancel, &mut |_| {}).unwrap();
         assert_eq!(
             crate::format::detect(&out).unwrap(),
             crate::format::Format::Zip
@@ -396,7 +449,7 @@ mod tests {
 
         let into = dir.path().join("x");
         fs::create_dir(&into).unwrap();
-        extract(&out, &into, &cancel, &mut |_| {}).unwrap();
+        extract(&out, &into, None, &cancel, &mut |_| {}).unwrap();
         assert_eq!(
             fs::read(into.join("Project/sub/data.bin")).unwrap(),
             [7u8; 3000]
@@ -436,7 +489,7 @@ mod tests {
         let into = dir.path().join("out");
         fs::create_dir(&into).unwrap();
         let cancel = AtomicBool::new(false);
-        extract(&bad, &into, &cancel, &mut |_| {}).unwrap();
+        extract(&bad, &into, None, &cancel, &mut |_| {}).unwrap();
         assert!(!dir.path().join("escape.txt").exists());
         assert!(!dir.path().join("escape2.txt").exists());
         let mut names: Vec<String> = fs::read_dir(&into)
@@ -476,10 +529,78 @@ mod tests {
         fs::create_dir(&into).unwrap();
         let cancel = AtomicBool::new(false);
         let bomb = dir.path().join("bomb.zip");
-        let r = extract_bounded(&bomb, &into, 1 << 20, 100, &cancel, &mut |_| {});
+        let r = extract_bounded(&bomb, &into, None, 1 << 20, 100, &cancel, &mut |_| {});
         assert!(matches!(r, Err(Error::TooLarge(_))), "{r:?}");
         // The real limits let it through.
-        extract(&bomb, &into, &cancel, &mut |_| {}).unwrap();
+        extract(&bomb, &into, None, &cancel, &mut |_| {}).unwrap();
         assert_eq!(fs::metadata(into.join("zeros")).unwrap().len(), 20 << 20);
+    }
+
+    #[test]
+    fn passwords_and_other_methods() {
+        let dir = tempfile::tempdir().unwrap();
+        let cancel = AtomicBool::new(false);
+        let src = dir.path().join("secret.txt");
+        fs::write(&src, b"the plans").unwrap();
+        let locked_zip = dir.path().join("locked.zip");
+        zip(
+            std::slice::from_ref(&src),
+            &locked_zip,
+            Some("hunter2"),
+            &cancel,
+            &mut |_| {},
+        )
+        .unwrap();
+        assert!(is_locked(&locked_zip));
+        assert!(!fs::read(&locked_zip)
+            .unwrap()
+            .windows(9)
+            .any(|w| w == b"the plans"));
+        let code = |r: Result<()>| r.unwrap_err().code();
+        let into = dir.path().join("a");
+        fs::create_dir(&into).unwrap();
+        assert_eq!(
+            code(extract(&locked_zip, &into, None, &cancel, &mut |_| {})),
+            "password_needed"
+        );
+        let into = dir.path().join("b");
+        fs::create_dir(&into).unwrap();
+        assert_eq!(
+            code(extract(
+                &locked_zip,
+                &into,
+                Some("wrong"),
+                &cancel,
+                &mut |_| {}
+            )),
+            "password_needed"
+        );
+        let into = dir.path().join("c");
+        fs::create_dir(&into).unwrap();
+        extract(&locked_zip, &into, Some("hunter2"), &cancel, &mut |_| {}).unwrap();
+        assert_eq!(fs::read(into.join("secret.txt")).unwrap(), b"the plans");
+
+        // Zstandard and XZ entries, as other tools write them.
+        let other = dir.path().join("methods.zip");
+        let mut zw = ZipWriter::new(File::create(&other).unwrap());
+        for (name, method) in [
+            ("z.txt", CompressionMethod::Zstd),
+            ("x.txt", CompressionMethod::Xz),
+        ] {
+            zw.start_file(
+                name,
+                SimpleFileOptions::default().compression_method(method),
+            )
+            .unwrap();
+            zw.write_all(&b"radlet ".repeat(100)).unwrap();
+        }
+        zw.finish().unwrap();
+        assert!(!is_locked(&other));
+        let into = dir.path().join("d");
+        fs::create_dir(&into).unwrap();
+        extract(&other, &into, None, &cancel, &mut |_| {}).unwrap();
+        for name in ["z.txt", "x.txt"] {
+            assert_eq!(fs::read(into.join(name)).unwrap(), b"radlet ".repeat(100));
+        }
     }
 }

@@ -1093,6 +1093,8 @@ pub fn read(path: &Path, fmt: Format) -> Result<Doc> {
         Format::Xlsx | Format::Xls | Format::Ods => crate::engines::sheet::doc(path, fmt)?,
         // Word 97 and OpenDocument go through macOS's own converter, as HTML.
         Format::Doc | Format::Odt => htmlread::parse(&textutil_html(path)?),
+        Format::Epub => crate::engines::epub::read(path)?,
+        Format::Pptx => crate::engines::pptx::read(path)?,
         f if f.is_subtitles() => {
             let cues = text::read_cues(&text::read_text(path)?, f)?;
             from_text(&text::subtitles_to_text(&cues))
@@ -1139,6 +1141,7 @@ pub fn write(doc: &Doc, to: Format, title: &str, out: &Path) -> Result<()> {
         Format::Html => std::fs::write(out, to_html(doc, title, false))?,
         Format::Docx => std::fs::write(out, docx::write(doc, title)?)?,
         Format::Rtf => std::fs::write(out, rtf::write(doc))?,
+        Format::Epub => crate::engines::epub::write(doc, title, out)?,
         other => {
             return Err(Error::UnsupportedRoute {
                 from: "a document".into(),
@@ -1153,7 +1156,7 @@ pub fn write(doc: &Doc, to: Format, title: &str, out: &Path) -> Result<()> {
 pub fn writable(f: Format) -> bool {
     matches!(
         f,
-        Format::Txt | Format::Md | Format::Html | Format::Docx | Format::Rtf
+        Format::Txt | Format::Md | Format::Html | Format::Docx | Format::Rtf | Format::Epub
     )
 }
 

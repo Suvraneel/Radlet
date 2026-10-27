@@ -91,6 +91,56 @@ pub fn searchable(
     run(caps, "searchable", input, out, cancel, progress)
 }
 
+/// Photos of paper pages as one scanned PDF: each page found in its photo,
+/// squared up, evened out, with a text layer.
+pub fn scan(
+    caps: &Capabilities,
+    photos: &[std::path::PathBuf],
+    out: &Path,
+    cancel: &AtomicBool,
+    progress: &mut dyn FnMut(f32),
+) -> Result<()> {
+    std::fs::File::create(out)?;
+    let mut args: Vec<&OsStr> = vec![OsStr::new("scan"), out.as_os_str()];
+    args.extend(photos.iter().map(|p| p.as_os_str()));
+    run_args(caps, &args, out, cancel, progress)
+}
+
+/// What to black out of a PDF's text.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+pub struct RedactTerms {
+    pub words: Vec<String>,
+    /// Any of "emails", "phones", "cards".
+    pub kinds: Vec<&'static str>,
+}
+
+/// A copy of a PDF with matching text removed and boxed over: pages with
+/// a match are redrawn as pictures with a fresh text layer; the rest stay
+/// as they were.
+pub fn redact_pdf(
+    caps: &Capabilities,
+    input: &Path,
+    terms: &RedactTerms,
+    scratch: &Path,
+    out: &Path,
+    cancel: &AtomicBool,
+    progress: &mut dyn FnMut(f32),
+) -> Result<()> {
+    let spec = scratch.join("terms.json");
+    std::fs::write(
+        &spec,
+        serde_json::to_vec(terms).map_err(|e| Error::Internal(e.to_string()))?,
+    )?;
+    std::fs::File::create(out)?;
+    let args = [
+        OsStr::new("redact-pdf"),
+        input.as_os_str(),
+        out.as_os_str(),
+        spec.as_os_str(),
+    ];
+    run_args(caps, &args, out, cancel, progress)
+}
+
 /// Lays out a document, written by Radlet as plain HTML, on A4 pages with
 /// the Mac's text engine, which has fonts for every script.
 pub fn document_pdf(

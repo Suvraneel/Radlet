@@ -191,7 +191,7 @@ fn srt_safe(text: &str) -> String {
     strip_tags(text, &["b", "i", "u"])
 }
 
-fn strip_tags(text: &str, keep: &[&str]) -> String {
+pub(crate) fn strip_tags(text: &str, keep: &[&str]) -> String {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
     while let Some(open) = rest.find('<') {

@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
+use crate::assemble;
 use crate::catalog::Capabilities;
 use crate::error::{Error, ErrorInfo};
 use crate::format::{self, Category};
@@ -177,9 +178,18 @@ fn execute_inner(
         (Action::CombinePdf, inputs) => pipeline::combine_pdf(inputs, &mut ctx),
         (Action::CombineText, inputs) => pipeline::combine_text(inputs, &mut ctx),
         (Action::CombineWorkbook, inputs) => pipeline::combine_workbook(inputs, &mut ctx),
-        (Action::ZipAll, inputs) => pipeline::zip_all(inputs, &mut ctx),
+        (Action::ZipAll, inputs) => pipeline::zip_all(inputs, None, &mut ctx),
+        (Action::ZipLocked { password }, inputs) => {
+            pipeline::zip_all(inputs, Some(password.expose()), &mut ctx)
+        }
+        (Action::UnzipLocked { password }, [input]) => {
+            pipeline::unzip_with(input, Some(password.expose()), &mut ctx)
+        }
         (Action::MergeFolders, inputs) => pipeline::merge_folders(inputs, &mut ctx),
         (Action::FindDuplicates, inputs) => pipeline::find_duplicates(inputs, &mut ctx),
+        (Action::JoinMedia, inputs) => assemble::join_media(inputs, &mut ctx),
+        (Action::BurnSubtitles, inputs) => assemble::burn_subtitles(inputs, &mut ctx),
+        (Action::ScanDocuments, inputs) => assemble::scan_documents(inputs, &mut ctx),
         (Action::WordCount, [input]) => pipeline::word_count(input, &mut ctx),
         (Action::ReadCodes, [input]) => pipeline::read_codes(input, &mut ctx),
         (Action::MakeQr, [input]) => pipeline::make_qr(input, &mut ctx),
@@ -258,7 +268,7 @@ pub struct Summary {
 /// Text recognition can take a while on long scanned PDFs.
 fn involves_vision(unit: &Unit) -> bool {
     match &unit.action {
-        Action::CopyText | Action::WordCount => true,
+        Action::CopyText | Action::WordCount | Action::ScanDocuments => true,
         Action::Steps { steps, .. } => steps.iter().any(|s| {
             matches!(
                 s,
@@ -267,6 +277,7 @@ fn involves_vision(unit: &Unit) -> bool {
                     | Step::RemoveBackground { .. }
                     | Step::BlurFaces { .. }
                     | Step::Translate { .. }
+                    | Step::RedactText { .. }
                     | Step::Convert {
                         to: crate::format::Format::Txt | crate::format::Format::Md,
                         ..
@@ -281,6 +292,8 @@ fn involves_vision(unit: &Unit) -> bool {
 fn involves_folders(unit: &Unit) -> bool {
     match &unit.action {
         Action::ZipAll
+        | Action::ZipLocked { .. }
+        | Action::UnzipLocked { .. }
         | Action::MergeFolders
         | Action::Flatten
         | Action::SortByKind
@@ -298,6 +311,13 @@ fn involves_folders(unit: &Unit) -> bool {
         }),
         _ => false,
     }
+}
+
+/// Keynote, Pages and Numbers export one document at a time.
+fn involves_apps(unit: &Unit) -> bool {
+    unit.inputs
+        .iter()
+        .any(|p| format::detect(p).is_ok_and(|f| f.is_iwork() || f == crate::format::Format::Pptx))
 }
 
 fn involves_media(unit: &Unit) -> bool {
@@ -328,7 +348,10 @@ pub fn run_batch(
     // FFmpeg and Vision are heavy and multi-threaded themselves, and a
     // folder's contents are converted several files at a time already.
     let any_heavy = units.iter().any(|u| {
-        involves_media(u) || involves_vision(u) || matches!(u.action, Action::ConvertInside { .. })
+        involves_media(u)
+            || involves_vision(u)
+            || involves_apps(u)
+            || matches!(u.action, Action::ConvertInside { .. })
     });
     let cpus = std::thread::available_parallelism()
         .map(|n| n.get())
@@ -361,7 +384,7 @@ pub fn run_batch(
                     let timeout = Duration::from_secs(options.timeout_secs.unwrap_or(
                         if involves_media(&unit) || involves_folders(&unit) {
                             4 * 3600
-                        } else if involves_vision(&unit) {
+                        } else if involves_vision(&unit) || involves_apps(&unit) {
                             3600
                         } else {
                             600
