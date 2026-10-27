@@ -2,96 +2,91 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key>
-    <string>Radlet</string>
-    <key>CFBundleDisplayName</key>
-    <string>Radlet</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.suvraneel.radlet</string>
-    <key>CFBundleExecutable</key>
-    <string>Radlet</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>0.2.0</string>
-    <key>CFBundleVersion</key>
-    <string>1</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>14.0</string>
-    <key>LSUIElement</key>
-    <true/>
-    <key>NSHighResolutionCapable</key>
-    <true/>
-    <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Radlet turns speech in your videos and recordings into subtitles. Recognition runs on this Mac; nothing is sent anywhere.</string>
-    <key>NSAppleEventsUsageDescription</key>
-    <string>Radlet reads which files are selected in Finder when you press its shortcut, to open the wheel for them, and asks Keynote, Pages and Numbers to export your documents when you convert them. It doesn't change anything else.</string>
-    <!-- Updates (Sparkle): every release attaches an appcast.xml, and
-         releases/latest always serves the newest one. The public key is
-         written by mac/scripts/setup-updates.sh; without it there's no updater. -->
-    <key>SUFeedURL</key>
-    <string>https://github.com/Suvraneel/Radlet/releases/latest/download/appcast.xml</string>
-    <key>SUPublicEDKey</key>
-    <string></string>
-    <key>SUEnableAutomaticChecks</key>
-    <true/>
-    <key>NSHumanReadableCopyright</key>
-    <string>© 2026 Suvraneel Bhuin</string>
-    <!-- Finder right-click → Services. NSMessage names a method on ServiceProvider. -->
-    <key>NSServices</key>
-    <array>
-        <dict>
-            <key>NSMenuItem</key>
-            <dict>
-                <key>default</key>
-                <string>Convert with Radlet</string>
-            </dict>
-            <key>NSMessage</key>
-            <string>convertFiles</string>
-            <key>NSPortName</key>
-            <string>Radlet</string>
-            <key>NSSendFileTypes</key>
-            <array>
-                <string>public.item</string>
-            </array>
-            <key>NSRequiredContext</key>
-            <dict/>
-        </dict>
-        <dict>
-            <key>NSMenuItem</key>
-            <dict>
-                <key>default</key>
-                <string>Radlet Tools</string>
-            </dict>
-            <key>NSMessage</key>
-            <string>toolsForFiles</string>
-            <key>NSPortName</key>
-            <string>Radlet</string>
-            <key>NSSendFileTypes</key>
-            <array>
-                <string>public.item</string>
-            </array>
-            <key>NSRequiredContext</key>
-            <dict/>
-        </dict>
-    </array>
-    <!-- Open With → Radlet for any file, never as the default app. -->
-    <key>CFBundleDocumentTypes</key>
-    <array>
-        <dict>
-            <key>CFBundleTypeName</key>
-            <string>Any file</string>
-            <key>CFBundleTypeRole</key>
-            <string>Viewer</string>
-            <key>LSHandlerRank</key>
-            <string>Alternate</string>
-            <key>LSItemContentTypes</key>
-            <array>
-                <string>public.data</string>
-            </array>
-        </dict>
-    </array>
+	<key>CFBundleDisplayName</key>
+	<string>Radlet</string>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Any file</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.data</string>
+			</array>
+		</dict>
+	</array>
+	<key>CFBundleExecutable</key>
+	<string>Radlet</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.suvraneel.radlet</string>
+	<key>CFBundleName</key>
+	<string>Radlet</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.2.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Radlet reads which files are selected in Finder when you press its shortcut, to open the wheel for them, and asks Keynote, Pages and Numbers to export your documents when you convert them. It doesn't change anything else.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>© 2026 Suvraneel Bhuin</string>
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Convert with Radlet</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>convertFiles</string>
+			<key>NSPortName</key>
+			<string>Radlet</string>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>public.item</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Radlet Tools</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>toolsForFiles</string>
+			<key>NSPortName</key>
+			<string>Radlet</string>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>public.item</string>
+			</array>
+		</dict>
+	</array>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Radlet turns speech in your videos and recordings into subtitles. Recognition runs on this Mac; nothing is sent anywhere.</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/Suvraneel/Radlet/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>OcHu0zS4ML1w7DQZ0V6TF2HRlrCRtfROjKHdIf1j3Us=</string>
 </dict>
 </plist>
