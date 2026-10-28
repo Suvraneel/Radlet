@@ -279,9 +279,14 @@ pub fn targets(from: Format, caps: &Capabilities) -> Vec<Format> {
                 .filter(|&t| t == Pdf || caps.can_encode_raster(t)),
         );
     }
-    // Pictures trace into drawings.
+    // Pictures trace into drawings: next to PDF, so a drawing gets a slot
+    // on the wheel rather than the bottom of "More…".
     if traces(from, caps) {
-        out.push(Svg);
+        let at = out
+            .iter()
+            .position(|&t| t == Pdf)
+            .map_or(out.len(), |i| i + 1);
+        out.insert(at, Svg);
     }
     // Text recognition reads images too.
     if caps.vision.is_some() && caps.can_decode_raster(from) && from != Svg {
@@ -2468,8 +2473,11 @@ mod tests {
         );
         assert_eq!(
             targets(Gif, &mac),
-            [Jpeg, Png, Webp, Avif, Pdf, Tiff, Jxl, Bmp, Ico, Icns, Tga, Qoi, Svg, Txt, Mp4, Mov]
+            [Jpeg, Png, Webp, Avif, Pdf, Svg, Tiff, Jxl, Bmp, Ico, Icns, Tga, Qoi, Txt, Mp4, Mov]
         );
+        let photo = wheel(&[Some(Jpeg)], &mac, &[]);
+        let at = photo.convert.iter().position(|s| s.id == "to_svg").unwrap();
+        assert!(at < 7, "SVG gets a slot on an 8-slot wheel, not \"More…\"");
         let clips = ids(&wheel(&[Some(Mov), Some(Mp4)], &mac, &[]));
         assert!(clips.contains(&"join_media".to_string()), "{clips:?}");
         let subtitled = ids(&wheel(&[Some(Mov), Some(Srt)], &mac, &[]));
