@@ -29,10 +29,15 @@ jobs:
 
   mac:
     name: Mac app
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Check Swift is 6.2 or later
+        # Older Swift leaves out the Apple Intelligence tools (FoundationModels).
+        run: |
+          swift --version
+          swift --version 2>&1 | grep -Eq 'Swift version (6\.([2-9]|[1-9][0-9])|([7-9]|[1-9][0-9])\.)'
       - run: brew install ffmpeg
       - run: cargo test --all
       - run: cargo build --release -p radlet-cli
