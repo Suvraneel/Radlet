@@ -25,6 +25,11 @@ enum Prefs {
     static var finderShortcut: Bool { d.object(forKey: "finderShortcut") as? Bool ?? true }
 
     static var excludedApps: [String] { d.stringArray(forKey: "excludedApps") ?? [] }
+    /// Shortcuts (from the Shortcuts app) on the Control wheel, by name.
+    static var wheelShortcuts: [String] {
+        get { d.stringArray(forKey: "wheelShortcuts") ?? [] }
+        set { d.set(newValue, forKey: "wheelShortcuts") }
+    }
 
     private static var supportDir: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first

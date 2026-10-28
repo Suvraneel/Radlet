@@ -25,6 +25,7 @@ pub mod pdfium;
 pub mod pptx;
 pub mod rtf;
 pub mod sheet;
+pub mod shortcuts;
 pub mod sips;
 pub mod speech;
 pub mod svg;

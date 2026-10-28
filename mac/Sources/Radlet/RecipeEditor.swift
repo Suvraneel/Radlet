@@ -130,6 +130,8 @@ final class RecipeLibrary: ObservableObject {
     }
     /// Set while the selection changes in code rather than by a click.
     private var quiet = false
+    /// The sheet choosing shortcuts for the Control wheel.
+    @Published var showingShortcuts = false
 
     var user: [Item] { items.filter { !$0.builtin } }
     var builtins: [Item] { items.filter(\.builtin) }
@@ -364,6 +366,8 @@ struct RecipesSettings: View {
                     .help("Share as a link or a file; anyone with Radlet can add it")
                     Button(action: library.revealFolder) { Image(systemName: "folder") }
                         .help("Show in Finder")
+                    Button { library.showingShortcuts = true } label: { Image(systemName: "square.2.layers.3d") }
+                        .help("Shortcuts on the Control wheel…")
                 }
                 .buttonStyle(.borderless)
                 .padding(6)
@@ -379,6 +383,9 @@ struct RecipesSettings: View {
             }
         }
         .onAppear { library.refresh() }
+        .sheet(isPresented: $library.showingShortcuts) {
+            ShortcutsPicker { library.showingShortcuts = false }
+        }
     }
 }
 

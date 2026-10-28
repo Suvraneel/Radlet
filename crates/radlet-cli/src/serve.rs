@@ -38,6 +38,9 @@ struct InspectParams {
     /// Also list what needs something this Mac can get, marked `needs`.
     #[serde(default)]
     installs: bool,
+    /// Shortcuts (by name) the person put on the Control wheel.
+    #[serde(default)]
+    shortcuts: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -201,6 +204,7 @@ pub fn serve(
                     .collect();
                 let (recipes, recipe_errors) = all_recipes(p.recipes_dir.as_ref());
                 let mut wheel = catalog::wheel_for(&p.paths, &detected, caps, &recipes);
+                catalog::add_shortcuts(&mut wheel, &detected, &p.shortcuts, caps);
                 if p.installs {
                     catalog::add_installable(
                         &mut wheel,
@@ -255,6 +259,11 @@ pub fn serve(
                     send(&out, &json!({ "id": id, "result": { "reports": reports } }));
                 }));
             }
+            // The person's shortcuts, to choose which go on the wheel.
+            "shortcuts" => match radlet_core::engines::shortcuts::list(caps) {
+                Ok(names) => send(&out, &json!({ "id": id, "result": { "shortcuts": names } })),
+                Err(e) => send(&out, &error_response(&id, e.code(), e.to_string())),
+            },
             // A loadout shared as a file or link: checked, never saved here.
             "parse_recipe" => {
                 let p = params!(TextParams);

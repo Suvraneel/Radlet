@@ -1802,6 +1802,29 @@ pub fn read_codes(input: &Path, ctx: &mut Context<'_>) -> Result<Produced> {
     Ok(value(found.join("\n")))
 }
 
+/// Runs the person's shortcut `name` on `input` and saves what it returns
+/// beside it: "photo (Resize for Web).jpg". A shortcut that returns
+/// nothing (it shared or sent the file, say) saves nothing.
+pub fn run_shortcut(input: &Path, name: &str, ctx: &mut Context<'_>) -> Result<Produced> {
+    use crate::engines::shortcuts;
+    let scratch = tempfile::tempdir()?;
+    let results = shortcuts::run(ctx.caps, name, input, scratch.path(), ctx.cancel)?;
+    let dir = ctx.output.dir_for(input);
+    let label = file_part(name, 60, "shortcut");
+    let mut outs = Vec::with_capacity(results.len());
+    for result in &results {
+        ctx.check_cancel()?;
+        let ext = shortcuts::extension_for(result);
+        let tmp = naming::temp_in(&dir, ctx.temp_tag, &ext)?;
+        std::fs::copy(result, tmp.path())?;
+        naming::inherit_permissions(input, tmp.path());
+        let desired = naming::desired_path(input, &dir, &ext, Some(&label));
+        outs.push(naming::publish(tmp.into_temp_path(), &desired)?);
+    }
+    (ctx.progress)(1.0);
+    Ok(Produced::many(outs))
+}
+
 /// A QR code (PNG) of a text file's contents, beside it.
 pub fn make_qr(input: &Path, ctx: &mut Context<'_>) -> Result<Produced> {
     let fmt = format::detect(input)?;

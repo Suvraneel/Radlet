@@ -582,6 +582,16 @@ enum Command {
         #[arg(long = "loadouts-dir", alias = "recipes-dir", value_name = "DIR")]
         recipes_dir: Option<PathBuf>,
     },
+    /// Run one of your shortcuts (from the Shortcuts app) on each file;
+    /// what it returns is saved beside the file (macOS).
+    Shortcut {
+        /// The shortcut's name, as the Shortcuts app shows it.
+        name: String,
+        #[command(flatten)]
+        run: RunArgs,
+    },
+    /// List your shortcuts (macOS).
+    Shortcuts,
     /// Show what files reveal: location, device, names, dates, hidden
     /// content. `radlet strip` removes what's marked removable.
     Privacy {
@@ -1318,6 +1328,18 @@ fn dispatch(cli: Cli) -> Result<ExitCode> {
             Ok(ExitCode::SUCCESS)
         }
         Command::Privacy { files } => privacy(&files, caps, json_out),
+        Command::Shortcut { name, run: r } => run(&r, Action::RunShortcut { name }, json_out),
+        Command::Shortcuts => {
+            let names = radlet_core::engines::shortcuts::list(caps)?;
+            if json_out {
+                println!("{}", serde_json::to_string(&names)?);
+            } else {
+                for n in names {
+                    println!("{n}");
+                }
+            }
+            Ok(ExitCode::SUCCESS)
+        }
         Command::Mcp { recipes_dir } => {
             let stdin = BufReader::new(io::stdin());
             let code = mcp::serve(

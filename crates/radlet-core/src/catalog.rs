@@ -48,6 +48,9 @@ pub struct Capabilities {
     pub pages: bool,
     #[serde(default)]
     pub numbers: bool,
+    /// macOS's `shortcuts` tool, to run the person's own shortcuts.
+    #[serde(default)]
+    pub shortcuts: Option<PathBuf>,
 }
 
 impl Capabilities {
@@ -98,6 +101,10 @@ impl Capabilities {
             keynote: iwork(App::Keynote),
             pages: iwork(App::Pages),
             numbers: iwork(App::Numbers),
+            shortcuts: std::env::var_os("RADLET_SHORTCUTS")
+                .map(PathBuf::from)
+                .or_else(|| cfg!(target_os = "macos").then(|| PathBuf::from("/usr/bin/shortcuts")))
+                .filter(|p| is_executable(p)),
         }
     }
 
@@ -639,6 +646,39 @@ pub struct Wheel {
     pub convert: Vec<Slot>,
     pub tools: Vec<Slot>,
     pub recipes: Vec<Slot>,
+}
+
+/// Adds the person's chosen shortcuts (`names`, from the Shortcuts app) to
+/// the Control wheel, after their loadouts. Shortcuts take files, so a
+/// selection with a folder gets none.
+pub fn add_shortcuts(
+    w: &mut Wheel,
+    formats: &[Option<Format>],
+    names: &[String],
+    caps: &Capabilities,
+) {
+    if caps.shortcuts.is_none() || formats.is_empty() || formats.contains(&Some(Folder)) {
+        return;
+    }
+    for name in names {
+        if crate::engines::shortcuts::check_name(name).is_err() {
+            continue;
+        }
+        let id = format!("shortcut:{name}");
+        if w.recipes.iter().any(|s| s.id == id) {
+            continue;
+        }
+        w.recipes.push(Slot {
+            id,
+            label: name.clone(),
+            symbol: "square.2.layers.3d".into(),
+            group: SlotGroup::Recipe,
+            action: Action::RunShortcut { name: name.clone() },
+            window: None,
+            variants: Vec::new(),
+            needs: None,
+        });
+    }
 }
 
 /// Builds the wheel for a selection. `None` entries are files Radlet doesn't
@@ -1978,6 +2018,36 @@ mod tests {
             .find(|s| s.id == id)
             .unwrap_or_else(|| panic!("no {id}"));
         slot.variants.iter().map(|v| v.label.as_str()).collect()
+    }
+
+    #[test]
+    fn chosen_shortcuts_join_the_control_wheel() {
+        let caps = Capabilities {
+            shortcuts: Some("/usr/bin/shortcuts".into()),
+            ..Capabilities::none()
+        };
+        let names = [
+            "Resize for Web".to_string(),
+            "Bad\nname".to_string(),
+            "Resize for Web".to_string(),
+        ];
+        let mut w = wheel(&[Some(Png)], &caps, &[]);
+        let before = w.recipes.len();
+        add_shortcuts(&mut w, &[Some(Png)], &names, &caps);
+        assert_eq!(w.recipes.len(), before + 1, "once, and never a bad name");
+        let slot = w.recipes.last().unwrap();
+        assert_eq!(slot.id, "shortcut:Resize for Web");
+        assert!(matches!(&slot.action, Action::RunShortcut { name } if name == "Resize for Web"));
+        // No shortcuts tool, or a folder: none.
+        let mut none = wheel(&[Some(Png)], &Capabilities::none(), &[]);
+        add_shortcuts(&mut none, &[Some(Png)], &names, &Capabilities::none());
+        assert!(none.recipes.iter().all(|s| !s.id.starts_with("shortcut:")));
+        let mut folder = wheel(&[Some(Folder)], &caps, &[]);
+        add_shortcuts(&mut folder, &[Some(Folder)], &names, &caps);
+        assert!(folder
+            .recipes
+            .iter()
+            .all(|s| !s.id.starts_with("shortcut:")));
     }
 
     #[test]

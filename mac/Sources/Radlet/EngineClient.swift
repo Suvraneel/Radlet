@@ -221,6 +221,8 @@ final class EngineClient: @unchecked Sendable {
     func inspect(_ files: [URL], recipesDir: URL?) async throws -> InspectResult {
         var params: [String: JSONValue] = ["paths": .array(files.map { .string($0.path) }), "installs": .bool(true)]
         if let recipesDir { params["recipes_dir"] = .string(recipesDir.path) }
+        let shortcuts = Prefs.wheelShortcuts
+        if !shortcuts.isEmpty { params["shortcuts"] = .array(shortcuts.map { .string($0) }) }
         return try await request("inspect", params).decode(InspectResult.self)
     }
 

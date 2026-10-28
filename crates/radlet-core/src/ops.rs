@@ -510,6 +510,9 @@ pub enum Action {
     /// page cut out, squared up, evened out, with searchable text (Mac
     /// helper).
     ScanDocuments,
+    /// Run the person's shortcut `name` (from the Shortcuts app) on each
+    /// file; what it returns is saved beside it. Not offered to AI agents.
+    RunShortcut { name: String },
 }
 
 /// Which icons [`Action::IconSet`] makes. (A macOS icon is a conversion

@@ -217,6 +217,7 @@ fn execute_inner(
             pipeline::pdf_password(input, password.expose(), false, &mut ctx)
         }
         (Action::SplitPdf { mode }, [input]) => pipeline::split_pdf(input, mode, &mut ctx),
+        (Action::RunShortcut { name }, [input]) => pipeline::run_shortcut(input, name, &mut ctx),
         _ => Err(Error::Invalid(
             "this action takes exactly one file per unit".into(),
         )),
@@ -384,7 +385,10 @@ pub fn run_batch(
                     let timeout = Duration::from_secs(options.timeout_secs.unwrap_or(
                         if involves_media(&unit) || involves_folders(&unit) {
                             4 * 3600
-                        } else if involves_vision(&unit) || involves_apps(&unit) {
+                        } else if involves_vision(&unit)
+                            || involves_apps(&unit)
+                            || matches!(unit.action, Action::RunShortcut { .. })
+                        {
                             3600
                         } else {
                             600

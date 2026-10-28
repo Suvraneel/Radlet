@@ -122,7 +122,8 @@ Tools ending in "…" open a window first, with a live preview where it helps.
 - **Share loadouts and skins.** The share button in **Settings → Loadouts**, and **Share** under **Settings → Wheel → Skin**, copy a `radlet://` link or save a `.radletloadout` or `.radletskin` file. Opening one shows what it holds (a loadout's steps in words, a skin on a live wheel) and adds it only if you say so; nothing runs by itself, and a name already taken gets a number. Ready-made ones are in the [gallery](https://radlet.vercel.app/gallery/).
 - **What a conversion needs, offered.** Slots that need something this Mac doesn't have yet show a badge: FFmpeg for more audio and video, Keynote, Pages or Numbers for their documents. Choosing one explains what's missing and helps get it: Radlet installs FFmpeg with Homebrew (or, once one is published, its own FFmpeg build), and opens the App Store page for Apple's free apps. Anything installed meanwhile, in Terminal or the App Store, is found the next time you choose it. A job that needs a speech or translation language download offers to open the right settings pane.
 - **Other ways in.** Finder's right-click **Services → Convert with Radlet** (or **Radlet Tools**), **Open With → Radlet**, **⌃⌥V** in Finder for the selected files, and the menu bar (**Convert Files…**, **Tools for Files…**, **Run a Loadout…**, **Convert Finder Selection**). Each opens the wheel for the keyboard: arrow keys to choose, Return to run, Tab to switch wheels, Escape to cancel.
-- **Command line, Shortcuts and AI agents.** The same engine is the `radlet` command. `radlet mcp` is a Model Context Protocol server, so Claude and other AI apps can inspect, convert, compress, clean, subtitle and run loadouts on your files, locally. Password tools aren't offered to agents. See [Reference](#reference).
+- **Your shortcuts on the wheel.** The shortcuts button in **Settings → Loadouts** lists your shortcuts from the Shortcuts app; the ones you tick join the Control wheel after your loadouts. Each file goes in as the shortcut's input, and what it returns is saved beside the file, such as `photo (Resize for Web).jpg`; a shortcut that returns nothing (it shared or sent the file) saves nothing. AI agents can't run them.
+- **Command line, Shortcuts and AI agents.** The same engine is the `radlet` command. `radlet mcp` is a Model Context Protocol server, so Claude and other AI apps can inspect, convert, compress, clean, subtitle and run loadouts on your files, locally. Password tools and your own shortcuts aren't offered to agents. See [Reference](#reference).
 
 ## Tech stack
 
@@ -351,6 +352,7 @@ radlet merge "Photos 2023" "Photos 2024"    # "Photos 2023 (merged)"
 radlet flatten Downloads                    # or: radlet sort, radlet list --csv, radlet duplicates
 radlet checksum installer.dmg
 radlet loadout "Web-ready image" *.png
+radlet shortcut "Resize for Web" *.png     # one of your shortcuts; `radlet shortcuts` lists them
 radlet --json convert a.png --to webp       # JSON lines for scripts
 ```
 
@@ -409,7 +411,8 @@ JSON, one object per line. Every request gets exactly one reply with the same `i
 | Method | Params | Result |
 | --- | --- | --- |
 | `hello` | none | `version`, `protocol` (1), `capabilities` |
-| `inspect` | `paths`, `recipes_dir?`, `installs?` | `files` (detected formats), `wheel` (`convert`, `tools`, `recipes` slots). A slot may carry `variants`: presets with a short `label`, a `hint` and their own `action`, shown by the Orbit and Bloom styles. With `installs`, slots that need something this Mac can get come after the rest, with `needs`: `ffmpeg`, `keynote`, `pages` or `numbers`. |
+| `inspect` | `paths`, `recipes_dir?`, `installs?`, `shortcuts?` | `files` (detected formats), `wheel` (`convert`, `tools`, `recipes` slots). A slot may carry `variants`: presets with a short `label`, a `hint` and their own `action`, shown by the Orbit and Bloom styles. With `installs`, slots that need something this Mac can get come after the rest, with `needs`: `ffmpeg`, `keynote`, `pages` or `numbers`. `shortcuts` (names) adds those shortcuts to the `recipes` slots, as `run_shortcut` actions. |
+| `shortcuts` | none | `shortcuts`: the names in the Shortcuts app (macOS) |
 | `run` | `paths`, `action`, `options?`, `isolate?` | `job`, `units`, then events: `item_started`, `item_progress`, `item_finished`, `job_finished`. An outcome lists everything it created in `outputs` (several page images, or one folder). A failed outcome's `error` may carry `need` (the four above, `speech_language` or `translation_language`). |
 | `refresh` | none | `ffmpeg`, `keynote`, `pages`, `numbers`. Looks again for FFmpeg and the iWork apps, after one was installed. |
 | `cancel` | `job` | `cancelled` |

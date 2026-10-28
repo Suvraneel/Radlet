@@ -1009,3 +1009,100 @@ fn tables_codes_icons_and_folder_contents_from_the_command_line() {
     assert_ne!(radlet(&["faces", "logo.png"], d).0, 0);
     assert_ne!(radlet(&["translate", "link.txt", "--to", "fr"], d).0, 0);
 }
+
+/// A stand-in for macOS's `shortcuts`: "Upper" returns the input in
+/// capitals, "Quiet" returns nothing.
+#[cfg(unix)]
+fn fake_shortcuts(dir: &Path) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let path = dir.join("shortcuts");
+    std::fs::write(
+        &path,
+        "#!/bin/sh\nif [ \"$1\" = list ]; then printf 'Upper\\nQuiet\\n'; exit 0; fi\n\
+         case \"$2\" in Upper) tr a-z A-Z < \"$4\" > \"$6\" ;; Quiet) ;; *) echo \"Couldn't find shortcut\" >&2; exit 1 ;; esac\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+    path
+}
+
+#[cfg(unix)]
+#[test]
+fn serve_runs_the_persons_shortcuts() {
+    let dir = tempfile::tempdir().unwrap();
+    let tool = fake_shortcuts(dir.path());
+    let note = dir.path().join("note.txt");
+    std::fs::write(&note, "hello").unwrap();
+    let mut h = Helper::start_env(&["serve"], &[("RADLET_SHORTCUTS", tool.to_str().unwrap())]);
+
+    h.send(json!({"id": 1, "method": "shortcuts"}));
+    assert_eq!(h.next()["result"]["shortcuts"], json!(["Upper", "Quiet"]));
+
+    // Only the ones chosen go on the Control wheel, after the loadouts.
+    h.send(
+        json!({"id": 2, "method": "inspect", "params": {"paths": [note], "shortcuts": ["Upper"]}}),
+    );
+    let wheel = h.next()["result"]["wheel"]["recipes"]
+        .as_array()
+        .unwrap()
+        .clone();
+    let slot = wheel
+        .iter()
+        .find(|s| s["id"] == "shortcut:Upper")
+        .expect("the shortcut's slot");
+    assert_eq!(slot["label"], "Upper");
+    assert!(!wheel.iter().any(|s| s["id"] == "shortcut:Quiet"));
+    h.send(json!({"id": 3, "method": "inspect", "params": {"paths": [dir.path()], "shortcuts": ["Upper"]}}));
+    let folder = h.next()["result"]["wheel"]["recipes"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert!(
+        !folder.iter().any(|s| s["id"] == "shortcut:Upper"),
+        "shortcuts take files"
+    );
+
+    // Running it saves what it returns beside the file.
+    h.send(
+        json!({"id": 4, "method": "run", "params": {"paths": [note], "action": slot["action"]}}),
+    );
+    let events = h.until(|v| v["event"] == "job_finished");
+    let done = events
+        .iter()
+        .find(|e| e["event"] == "item_finished")
+        .unwrap();
+    assert_eq!(done["outcome"]["status"], "done", "{done}");
+    let out = dir.path().join("note (Upper).txt");
+    assert_eq!(std::fs::read_to_string(&out).unwrap(), "HELLO");
+    assert_eq!(
+        std::fs::read_to_string(&note).unwrap(),
+        "hello",
+        "the original is untouched"
+    );
+
+    // One that returns nothing is done, with nothing saved; a missing one
+    // says so.
+    h.send(json!({"id": 5, "method": "run", "params": {"paths": [note], "action": {"kind": "run_shortcut", "name": "Quiet"}}}));
+    let events = h.until(|v| v["event"] == "job_finished");
+    let quiet = events
+        .iter()
+        .find(|e| e["event"] == "item_finished")
+        .unwrap();
+    assert_eq!(quiet["outcome"]["status"], "done", "{quiet}");
+    h.send(json!({"id": 6, "method": "run", "params": {"paths": [note], "action": {"kind": "run_shortcut", "name": "Gone"}}}));
+    let events = h.until(|v| v["event"] == "job_finished");
+    let gone = events
+        .iter()
+        .find(|e| e["event"] == "item_finished")
+        .unwrap();
+    assert_eq!(gone["outcome"]["status"], "failed");
+    assert!(
+        gone["outcome"]["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("no shortcut called"),
+        "{gone}"
+    );
+    h.send(json!({"id": 7, "method": "shutdown"}));
+    let _ = h.until(|v| v["id"] == 7);
+}
