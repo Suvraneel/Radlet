@@ -317,6 +317,12 @@ case "$1 $2" in
   "describe alt") printf '{"title":"Red apple","description":"A red apple on a wooden table."}' > "$4";;
   "write title") printf 'Title: "Garden plan for spring"\n' > "$4";;
   "write summary") printf -- '- Plant tomatoes in May.\n- Water daily.\n' > "$4";;
+  "write loadout")
+    if grep -qs "wasn't a valid loadout" "$3"; then
+      printf '```json\n{"name": "Small PDFs", "description": "As PDF, under 2 MB", "steps": [{"op": "convert", "to": "pdf"}, {"op": "compress", "target_bytes": 2000000}]}\n```\n' > "$4"
+    else
+      printf '{"name": "Small PDFs", "steps": [{"op": "shrink"}]}' > "$4"
+    fi;;
   *) echo "unknown command" >&2; exit 2;;
 esac
 "#,
@@ -410,6 +416,13 @@ fn names_descriptions_and_summaries_from_apple_intelligence() {
         content::title(&off, &caps, &mut ctx).unwrap().as_deref(),
         Some("Plan for the off-season")
     );
+    // A loadout from a sentence: the first answer isn't one, so the
+    // model is asked again, saying why.
+    let drafted = content::draft_recipe(&caps, "as PDF, under 2 MB", &cancel).unwrap();
+    assert_eq!(drafted.name, "Small PDFs");
+    assert_eq!(drafted.steps.len(), 2);
+    assert!(content::draft_recipe(&caps, "  ", &cancel).is_err());
+    assert!(content::draft_recipe(&caps, &"x".repeat(301), &cancel).is_err());
     // A Mac that can't have it never asks the helper.
     let older = Capabilities {
         apple_intelligence: false,

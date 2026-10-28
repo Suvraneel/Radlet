@@ -10,6 +10,9 @@
 //       (the description) needs Apple Intelligence.
 //   radlet-vision write title|summary <input.txt> <output.txt>
 //       a document's title, or a summary of it, by the model.
+//   radlet-vision write loadout <prompt.txt> <output.txt>
+//       a loadout as JSON, for a request the engine wrote out with the
+//       steps a loadout can hold (crates/radlet-core/src/content.rs).
 //
 // Without Apple Intelligence where it's needed: exit 4 with "need
 // apple_intelligence" (see main.swift). The model can't see pictures, so
@@ -114,6 +117,11 @@ func writeAbout(_ args: [String]) throws {
             required: true) ?? ""
     case "summary":
         answer = try summarise(text)
+    case "loadout":
+        answer = try ask(
+            "You turn requests into JSON for a file tool, following the rules you're given exactly. Answer with only the JSON object, and no other text.",
+            String(text.prefix(8000)),
+            required: true) ?? ""
     default:
         throw Failure.failed("write takes title or summary")
     }

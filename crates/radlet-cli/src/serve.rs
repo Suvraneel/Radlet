@@ -186,6 +186,7 @@ pub fn serve(
                         "pdfium": caps.pdfium.is_some(),
                         "vision": caps.vision.is_some(),
                         "avfoundation": caps.avfoundation,
+                        "apple_intelligence": caps.apple_intelligence,
                     }
                 }}),
             ),
@@ -293,6 +294,26 @@ pub fn serve(
                 Ok(names) => send(&out, &json!({ "id": id, "result": { "shortcuts": names } })),
                 Err(e) => send(&out, &error_response(&id, e.code(), e.to_string())),
             },
+            // A loadout drafted from a sentence by Apple Intelligence:
+            // checked, never saved here. The model takes a moment, so it's
+            // answered from a thread.
+            "draft_recipe" => {
+                let p = params!(TextParams);
+                let out = out.clone();
+                threads.push(std::thread::spawn(move || {
+                    let cancel = AtomicBool::new(false);
+                    match radlet_core::content::draft_recipe(caps, &p.text, &cancel) {
+                        Ok(r) => send(&out, &json!({ "id": id, "result": { "recipe": r } })),
+                        Err(e) => {
+                            let mut response = error_response(&id, e.code(), e.to_string());
+                            if let Some(need) = e.need() {
+                                response["error"]["need"] = json!(need);
+                            }
+                            send(&out, &response);
+                        }
+                    }
+                }));
+            }
             // A loadout shared as a file or link: checked, never saved here.
             "parse_recipe" => {
                 let p = params!(TextParams);

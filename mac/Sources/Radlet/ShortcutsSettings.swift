@@ -103,3 +103,90 @@ struct ShortcutsPicker: View {
         .onAppear { model.load() }
     }
 }
+
+/// Drafting a loadout from a sentence ("under 2 MB, as PDF") with Apple
+/// Intelligence, on this Mac. The draft opens in the editor, unsaved, to
+/// check first.
+@MainActor
+final class SentenceDraft: ObservableObject {
+    @Published var text = ""
+    @Published private(set) var working = false
+    @Published private(set) var problem: String?
+
+    static let examples = ["Under 2 MB, as PDF", "Small WebP for the web, no location", "Podcast-ready MP3"]
+
+    var canDraft: Bool { !working && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    func draft(open: @escaping (JSONValue) -> Void) {
+        let request = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard canDraft else { return }
+        working = true
+        problem = nil
+        Task {
+            do {
+                let result = try await EngineClient.shared.request("draft_recipe", ["text": .string(request)])
+                working = false
+                guard let recipe = result["recipe"] else {
+                    problem = "Nothing came back. Try saying it another way."
+                    return
+                }
+                Log.app("loadout drafted from a sentence")
+                open(recipe)
+            } catch let EngineError.remote(code, message) where code == "needs" {
+                working = false
+                problem = message
+                InstallWindowController.shared.offer(.appleIntelligence, task: "Make a loadout from a sentence")
+            } catch {
+                working = false
+                problem = error.localizedDescription
+            }
+        }
+    }
+}
+
+struct SentenceDraftView: View {
+    @StateObject private var model = SentenceDraft()
+    let open: (JSONValue) -> Void
+    let close: () -> Void
+
+    init(open: @escaping (JSONValue) -> Void, close: @escaping () -> Void) {
+        self.open = open
+        self.close = close
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Make a loadout from a sentence", systemImage: "sparkles").font(.headline)
+            Text("Say what it should do. Apple Intelligence drafts the steps on this Mac, and you check them before saving.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            TextField("What should it do?", text: $model.text, axis: .vertical)
+                .lineLimit(2...4)
+                .textFieldStyle(.roundedBorder)
+                .onSubmit { model.draft(open: open) }
+            HStack(spacing: 6) {
+                Text("Try:").font(.caption).foregroundStyle(.secondary)
+                ForEach(SentenceDraft.examples, id: \.self) { example in
+                    Button(example) { model.text = example }
+                }
+            }
+            .controlSize(.small)
+            if model.working {
+                ProgressView("Drafting…").controlSize(.small)
+            }
+            if let problem = model.problem {
+                Text(problem).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Spacer()
+                Button("Cancel", action: close).keyboardShortcut(.cancelAction)
+                Button("Draft") { model.draft(open: open) }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!model.canDraft)
+            }
+        }
+        .padding(20)
+        .frame(width: 480)
+    }
+}

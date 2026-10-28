@@ -350,6 +350,14 @@ public struct Capabilities: Codable, Sendable {
     /// The helper converts audio and video with AVFoundation when FFmpeg is
     /// missing. Missing from older helpers.
     public let avfoundation: Bool?
+    /// This Mac can have Apple Intelligence (macOS 26, Apple silicon).
+    /// Missing from older helpers.
+    public let appleIntelligence: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case ffmpeg, ffprobe, sips, pdfium, vision, avfoundation
+        case appleIntelligence = "apple_intelligence"
+    }
 }
 
 public struct Hello: Codable, Sendable {

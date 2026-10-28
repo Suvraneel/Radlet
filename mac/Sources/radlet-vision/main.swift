@@ -36,7 +36,7 @@
 //   radlet-vision describe title|alt <image> <output.json>
 //                                                what's in a picture, in words
 //                                                (Intelligence.swift)
-//   radlet-vision write title|summary <input.txt> <output.txt>
+//   radlet-vision write title|summary|loadout <input.txt> <output.txt>
 //                                                a document's title or
 //                                                summary, by Apple
 //                                                Intelligence (Intelligence.swift)
@@ -735,7 +735,7 @@ do {
     case "--version":
         print("radlet-vision 5")
     default:
-        FileHandle.standardError.write(Data("usage: radlet-vision text|mask|searchable|document-pdf|faces <input> <output>, transcribe <language> <output.json> <chunk>..., translate <to> <from|auto> <input.json> <output.json>, media <input> <output> <to> [options], codes <input> <output.json>, join <output> <to> <input>..., burn <video> <cues.json> <output> <to>, scan <output.pdf> <photo>..., redact-pdf <input> <output> <terms.json>, describe title|alt <image> <output.json>, write title|summary <input.txt> <output.txt>, or selftest\n".utf8))
+        FileHandle.standardError.write(Data("usage: radlet-vision text|mask|searchable|document-pdf|faces <input> <output>, transcribe <language> <output.json> <chunk>..., translate <to> <from|auto> <input.json> <output.json>, media <input> <output> <to> [options], codes <input> <output.json>, join <output> <to> <input>..., burn <video> <cues.json> <output> <to>, scan <output.pdf> <photo>..., redact-pdf <input> <output> <terms.json>, describe title|alt <image> <output.json>, write title|summary|loadout <input.txt> <output.txt>, or selftest\n".utf8))
         exit(2)
     }
 } catch Failure.nothingFound(let message) {

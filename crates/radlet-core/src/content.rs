@@ -131,6 +131,81 @@ pub fn summarize(input: &Path, ctx: &mut Context<'_>) -> Result<Produced> {
     Ok(Produced::one(out))
 }
 
+/// The longest request turned into a loadout.
+pub const MAX_REQUEST: usize = 300;
+
+/// What the model is told a loadout can hold: the steps people ask for in
+/// words, with the fields each takes.
+const LOADOUT_GUIDE: &str = r#"Turn the request into a Radlet loadout: steps run in order on each file a person drops on it. Answer with only a JSON object, like {"name": "Web photos", "description": "Longest side 2048 px, WebP, no metadata", "steps": [{"op": "resize", "max": 2048}, {"op": "convert", "to": "webp"}, {"op": "strip_metadata"}]}.
+The name is 2 to 5 words. The description says what it does, in one line.
+Steps, with only these fields:
+- {"op": "resize", "max": N} makes the longest side at most N pixels; or use exactly one of "percent" (1 to 100), "width" or "height" instead of "max".
+- {"op": "convert", "to": F} where F is one of jpeg, png, webp, heic, avif, gif, tiff, pdf, svg, txt, md, html, docx, csv, xlsx, json, mp3, m4a, wav, flac, mp4, mov, webm, srt, vtt. Add "quality" (1 to 100) only if asked.
+- {"op": "compress", "level": L} where L is smart, light, balanced or strong; or {"op": "compress", "target_bytes": N} to fit under N bytes (2 MB is 2000000).
+- {"op": "strip_metadata"} removes location, camera and other personal details.
+- {"op": "rotate", "degrees": D} where D is 90, 180 or 270.
+- {"op": "watermark", "text": T} and {"op": "page_numbers"} are for PDFs.
+- {"op": "trim", "start": S, "end": S} keeps seconds S to S of audio or video.
+- {"op": "normalize_audio"} evens out volume.
+- {"op": "remove_background"}, {"op": "blur_faces", "style": "blur"}, {"op": "trace"} (a picture to an SVG drawing) are for pictures.
+- {"op": "make_searchable"} makes scans searchable PDFs.
+- {"op": "transcribe", "to": "srt"} makes subtitles from speech.
+- {"op": "translate", "to": "fr"} translates into a language code.
+Use at most 6 steps. Change size and format before compressing. Don't add steps that weren't asked for, except strip_metadata when the request mentions privacy or sharing."#;
+
+/// Drafts a loadout from a sentence ("under 2 MB, as PDF"), written by
+/// Apple Intelligence and checked like any loadout. Never saved here: the
+/// app opens it in the editor to review.
+pub fn draft_recipe(
+    caps: &Capabilities,
+    request: &str,
+    cancel: &std::sync::atomic::AtomicBool,
+) -> Result<crate::recipe::Recipe> {
+    let request = request.trim();
+    if request.is_empty() {
+        return Err(Error::Invalid("say what the loadout should do".into()));
+    }
+    if request.chars().count() > MAX_REQUEST {
+        return Err(Error::Invalid(
+            "say it in fewer words (up to 300 characters)".into(),
+        ));
+    }
+    require(caps)?;
+    let mut prompt = format!("{LOADOUT_GUIDE}\n\nRequest: {request}");
+    let mut last = String::new();
+    // One more go if the first answer isn't a loadout, saying why.
+    for attempt in 0..2 {
+        let answer = vision::write(caps, "loadout", &prompt, cancel, &mut |_| {})?;
+        match recipe_from_answer(&answer) {
+            Ok(r) => return Ok(r),
+            Err(why) => {
+                last = why;
+                if attempt == 0 {
+                    prompt.push_str(&format!(
+                        "\n\nYour answer wasn't a valid loadout ({last}). Answer again with only the JSON object."
+                    ));
+                }
+            }
+        }
+    }
+    Err(Error::NothingToDo(format!(
+        "Apple Intelligence couldn't make a loadout from that ({last}). Try saying it another way"
+    )))
+}
+
+/// The loadout in a model's answer: its JSON object, read and checked.
+fn recipe_from_answer(answer: &str) -> std::result::Result<crate::recipe::Recipe, String> {
+    let start = answer.find('{').ok_or("no JSON object")?;
+    let end = answer.rfind('}').ok_or("no JSON object")?;
+    if end <= start {
+        return Err("no JSON object".into());
+    }
+    let recipe: crate::recipe::Recipe =
+        serde_json::from_str(&answer[start..=end]).map_err(|e| e.to_string())?;
+    recipe.validate().map_err(|e| e.to_string())?;
+    Ok(recipe)
+}
+
 /// Says what's needed when this Mac can't have Apple Intelligence at all.
 fn require(caps: &Capabilities) -> Result<()> {
     if caps.vision.is_none() {
@@ -256,6 +331,24 @@ mod tests {
         let long = "word ".repeat(30);
         let t = clean_title(&long).unwrap();
         assert!(t.chars().count() <= MAX_TITLE && !t.ends_with(' '), "{t:?}");
+    }
+
+    #[test]
+    fn loadouts_from_answers() {
+        let fenced = "Here you go:\n```json\n{\"name\": \"Small PDFs\", \"steps\": [{\"op\": \"convert\", \"to\": \"pdf\"}, {\"op\": \"compress\", \"target_bytes\": 2000000}]}\n```";
+        let r = recipe_from_answer(fenced).unwrap();
+        assert_eq!(r.name, "Small PDFs");
+        assert_eq!(r.steps.len(), 2);
+        assert!(recipe_from_answer("no idea").is_err());
+        assert!(recipe_from_answer("{\"name\": \"x\", \"steps\": [{\"op\": \"melt\"}]}").is_err());
+        assert!(
+            recipe_from_answer("{\"name\": \"x\", \"steps\": []}").is_err(),
+            "checked like any loadout"
+        );
+        assert!(recipe_from_answer(
+            "{\"name\": \"x\", \"run\": \"rm\", \"steps\": [{\"op\": \"strip_metadata\"}]}"
+        )
+        .is_err());
     }
 
     #[test]

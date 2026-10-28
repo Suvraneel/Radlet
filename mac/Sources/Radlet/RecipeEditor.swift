@@ -132,12 +132,19 @@ final class RecipeLibrary: ObservableObject {
     private var quiet = false
     /// The sheet choosing shortcuts for the Control wheel.
     @Published var showingShortcuts = false
+    /// The sheet drafting a loadout from a sentence, and whether this Mac
+    /// can (Apple Intelligence, macOS 26 on Apple silicon).
+    @Published var showingSentence = false
+    @Published private(set) var canDraft = false
 
     var user: [Item] { items.filter { !$0.builtin } }
     var builtins: [Item] { items.filter(\.builtin) }
     var selectedItem: Item? { items.first { $0.id == selection } }
 
     func refresh(select wanted: String? = nil) {
+        Task {
+            canDraft = (try? await EngineClient.shared.hello())?.capabilities.appleIntelligence ?? false
+        }
         Task {
             do {
                 let result = try await EngineClient.shared.request(
@@ -199,6 +206,19 @@ final class RecipeLibrary: ObservableObject {
         draft = RecipeDraft(name: "New Loadout", summary: "",
                             steps: [.object(["op": .string("convert"), "to": .string("jpeg")])],
                             path: nil, builtin: false, dirty: true)
+    }
+
+    /// Opens a loadout drafted elsewhere (from a sentence) as a new one,
+    /// unsaved, to check and save.
+    func openDrafted(_ recipe: JSONValue) {
+        guard confirmDiscard() else { return }
+        var steps: [JSONValue] = []
+        if case .array(let list)? = recipe["steps"] { steps = list }
+        select(nil, open: false)
+        draft = RecipeDraft(name: recipe["name"]?.string ?? "New Loadout",
+                            summary: recipe["description"]?.string ?? "",
+                            steps: steps, path: nil, builtin: false, dirty: true)
+        showingSentence = false
     }
 
     /// Copies the recipe shown (built-in or not) into a new, editable one.
@@ -368,6 +388,10 @@ struct RecipesSettings: View {
                         .help("Show in Finder")
                     Button { library.showingShortcuts = true } label: { Image(systemName: "square.2.layers.3d") }
                         .help("Shortcuts on the Control wheel…")
+                    if library.canDraft {
+                        Button { library.showingSentence = true } label: { Image(systemName: "sparkles") }
+                            .help("Make a loadout from a sentence, with Apple Intelligence")
+                    }
                 }
                 .buttonStyle(.borderless)
                 .padding(6)
@@ -385,6 +409,9 @@ struct RecipesSettings: View {
         .onAppear { library.refresh() }
         .sheet(isPresented: $library.showingShortcuts) {
             ShortcutsPicker { library.showingShortcuts = false }
+        }
+        .sheet(isPresented: $library.showingSentence) {
+            SentenceDraftView(open: { library.openDrafted($0) }, close: { library.showingSentence = false })
         }
     }
 }
