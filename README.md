@@ -76,7 +76,7 @@ Radlet is two programs. The **Mac app** (Swift) spots the drag, draws the wheel 
 
 - **Three wheels on one gesture.** **Shift** converts, **Command** opens tools, **Control** runs your loadouts. Drop on a slot to run it, or in the middle to cancel.
 - **Styles** (Settings → Wheel). **Dial**, one ring, is the default. Under **Advanced** are **Orbit**, which adds an outer ring of presets behind each slot (JPEG → Smart or Best, Compress → Email or Discord) and widens it when you push into a slot with more, and **Bloom**, where resting on a slot or flicking past it fans out its presets. In both, presets stay out until you rest on another slot, so overshooting doesn't lose them. The highlight glides between slots, borders are slightly sticky so it doesn't flicker, and a Force Touch trackpad taps as you cross into a slot.
-- **Slots that stay put.** The wheel holds eight (or 6, 10 or 12), and anything more is under **More…**. Conversions are ranked for each kind of file: the ones most people want are on the wheel (JPEG, PNG, PDF and WebP for a photo; MP4 for a GIF), and less known formats such as TIFF, TGA, QOI, AIFF or WMA wait under **More…**, the ones you use most at the top. The slots you use most stay on the wheel, but nothing moves around: the most useful go up, right, down and left, and stay there.
+- **Slots that stay put.** The wheel holds eight (or 6, 10 or 12), and anything more is under **More…**. Conversions are ranked for each kind of file, and less known formats wait under **More…** (see [What's on the wheel](#whats-on-the-wheel)). The slots you use most stay on the wheel, but nothing moves around: the most useful go up, right, down and left, and stay there.
 - **Skins.** Glass (the plain system look and the default), Instrument, Tactical, Neon, Sunset and Porcelain, plus your own as small CSS files of custom properties (`--accent: #00FF9C;`), starting from any built-in with `--base`. Radlet picks up an edited skin the next time the wheel opens and lists any mistakes with line numbers. See [docs/skins.md](docs/skins.md).
 
 ### Convert (Shift)
@@ -94,6 +94,28 @@ Radlet is two programs. The **Mac app** (Swift) spots the drag, draws the wheel 
 | **Fonts** | TTF and OTF to WOFF2 or WOFF for the web, and web fonts back to TTF or OTF. |
 | **Folders** | Drop a folder for **Images to JPEG**, **Documents to PDF**, **Audio to MP3** and so on. Results go into a copy of the folder ("Trip (JPEG)") with the same subfolders, and anything that couldn't be converted is listed in "Not converted.txt". |
 | **Archives** | A folder becomes a ZIP (or a .tar.gz) and a ZIP becomes a folder; on a Mac, so do 7-Zip, RAR, TAR (.tar.gz, .tar.bz2, .tar.xz) and ISO disc images. ZIPs made with Deflate, Deflate64, LZMA, XZ or Zstandard open, and so do locked ones with their password (**Unzip with password…**). Extraction never writes outside its folder, skips links and `__MACOSX` clutter, and refuses archive bombs. |
+
+
+#### What's on the wheel
+
+Each kind of file puts the conversions most people want on the wheel, most useful first, so the first four land up, right, down and left. Less known formats wait under **More…** even when the wheel has room, with the ones you use most at the top. A file's own format is left out.
+
+| Files | On the wheel | Under More… |
+| --- | --- | --- |
+| Photos (JPEG, PNG, HEIC, WebP, AVIF, TIFF and the rest) | JPEG, PNG, PDF, WebP, HEIC, SVG, Text | TIFF, GIF, AVIF, ICO, ICNS, BMP, JPEG XL, TGA, QOI |
+| Camera RAW, Photoshop | JPEG, PNG, TIFF, PDF, HEIC, WebP | GIF, AVIF, ICO, ICNS, BMP, JPEG XL, TGA, QOI, SVG, Text |
+| GIF | MP4, PNG, JPEG, WebP, MOV, PDF | HEIC, TIFF, AVIF, ICO, ICNS, BMP, JPEG XL, TGA, QOI, SVG, Text, WebM |
+| SVG | PNG, PDF, JPEG, WebP | ICO, ICNS, TIFF, GIF, AVIF, JPEG XL, BMP, TGA, QOI, HEIC |
+| Video | MP4, MOV, MP3, GIF, M4A, WebM | MKV, AVI, WMV (and WAV, AIFF without FFmpeg) |
+| Audio | MP3, M4A, WAV, FLAC | AIFF, OGG, Opus, WMA |
+| PDF | Word, JPEG, PNG, Text, Markdown | WebP, TIFF, HTML, RTF |
+| Word, Pages, Markdown, HTML, text | PDF, Word, Markdown, Text, HTML | RTF, EPUB (and SRT, VTT for text) |
+| PowerPoint | PDF, Keynote, Word, Text, Markdown | HTML, RTF, EPUB |
+| Excel, CSV, old workbooks, SQLite | Excel, CSV, PDF, JSON, Markdown | TSV, HTML |
+| JSON | CSV, Excel, YAML | TSV, TOML, XML |
+| Subtitles | SRT, VTT, Text | ASS, TTML, SBV |
+
+When only one format would wait under **More…**, it stays on the wheel, since **More…** would take its slot anyway. So RTF, EPUB and TSV files, Keynote, Numbers, YAML, TOML, XML, fonts, archives and folders show everything on the wheel. Conversions that need FFmpeg, Keynote, Pages or Numbers follow the same ranking, after the ones that work now.
 
 ### Tools (Command)
 
