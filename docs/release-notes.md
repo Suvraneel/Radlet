@@ -1,5 +1,15 @@
 **Radlet is a weapon wheel for your files.** Drag files in Finder, hold a key, and flick to a tool: convert, compress, crop, translate and dozens more, all on your Mac.
 
+**New in 0.3.0:**
+
+- **SVG drawings.** Convert any picture to SVG: it's traced into shapes that stay sharp at any size, in colour, black and white, Simple or Detailed.
+- **Sharing.** Share a loadout or a skin as a file or a `radlet://` link, and add ready-made ones from the [gallery](https://radlet.vercel.app/gallery/).
+- **Your shortcuts on the wheel.** Pick shortcuts from the Shortcuts app in Settings → Loadouts, and run them from the Control wheel.
+- **Apple Intelligence, on this Mac** (macOS 26): Describe a picture as alt text, Summarize a document, rename files by what's in them, and make a loadout from a sentence.
+- **A tidier Convert wheel.** Each kind of file shows the formats most people want; less known ones wait under More….
+- **Bloom keeps its presets out** for the whole drag, and overshooting one still lands on the wheel.
+- **AI agents** get the rest of the wheel's tools over MCP: combining documents and workbooks, QR codes, icon sets, folder tools, names, descriptions and summaries.
+
 **Install:** download the `.dmg` below, open it and drag **Radlet** into **Applications**. Radlet runs on macOS 14 or later, on Apple silicon and Intel Macs.
 
 <!-- not-notarized -->

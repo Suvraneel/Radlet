@@ -223,7 +223,7 @@ The Swift tests cover the app's pure logic in `RadletKit`: wheel hit-testing for
 
 ### Sharing a build
 
-`mac/scripts/build-app.sh` makes `dist/Radlet.app` (ad-hoc signed). `mac/scripts/make-dmg.sh` packs `dist/Radlet-<version>.dmg`, a zip and their SHA-256 checksums. The disk image opens on a styled window (drag Radlet onto Applications) laid out by [dmgbuild](https://github.com/dmgbuild/dmgbuild), which the script installs into `target/dmgbuild` the first time; without Python 3 or a network it makes a plain image instead. Its background is in `mac/dmg`, and the app icon is `mac/Resources/AppIcon.icns`. Set `UNIVERSAL=1` for Apple silicon and Intel, `VERSION=0.2.0` to stamp a version, and `SKIP_PDFIUM=1` to leave out PDF to image. The build downloads a pinned PDFium once into `target/pdfium`.
+`mac/scripts/build-app.sh` makes `dist/Radlet.app` (ad-hoc signed). `mac/scripts/make-dmg.sh` packs `dist/Radlet-<version>.dmg`, a zip and their SHA-256 checksums. The disk image opens on a styled window (drag Radlet onto Applications) laid out by [dmgbuild](https://github.com/dmgbuild/dmgbuild), which the script installs into `target/dmgbuild` the first time; without Python 3 or a network it makes a plain image instead. Its background is in `mac/dmg`, and the app icon is `mac/Resources/AppIcon.icns`. Set `UNIVERSAL=1` for Apple silicon and Intel, `VERSION=0.3.0` to stamp a version, and `SKIP_PDFIUM=1` to leave out PDF to image. The build downloads a pinned PDFium once into `target/pdfium`.
 
 Unless they're signed with a Developer ID and notarized, whoever opens one has to allow it once ([docs/release-notes.md](docs/release-notes.md) has the steps). With a certificate, `SIGN_IDENTITY="Developer ID Application: …" mac/scripts/make-dmg.sh` signs the app, its helpers, Sparkle and the disk image with the hardened runtime, and `mac/scripts/notarize.sh` notarizes and staples them (with an App Store Connect API key, or a `notarytool` keychain profile).
 
@@ -232,11 +232,11 @@ Unless they're signed with a Developer ID and notarized, whoever opens one has t
 Releases come from version tags. Bump `version` in `Cargo.toml` (and run `cargo build`, so `Cargo.lock` follows), merge it, then tag that commit on `main`:
 
 ```sh
-git tag v0.2.0
-git push origin v0.2.0
+git tag v0.3.0
+git push origin v0.3.0
 ```
 
-[The release workflow](.github/workflows/release.yml) builds the app for Apple silicon and Intel, checks every binary and the bundled helpers, and publishes the `.dmg`, zip and checksums on the Releases page, with [docs/release-notes.md](docs/release-notes.md) above GitHub's list of what changed. It stops early if the tag doesn't match `Cargo.toml`. A tag with a hyphen, such as `v0.2.0-beta.1`, becomes a prerelease. Re-running the workflow replaces a release's files, and publishes the release again if deleting and re-pushing its tag turned it into a draft.
+[The release workflow](.github/workflows/release.yml) builds the app for Apple silicon and Intel, checks every binary and the bundled helpers, and publishes the `.dmg`, zip and checksums on the Releases page, with [docs/release-notes.md](docs/release-notes.md) above GitHub's list of what changed. It stops early if the tag doesn't match `Cargo.toml`. A tag with a hyphen, such as `v0.3.0-beta.1`, becomes a prerelease. Re-running the workflow replaces a release's files, and publishes the release again if deleting and re-pushing its tag turned it into a draft.
 
 **Updates (once).** Run `mac/scripts/setup-updates.sh` on your Mac and commit `mac/Resources/Info.plist`. It makes an EdDSA key in your login keychain, writes its public half into Info.plist and stores the private half as the `SPARKLE_ED_PRIVATE_KEY` secret with `gh`. From then on every release also carries an `appcast.xml`, signed for installed copies, and the workflow checks the signature against the app's key before publishing. Copies from before the key was added don't update themselves; they need one manual download.
 
@@ -475,7 +475,7 @@ JSON, one object per line. Every request gets exactly one reply with the same `i
 
 ## Current status
 
-Version 0.2.0, working towards 1.0.
+Version 0.3.0, working towards 1.0.
 
 - **Releases come from tags.** Each `v*` tag builds a universal `.dmg` and publishes it on the Releases page, with an appcast for installed copies once the update key is set up. Until the Developer ID secrets are added, builds are ad-hoc signed and not notarized, so the first open needs **Open Anyway**.
 - **What CI checks.** On Linux: formatting, clippy, every engine test (including the end-to-end, protocol, FFmpeg and PDFium tests) and the licence policy. On macOS: the engine tests again, the Swift tests, a live protocol contract against the freshly built engine, the app bundle build, and a smoke test of the bundled helpers, including `radlet-vision selftest`.
@@ -496,7 +496,6 @@ Version 0.2.0, working towards 1.0.
 - Describe and Summarize need Apple Intelligence turned on (macOS 26 on Apple silicon); without it, Radlet offers to open its settings. The on-device model reads text, not pictures, so a description is written from what Vision recognises in the picture and any text in it: check it before publishing. Summaries read up to about 48,000 characters, from the start, and are marked as written by Apple Intelligence.
 - Translate needs macOS 26 and the two languages downloaded in System Settings → General → Language & Region → Translation Languages. Each paragraph is translated as a whole, so bold or italic words inside one come out plain.
 - Without the Mac app, documents become PDF through a built-in writer with the standard PDF fonts (Helvetica, Courier), which cover Western European languages; other letters print as "?".
-- Password-protected ZIP files can't be opened yet, nor archives compressed with methods other than Deflate and Deflate64.
 - Text recognition, Remove background and searchable PDFs need the Mac app (macOS 14 or later); the engine on Linux doesn't offer them. A searchable PDF made from a PDF is redrawn page by page, so links, form fields and bookmarks aren't carried over.
 - PDF to image needs the bundled PDFium. Password-protected PDFs are refused by the other PDF tools; remove the password first with **Password…**.
 - A PDF with only an owner password (editing restrictions, no password to open it) opens without one, so Radlet's PDF tools treat it as unlocked and their results drop those restrictions.
@@ -520,8 +519,13 @@ Version 0.2.0, working towards 1.0.
 - [x] Publish the landing page on Vercel and GitHub Pages.
 - [x] Everyday audio and video without FFmpeg, through AVFoundation.
 - [x] RAW, PSD, JPEG XL, JPEG 2000, Word 97, ODT, old Excel, ODS, YAML, TOML, XML, ASS, SBV, TTML, 7-Zip, RAR, TAR and ISO; PDF to Word; barcodes.
+- [x] PowerPoint files, password-protected ZIPs and other ZIP compression methods.
+- [x] Trace pictures into SVG drawings.
+- [x] Share loadouts and skins as files and links, with a gallery on the website.
+- [x] Your own shortcuts on the Control wheel.
+- [x] On-device Apple Intelligence: Describe, Summarize, names from what's in a file, and a loadout from a sentence.
+- [x] Every wheel tool for AI agents over MCP, except passwords and shortcuts.
 - [ ] Native Shortcuts actions (App Intents), in a release built with Xcode.
-- [ ] PowerPoint files, password-protected ZIPs and other ZIP compression methods.
 
 ## License
 
