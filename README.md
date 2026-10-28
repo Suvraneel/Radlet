@@ -106,10 +106,10 @@ Tools ending in "…" open a window first, with a live preview where it helps.
 | **PDF** | **Split…** (every page, every few pages, or ranges like `1-3, 5, 8-`) · **Pages…** to reorder, delete and rotate · **Page numbers…** · **Watermark…** · **Password…** (AES-256; passwords are never saved or logged) · Combine into PDF · **Make searchable PDF** · **Black out text…**: words, phrases, email addresses, phone and card numbers removed for real, in the text, form fields and pictures of text, so nothing under a box can be copied · **Scan document**: photos of paper pages, each found, squared up and evened out, into one searchable PDF |
 | **Audio and video** | **Trim…** · **Make GIF…** · **Save stills** (ten evenly spaced frames) · **Even out volume** (-16 LUFS, as podcasts do) · **Make subtitles…** as SRT, WebVTT or a transcript, with on-device speech recognition · **Join clips** (videos into one MP4, each fitted into the first one's shape, or sound into one M4A) · **Burn in subtitles** (choose a video and its subtitle file; every player shows them) |
 | **Privacy** | **Privacy check…** shows what a file gives away before you share it: GPS location, camera and serial number, names, dates, editing apps, and hidden content such as earlier versions kept inside PDFs. **Remove Metadata** saves cleaned copies. **Hide faces** pixelates, blurs or blacks out every face Vision finds. |
-| **Text and AI** | **Copy text** from pictures and scanned PDFs · **Remove background** to a transparent PNG · **Translate…** documents and subtitles on device (macOS 26), keeping headings, lists, tables and timings · **Read code** (QR codes, and on a Mac barcodes too: EAN, UPC, Code 128, PDF417, Data Matrix, Aztec and more) / **Make QR code** |
+| **Text and AI** | **Copy text** from pictures and scanned PDFs · **Remove background** to a transparent PNG · **Translate…** documents and subtitles on device (macOS 26), keeping headings, lists, tables and timings · **Read code** (QR codes, and on a Mac barcodes too: EAN, UPC, Code 128, PDF417, Data Matrix, Aztec and more) / **Make QR code** · With Apple Intelligence (macOS 26 on Apple silicon), written on your Mac: **Describe** a picture as alt text for the clipboard, and **Summarize** a document or PDF into `report (summary).md` |
 | **Documents and data** | **Word count** ("1,234 words · 6 min read") · Copy text · **Clean up text** · **Combine into one** · **Format JSON** / **Minify JSON**, keeping key order and numbers exactly · **Combine into workbook** (several tables into one .xlsx, a sheet each) |
 | **Folders** (on copies) | **Zip together** · **Zip with password…** (AES-256) · **Merge folders** (identical files kept once) · **Flatten** · **Sort by kind** · **List contents** (a tree with sizes, or a CSV) · **Find duplicates** |
-| **Everyday** | **Rename…** with a pattern such as `Trip {date} {n}`, previewed first · **Copy path** · **Copy name** · **Open in Terminal** · **Share…** (AirDrop, Mail and Messages as presets) · **Copy image** · Copy SHA-256 |
+| **Everyday** | **Rename…** with a pattern such as `Trip {date} {n}`, previewed first; `{content}` (**What's in it**) names each picture or document by what's in it, such as `Red apple on a table.jpg`, from Apple Intelligence or, without it, the text and things Vision recognises · **Copy path** · **Copy name** · **Open in Terminal** · **Share…** (AirDrop, Mail and Messages as presets) · **Copy image** · Copy SHA-256 |
 
 ### Around the wheel
 
@@ -353,6 +353,8 @@ radlet flatten Downloads                    # or: radlet sort, radlet list --csv
 radlet checksum installer.dmg
 radlet loadout "Web-ready image" *.png
 radlet shortcut "Resize for Web" *.png     # one of your shortcuts; `radlet shortcuts` lists them
+radlet describe photo.jpg                   # alt text, by Apple Intelligence (macOS 26 app)
+radlet summarize report.pdf                 # "report (summary).md"; Apple Intelligence
 radlet --json convert a.png --to webp       # JSON lines for scripts
 ```
 
@@ -413,6 +415,7 @@ JSON, one object per line. Every request gets exactly one reply with the same `i
 | `hello` | none | `version`, `protocol` (1), `capabilities` |
 | `inspect` | `paths`, `recipes_dir?`, `installs?`, `shortcuts?` | `files` (detected formats), `wheel` (`convert`, `tools`, `recipes` slots). A slot may carry `variants`: presets with a short `label`, a `hint` and their own `action`, shown by the Orbit and Bloom styles. With `installs`, slots that need something this Mac can get come after the rest, with `needs`: `ffmpeg`, `keynote`, `pages` or `numbers`. `shortcuts` (names) adds those shortcuts to the `recipes` slots, as `run_shortcut` actions. |
 | `shortcuts` | none | `shortcuts`: the names in the Shortcuts app (macOS) |
+| `content_names` | `paths` | `names`: a short name for what's in each file (or `null`), for Rename's `{content}` |
 | `run` | `paths`, `action`, `options?`, `isolate?` | `job`, `units`, then events: `item_started`, `item_progress`, `item_finished`, `job_finished`. An outcome lists everything it created in `outputs` (several page images, or one folder). A failed outcome's `error` may carry `need` (the four above, `speech_language` or `translation_language`). |
 | `refresh` | none | `ffmpeg`, `keynote`, `pages`, `numbers`. Looks again for FFmpeg and the iWork apps, after one was installed. |
 | `cancel` | `job` | `cancelled` |
@@ -445,6 +448,7 @@ Version 0.2.0, working towards 1.0.
 - Password-protected 7-Zip and RAR archives can't be opened (macOS's libarchive doesn't decrypt them); locked ZIPs can. An XML file converted to JSON and back keeps its elements, attributes and text, but not comments or the order of mixed text and elements.
 - Excel workbooks are read for their values: a formula gives the result Excel last saved, and formatting, charts and merged cells aren't carried over. Workbooks are refused if they'd unpack to more than 512 MB.
 - Hide faces finds the faces Vision detects; very small, turned-away or covered faces can be missed, so check the result before sharing. Read code reads QR codes everywhere, and barcodes too on a Mac (through Vision).
+- Describe and Summarize need Apple Intelligence turned on (macOS 26 on Apple silicon); without it, Radlet offers to open its settings. The on-device model reads text, not pictures, so a description is written from what Vision recognises in the picture and any text in it: check it before publishing. Summaries read up to about 48,000 characters, from the start, and are marked as written by Apple Intelligence.
 - Translate needs macOS 26 and the two languages downloaded in System Settings → General → Language & Region → Translation Languages. Each paragraph is translated as a whole, so bold or italic words inside one come out plain.
 - Without the Mac app, documents become PDF through a built-in writer with the standard PDF fonts (Helvetica, Courier), which cover Western European languages; other letters print as "?".
 - Password-protected ZIP files can't be opened yet, nor archives compressed with methods other than Deflate and Deflate64.

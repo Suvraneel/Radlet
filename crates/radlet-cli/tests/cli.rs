@@ -1106,3 +1106,22 @@ fn serve_runs_the_persons_shortcuts() {
     h.send(json!({"id": 7, "method": "shutdown"}));
     let _ = h.until(|v| v["id"] == 7);
 }
+
+#[test]
+fn serve_names_files_by_their_content() {
+    let dir = tempfile::tempdir().unwrap();
+    let doc = dir.path().join("untitled 3.md");
+    std::fs::write(&doc, "# Trip to Lisbon\n\nDay one: the castle.\n").unwrap();
+    let odd = dir.path().join("data.bin");
+    std::fs::write(&odd, [0u8, 1, 2, 3]).unwrap();
+    let mut h = Helper::start_env(&["serve"], &[("RADLET_NO_VISION", "1")]);
+    h.send(json!({"id": 1, "method": "content_names", "params": {"paths": [doc, odd]}}));
+    let names = h.next();
+    assert_eq!(
+        names["result"]["names"],
+        json!(["Trip to Lisbon", null]),
+        "{names}"
+    );
+    h.send(json!({"id": 2, "method": "shutdown"}));
+    let _ = h.until(|v| v["id"] == 2);
+}

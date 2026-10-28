@@ -259,6 +259,35 @@ pub fn serve(
                     send(&out, &json!({ "id": id, "result": { "reports": reports } }));
                 }));
             }
+            // Names from what's in each file, for Rename's {content}: from
+            // Vision and Apple Intelligence, so answered from a thread.
+            "content_names" => {
+                let p = params!(PathsParams);
+                let out = out.clone();
+                threads.push(std::thread::spawn(move || {
+                    let cancel = AtomicBool::new(false);
+                    let location = radlet_core::OutputLocation::BesideSource;
+                    let names: Vec<Value> = p
+                        .paths
+                        .iter()
+                        .map(|path| {
+                            let mut noop = |_: f32| {};
+                            let mut ctx = radlet_core::pipeline::Context {
+                                caps,
+                                cancel: &cancel,
+                                progress: &mut noop,
+                                output: &location,
+                                temp_tag: "names",
+                            };
+                            match radlet_core::content::title(path, caps, &mut ctx) {
+                                Ok(Some(name)) => json!(name),
+                                _ => Value::Null,
+                            }
+                        })
+                        .collect();
+                    send(&out, &json!({ "id": id, "result": { "names": names } }));
+                }));
+            }
             // The person's shortcuts, to choose which go on the wheel.
             "shortcuts" => match radlet_core::engines::shortcuts::list(caps) {
                 Ok(names) => send(&out, &json!({ "id": id, "result": { "shortcuts": names } })),

@@ -51,6 +51,11 @@ pub struct Capabilities {
     /// macOS's `shortcuts` tool, to run the person's own shortcuts.
     #[serde(default)]
     pub shortcuts: Option<PathBuf>,
+    /// This Mac can have Apple Intelligence's on-device language model
+    /// (macOS 26 on Apple silicon, through the Vision helper). Whether
+    /// it's turned on is only known when it's asked.
+    #[serde(default)]
+    pub apple_intelligence: bool,
 }
 
 impl Capabilities {
@@ -89,7 +94,9 @@ impl Capabilities {
         use crate::engines::iwork::App;
         let no_iwork = std::env::var_os("RADLET_NO_IWORK").is_some_and(|v| v == "1");
         let iwork = |app: App| !no_iwork && app.installed();
+        let apple_intelligence = vision.is_some() && apple_intelligence_possible();
         Capabilities {
+            apple_intelligence,
             ffmpeg,
             ffprobe,
             sips,
@@ -202,6 +209,33 @@ fn exe_dir() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
     let exe = std::fs::canonicalize(&exe).unwrap_or(exe);
     exe.parent().map(Path::to_path_buf)
+}
+
+/// macOS 26 or later on Apple silicon: where Apple Intelligence's
+/// on-device model can run. `RADLET_NO_AI=1` says no, and `RADLET_AI=1`
+/// says yes (for tests with a stand-in helper).
+fn apple_intelligence_possible() -> bool {
+    if std::env::var_os("RADLET_NO_AI").is_some_and(|v| v == "1") {
+        return false;
+    }
+    if std::env::var_os("RADLET_AI").is_some_and(|v| v == "1") {
+        return true;
+    }
+    if !(cfg!(target_os = "macos") && cfg!(target_arch = "aarch64")) {
+        return false;
+    }
+    std::fs::read_to_string("/System/Library/CoreServices/SystemVersion.plist")
+        .ok()
+        .and_then(|plist| macos_major(&plist))
+        .is_some_and(|major| major >= 26)
+}
+
+/// The major version in a SystemVersion.plist: 26 for "26.1".
+fn macos_major(plist: &str) -> Option<u32> {
+    let after = &plist[plist.find("<key>ProductVersion</key>")?..];
+    let start = after.find("<string>")? + "<string>".len();
+    let end = after[start..].find('<')? + start;
+    after[start..end].split('.').next()?.trim().parse().ok()
 }
 
 fn is_executable(p: &Path) -> bool {
@@ -1330,6 +1364,27 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
             None,
         ));
     }
+    // Written on-device by Apple Intelligence.
+    if caps.apple_intelligence && caps.vision.is_some() {
+        if every(&|f| crate::content::is_picture(f, caps)) {
+            w.tools.push(tool(
+                "describe",
+                "Describe",
+                "text.below.photo",
+                Action::Describe,
+                None,
+            ));
+        }
+        if every(&|f| crate::content::has_text(f, caps)) {
+            w.tools.push(tool(
+                "summarize",
+                "Summarize",
+                "list.bullet.rectangle",
+                Action::Summarize,
+                None,
+            ));
+        }
+    }
     if all(&Step::StripMetadata) {
         // Opens a report of what the files reveal; without that window
         // it removes the metadata straight away.
@@ -1658,7 +1713,7 @@ fn with_need(caps: &Capabilities, need: Need) -> Capabilities {
         Need::Keynote => more.keynote = true,
         Need::Pages => more.pages = true,
         Need::Numbers => more.numbers = true,
-        Need::SpeechLanguage | Need::TranslationLanguage => {}
+        Need::SpeechLanguage | Need::TranslationLanguage | Need::AppleIntelligence => {}
     }
     more
 }
@@ -2018,6 +2073,51 @@ mod tests {
             .find(|s| s.id == id)
             .unwrap_or_else(|| panic!("no {id}"));
         slot.variants.iter().map(|v| v.label.as_str()).collect()
+    }
+
+    #[test]
+    fn apple_intelligence_tools_need_a_mac_that_can_have_it() {
+        let mac = Capabilities {
+            vision: Some("/x/radlet-vision".into()),
+            ..Capabilities::none()
+        };
+        let ai = Capabilities {
+            apple_intelligence: true,
+            ..mac.clone()
+        };
+        let ids = |caps: &Capabilities, f: Format| {
+            wheel(&[Some(f)], caps, &[])
+                .tools
+                .iter()
+                .map(|s| s.id.clone())
+                .collect::<Vec<_>>()
+        };
+        assert!(ids(&ai, Png).contains(&"describe".to_string()));
+        assert!(!ids(&ai, Png).contains(&"summarize".to_string()));
+        assert!(ids(&ai, Pdf).contains(&"summarize".to_string()));
+        assert!(ids(&ai, Md).contains(&"summarize".to_string()));
+        assert!(
+            !ids(&ai, Svg).contains(&"describe".to_string()),
+            "drawings aren't photos"
+        );
+        assert!(!ids(&mac, Png).contains(&"describe".to_string()));
+        assert!(!ids(&mac, Pdf).contains(&"summarize".to_string()));
+        let mixed = wheel(&[Some(Png), Some(Pdf)], &ai, &[]);
+        assert!(!mixed
+            .tools
+            .iter()
+            .any(|s| s.id == "describe" || s.id == "summarize"));
+    }
+
+    #[test]
+    fn macos_versions_from_the_system_plist() {
+        let plist = "<dict>\n\t<key>ProductName</key>\n\t<string>macOS</string>\n\t<key>ProductVersion</key>\n\t<string>26.1</string>\n</dict>";
+        assert_eq!(macos_major(plist), Some(26));
+        assert_eq!(
+            macos_major("<key>ProductVersion</key><string>15.6.1</string>"),
+            Some(15)
+        );
+        assert_eq!(macos_major("<key>ProductName</key>"), None);
     }
 
     #[test]

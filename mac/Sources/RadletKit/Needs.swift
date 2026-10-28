@@ -11,6 +11,7 @@ public enum Need: String, CaseIterable, Sendable {
     case numbers
     case speechLanguage = "speech_language"
     case translationLanguage = "translation_language"
+    case appleIntelligence = "apple_intelligence"
 
     /// The thing itself, for "Needs …".
     public var name: String {
@@ -21,6 +22,7 @@ public enum Need: String, CaseIterable, Sendable {
         case .numbers: return "Numbers"
         case .speechLanguage: return "a speech language"
         case .translationLanguage: return "translation languages"
+        case .appleIntelligence: return "Apple Intelligence"
         }
     }
 
@@ -34,6 +36,7 @@ public enum Need: String, CaseIterable, Sendable {
         case .keynote, .pages, .numbers: return "bag"
         case .speechLanguage: return "waveform"
         case .translationLanguage: return "character.bubble"
+        case .appleIntelligence: return "sparkles"
         }
     }
 
@@ -44,6 +47,7 @@ public enum Need: String, CaseIterable, Sendable {
         case .keynote, .pages, .numbers: return "Get \(name)?"
         case .speechLanguage: return "Download the speech language?"
         case .translationLanguage: return "Download the languages?"
+        case .appleIntelligence: return "Turn on Apple Intelligence?"
         }
     }
 
@@ -63,6 +67,9 @@ public enum Need: String, CaseIterable, Sendable {
         case .translationLanguage:
             return "\(doing) needs both languages on this Mac. Download them under Translation Languages in "
                 + "Language & Region settings, then try again."
+        case .appleIntelligence:
+            return "\(doing) is written on this Mac by Apple Intelligence, which is turned off. Turn it on in "
+                + "Apple Intelligence & Siri settings (it downloads once), then try again. Nothing leaves your Mac."
         }
     }
 
@@ -73,6 +80,7 @@ public enum Need: String, CaseIterable, Sendable {
         case .keynote, .pages, .numbers: return "Open App Store"
         case .speechLanguage: return "Open Keyboard Settings"
         case .translationLanguage: return "Open Language & Region"
+        case .appleIntelligence: return "Open Apple Intelligence Settings"
         }
     }
 
@@ -92,6 +100,8 @@ public enum Need: String, CaseIterable, Sendable {
         case .speechLanguage: return URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension")
         case .translationLanguage:
             return URL(string: "x-apple.systempreferences:com.apple.Localization-Settings.extension")
+        case .appleIntelligence:
+            return URL(string: "x-apple.systempreferences:com.apple.Siri-Settings.extension")
         }
     }
 }

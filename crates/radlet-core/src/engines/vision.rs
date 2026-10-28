@@ -388,3 +388,67 @@ mod tests {
         assert_eq!(err.to_string(), "odd");
     }
 }
+
+/// What the helper made of a picture: a short title (from Apple
+/// Intelligence when it's on, else from Vision's labels and any text in
+/// it), and, when asked for, a description.
+#[derive(Debug, Default, serde::Deserialize)]
+pub struct Described {
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+}
+
+/// Looks at a picture on-device. With `alt`, also writes alt text, which
+/// needs Apple Intelligence (an error with `need` otherwise).
+pub fn describe(
+    caps: &Capabilities,
+    input: &Path,
+    alt: bool,
+    cancel: &AtomicBool,
+) -> Result<Described> {
+    let out = tempfile::Builder::new().suffix(".json").tempfile()?;
+    run_args(
+        caps,
+        &[
+            OsStr::new("describe"),
+            OsStr::new(if alt { "alt" } else { "title" }),
+            input.as_os_str(),
+            out.path().as_os_str(),
+        ],
+        out.path(),
+        cancel,
+        &mut |_| {},
+    )?;
+    serde_json::from_slice(&std::fs::read(out.path())?)
+        .map_err(|e| Error::Helper(format!("the Vision helper's answer couldn't be read ({e})")))
+}
+
+/// Has Apple Intelligence write `task` ("title" or "summary") for `text`,
+/// on-device.
+pub fn write(
+    caps: &Capabilities,
+    task: &str,
+    text: &str,
+    cancel: &AtomicBool,
+    progress: &mut dyn FnMut(f32),
+) -> Result<String> {
+    let dir = tempfile::tempdir()?;
+    let input = dir.path().join("input.txt");
+    let out = dir.path().join("output.txt");
+    std::fs::write(&input, text)?;
+    run_args(
+        caps,
+        &[
+            OsStr::new("write"),
+            OsStr::new(task),
+            input.as_os_str(),
+            out.as_os_str(),
+        ],
+        &out,
+        cancel,
+        progress,
+    )?;
+    Ok(std::fs::read_to_string(&out)?.trim().to_string())
+}

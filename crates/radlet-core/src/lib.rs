@@ -11,6 +11,7 @@
 
 pub mod assemble;
 pub mod catalog;
+pub mod content;
 pub mod engines;
 pub mod error;
 pub mod format;

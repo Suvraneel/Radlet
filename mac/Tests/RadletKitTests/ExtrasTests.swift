@@ -255,6 +255,19 @@ final class RenamePlanTests: XCTestCase {
         XCTAssertEqual(timed[0].to.lastPathComponent, "a 00.00.00 007.png")
     }
 
+    func testNamesFromWhatsInside() throws {
+        XCTAssertTrue(RenamePlan.needsContent("{date} {Content}"))
+        XCTAssertFalse(RenamePlan.needsContent("{name} {n}"))
+        let files = [
+            RenamePlan.Input(url: URL(fileURLWithPath: "/p/IMG_1.jpg"), date: nil, content: "Red apple on a table"),
+            RenamePlan.Input(url: URL(fileURLWithPath: "/p/IMG_2.jpg"), date: nil, content: "Red apple on a table"),
+            RenamePlan.Input(url: URL(fileURLWithPath: "/p/IMG_3.jpg"), date: nil, content: nil),
+        ]
+        let changes = try RenamePlan.make(files, pattern: "{content}", exists: { _ in false }).get()
+        XCTAssertEqual(changes.map(\.to.lastPathComponent), ["Red apple on a table.jpg", "Red apple on a table 2.jpg"],
+                       "the same content twice gets a number; nothing to go on keeps the name")
+    }
+
     func testNeverClashes() throws {
         // b.txt exists and isn't being renamed; a.txt is.
         let exists: (URL) -> Bool = { ["/d/b.txt", "/d/a.txt"].contains($0.path) }

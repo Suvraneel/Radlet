@@ -218,6 +218,8 @@ fn execute_inner(
         }
         (Action::SplitPdf { mode }, [input]) => pipeline::split_pdf(input, mode, &mut ctx),
         (Action::RunShortcut { name }, [input]) => pipeline::run_shortcut(input, name, &mut ctx),
+        (Action::Describe, [input]) => crate::content::describe(input, &mut ctx),
+        (Action::Summarize, [input]) => crate::content::summarize(input, &mut ctx),
         _ => Err(Error::Invalid(
             "this action takes exactly one file per unit".into(),
         )),
@@ -269,7 +271,11 @@ pub struct Summary {
 /// Text recognition can take a while on long scanned PDFs.
 fn involves_vision(unit: &Unit) -> bool {
     match &unit.action {
-        Action::CopyText | Action::WordCount | Action::ScanDocuments => true,
+        Action::CopyText
+        | Action::WordCount
+        | Action::ScanDocuments
+        | Action::Describe
+        | Action::Summarize => true,
         Action::Steps { steps, .. } => steps.iter().any(|s| {
             matches!(
                 s,

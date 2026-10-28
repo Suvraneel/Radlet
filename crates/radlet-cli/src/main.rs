@@ -582,6 +582,18 @@ enum Command {
         #[arg(long = "loadouts-dir", alias = "recipes-dir", value_name = "DIR")]
         recipes_dir: Option<PathBuf>,
     },
+    /// Describe pictures as alt text, written on-device by Apple
+    /// Intelligence (macOS 26 app).
+    Describe {
+        #[command(flatten)]
+        run: RunArgs,
+    },
+    /// Summarise documents and PDFs into "<name> (summary).md", written
+    /// on-device by Apple Intelligence (macOS 26 app).
+    Summarize {
+        #[command(flatten)]
+        run: RunArgs,
+    },
     /// Run one of your shortcuts (from the Shortcuts app) on each file;
     /// what it returns is saved beside the file (macOS).
     Shortcut {
@@ -1329,6 +1341,8 @@ fn dispatch(cli: Cli) -> Result<ExitCode> {
         }
         Command::Privacy { files } => privacy(&files, caps, json_out),
         Command::Shortcut { name, run: r } => run(&r, Action::RunShortcut { name }, json_out),
+        Command::Describe { run: r } => run(&r, Action::Describe, json_out),
+        Command::Summarize { run: r } => run(&r, Action::Summarize, json_out),
         Command::Shortcuts => {
             let names = radlet_core::engines::shortcuts::list(caps)?;
             if json_out {

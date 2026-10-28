@@ -300,3 +300,124 @@ fn faces_and_translation_through_the_helper() {
         Some("translate")
     );
 }
+
+/// A stand-in for the Mac helper with Apple Intelligence: titles and alt
+/// text for pictures, and titles and summaries for text. Text about the
+/// "off-season" is answered as on a Mac with Apple Intelligence turned off.
+#[cfg(unix)]
+fn fake_intelligence(dir: &Path) -> Capabilities {
+    use std::os::unix::fs::PermissionsExt;
+    let script = dir.join("radlet-vision");
+    std::fs::write(
+        &script,
+        r#"#!/bin/sh
+if grep -qs off-season "$3"; then printf 'need apple_intelligence\nturn on Apple Intelligence\n' >&2; exit 4; fi
+case "$1 $2" in
+  "describe title") printf '{"title":"Red apple on a table."}' > "$4";;
+  "describe alt") printf '{"title":"Red apple","description":"A red apple on a wooden table."}' > "$4";;
+  "write title") printf 'Title: "Garden plan for spring"\n' > "$4";;
+  "write summary") printf -- '- Plant tomatoes in May.\n- Water daily.\n' > "$4";;
+  *) echo "unknown command" >&2; exit 2;;
+esac
+"#,
+    )
+    .unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    Capabilities {
+        vision: Some(script),
+        apple_intelligence: true,
+        ..Default::default()
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn names_descriptions_and_summaries_from_apple_intelligence() {
+    use radlet_core::content;
+    use radlet_core::pipeline::Context;
+    let dir = tempfile::tempdir().unwrap();
+    let caps = fake_intelligence(dir.path());
+    let photo = dir.path().join("IMG_0042.png");
+    image::RgbImage::new(8, 8).save(&photo).unwrap();
+    let notes = dir.path().join("notes.md");
+    std::fs::write(
+        &notes,
+        format!(
+            "# Notes\n\n{}\n",
+            "Some words about the garden. ".repeat(20)
+        ),
+    )
+    .unwrap();
+
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let mut noop = |_: f32| {};
+    let out = OutputLocation::BesideSource;
+    let mut ctx = Context {
+        caps: &caps,
+        cancel: &cancel,
+        progress: &mut noop,
+        output: &out,
+        temp_tag: "t",
+    };
+    assert_eq!(
+        content::title(&photo, &caps, &mut ctx).unwrap().as_deref(),
+        Some("Red apple on a table")
+    );
+    assert_eq!(
+        content::title(&notes, &caps, &mut ctx).unwrap().as_deref(),
+        Some("Garden plan for spring")
+    );
+
+    let described = one_with(&caps, &[photo.clone()], Action::Describe);
+    assert_eq!(
+        described.value.as_deref(),
+        Some("A red apple on a wooden table.")
+    );
+    assert!(
+        described.outputs.is_empty(),
+        "alt text is only for the clipboard"
+    );
+
+    let summary = done(&one_with(&caps, &[notes.clone()], Action::Summarize));
+    assert_eq!(name(&summary), "notes (summary).md");
+    let text = std::fs::read_to_string(&summary).unwrap();
+    assert!(
+        text.starts_with("# notes\n") && text.contains("- Plant tomatoes in May."),
+        "{text}"
+    );
+    assert!(
+        text.contains("Apple Intelligence"),
+        "says how it was written"
+    );
+
+    // Turned off: the error says what's needed, and Rename falls back to
+    // the document's first line.
+    let off = dir.path().join("off.md");
+    std::fs::write(
+        &off,
+        format!(
+            "Plan for the off-season\n\n{}",
+            "More words here. ".repeat(30)
+        ),
+    )
+    .unwrap();
+    let failed = one_with(&caps, &[off.clone()], Action::Summarize);
+    assert_eq!(
+        failed.error.as_ref().and_then(|e| e.need),
+        Some(radlet_core::error::Need::AppleIntelligence)
+    );
+    assert_eq!(
+        content::title(&off, &caps, &mut ctx).unwrap().as_deref(),
+        Some("Plan for the off-season")
+    );
+    // A Mac that can't have it never asks the helper.
+    let older = Capabilities {
+        apple_intelligence: false,
+        ..caps.clone()
+    };
+    let failed = one_with(&older, &[notes], Action::Summarize);
+    assert_eq!(
+        failed.error.as_ref().and_then(|e| e.need),
+        Some(radlet_core::error::Need::AppleIntelligence)
+    );
+}

@@ -7,7 +7,7 @@ public final class JobProgress: ObservableObject {
     public enum Phase: Sendable { case running, finished, failed }
     /// What a job that writes no files computes, which decides how the
     /// results go on the clipboard.
-    public enum ValueKind: Sendable { case checksum, text, count, code }
+    public enum ValueKind: Sendable { case checksum, text, count, code, description }
 
     /// A value computed for one file.
     public struct NamedValue: Equatable, Sendable {
@@ -125,6 +125,7 @@ public final class JobProgress: ObservableObject {
                 case .checksum: what = "SHA-256"
                 case .count: what = "Word counts"
                 case .code: what = "Codes"
+                case .description: what = "Alt text"
                 }
                 let problems = skipped.count + failures.filter { $0 != "Cancelled" }.count
                 return problems > 0 ? "\(what) copied to the clipboard · \(problems) without" : "\(what) copied to the clipboard"
@@ -136,6 +137,9 @@ public final class JobProgress: ObservableObject {
             if savedBytes > 0 {
                 parts.append(ByteCountFormatter.string(fromByteCount: savedBytes, countStyle: .file) + " smaller")
             }
+            // A shortcut that sends or shares its file finishes with
+            // nothing to show.
+            if parts.isEmpty && completed > 0 && failures.isEmpty && skipped.isEmpty { return "Done" }
             return parts.isEmpty ? "Nothing to do" : parts.joined(separator: " · ")
         }
     }
@@ -152,7 +156,7 @@ public final class JobProgress: ObservableObject {
         case .checksum:
             if values.count == 1 { return values[0].value }
             return values.map { "\($0.value)  \($0.name)" }.joined(separator: "\n")
-        case .text, .code:
+        case .text, .code, .description:
             if values.count == 1 { return values[0].value }
             return values.map { "\($0.name)\n\n\($0.value)" }.joined(separator: "\n\n")
         case .count:

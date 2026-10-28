@@ -33,12 +33,20 @@
 //   radlet-vision redact-pdf <input> <output> <terms.json>
 //                                                text blacked out for real
 //                                                (Scan.swift)
+//   radlet-vision describe title|alt <image> <output.json>
+//                                                what's in a picture, in words
+//                                                (Intelligence.swift)
+//   radlet-vision write title|summary <input.txt> <output.txt>
+//                                                a document's title or
+//                                                summary, by Apple
+//                                                Intelligence (Intelligence.swift)
 //   radlet-vision selftest                         checks this Mac can do them
 //   radlet-vision --version
 //
 // Exit 0 means done, 3 means nothing was found (no text, no subject), 4
 // means something must be downloaded first (stderr starts with a line
-// "need speech_language" or "need translation_language"), and anything
+// "need speech_language", "need translation_language" or "need
+// apple_intelligence"), and anything
 // else is a failure. The last line on stderr explains. Lines like
 // "progress 0.42" on stdout report progress. The engine side of this
 // contract is crates/radlet-core/src/engines/vision.rs.
@@ -650,6 +658,16 @@ func selftest() throws {
     }
     print(translationStatus())
 
+    // Vision's labels work everywhere; the model only with Apple
+    // Intelligence on.
+    do {
+        let seen = try see(png)
+        print("describe: ok (\(plainTitle(seen) ?? "nothing named"))")
+    } catch {
+        print("describe: unavailable here (\(error.localizedDescription))")
+    }
+    print("apple intelligence: \(intelligenceStatus())")
+
     // A Mac's own codecs: what Radlet does without FFmpeg.
     print(try mediaSelftest(in: dir))
     print(try videoSelftest(in: dir))
@@ -708,12 +726,16 @@ do {
         try scan(Array(args.dropFirst()))
     case "redact-pdf" where args.count == 4:
         try redactPDF(Array(args.dropFirst()))
+    case "describe" where args.count == 4:
+        try describePicture(Array(args.dropFirst()))
+    case "write" where args.count == 4:
+        try writeAbout(Array(args.dropFirst()))
     case "selftest":
         try selftest()
     case "--version":
-        print("radlet-vision 4")
+        print("radlet-vision 5")
     default:
-        FileHandle.standardError.write(Data("usage: radlet-vision text|mask|searchable|document-pdf|faces <input> <output>, transcribe <language> <output.json> <chunk>..., translate <to> <from|auto> <input.json> <output.json>, media <input> <output> <to> [options], codes <input> <output.json>, join <output> <to> <input>..., burn <video> <cues.json> <output> <to>, scan <output.pdf> <photo>..., redact-pdf <input> <output> <terms.json>, or selftest\n".utf8))
+        FileHandle.standardError.write(Data("usage: radlet-vision text|mask|searchable|document-pdf|faces <input> <output>, transcribe <language> <output.json> <chunk>..., translate <to> <from|auto> <input.json> <output.json>, media <input> <output> <to> [options], codes <input> <output.json>, join <output> <to> <input>..., burn <video> <cues.json> <output> <to>, scan <output.pdf> <photo>..., redact-pdf <input> <output> <terms.json>, describe title|alt <image> <output.json>, write title|summary <input.txt> <output.txt>, or selftest\n".utf8))
         exit(2)
     }
 } catch Failure.nothingFound(let message) {

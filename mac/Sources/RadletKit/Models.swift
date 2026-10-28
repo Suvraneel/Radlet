@@ -202,6 +202,8 @@ public struct Slot: Codable, Identifiable, Equatable, Sendable {
 
     public var isChecksum: Bool { action["kind"]?.string == "checksum" }
     public var isCopyText: Bool { action["kind"]?.string == "copy_text" }
+    /// Alt text for pictures, for the clipboard.
+    public var isDescribe: Bool { action["kind"]?.string == "describe" }
     public var isWordCount: Bool { action["kind"]?.string == "word_count" }
     public var isReadCodes: Bool { action["kind"]?.string == "read_codes" }
     public var isCombine: Bool { action["kind"]?.string == "combine_pdf" }

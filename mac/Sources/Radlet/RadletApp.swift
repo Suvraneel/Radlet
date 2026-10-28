@@ -390,6 +390,7 @@ final class AppState: ObservableObject {
         let title = slot.jobTitle(files: files)
         let total = slot.isWholeSelection ? 1 : files.count
         let kind: JobProgress.ValueKind = slot.isCopyText ? .text
+            : slot.isDescribe ? .description
             : slot.isReadCodes ? .code
             : slot.isWordCount ? .count : .checksum
         Log.app("running \(slot.id) on \(describeFiles(files))\(fromClipboard ? " from the clipboard" : "")")

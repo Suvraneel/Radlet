@@ -513,6 +513,13 @@ pub enum Action {
     /// Run the person's shortcut `name` (from the Shortcuts app) on each
     /// file; what it returns is saved beside it. Not offered to AI agents.
     RunShortcut { name: String },
+    /// A description of each picture, as alt text for the clipboard,
+    /// written on-device by Apple Intelligence from what Vision sees in it.
+    /// Writes nothing.
+    Describe,
+    /// A summary of each document or PDF, written on-device by Apple
+    /// Intelligence, saved beside it as Markdown.
+    Summarize,
 }
 
 /// Which icons [`Action::IconSet`] makes. (A macOS icon is a conversion

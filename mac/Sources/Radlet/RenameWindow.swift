@@ -8,13 +8,22 @@ import RadletKit
 /// applied in place. Names never clash, and History can undo it.
 @MainActor
 final class RenameModel: ObservableObject {
-    @Published var pattern = "{name} {n}" { didSet { plan() } }
+    @Published var pattern = "{name} {n}" {
+        didSet {
+            loadContentIfNeeded()
+            plan()
+        }
+    }
     @Published var startText = "1" { didSet { plan() } }
     @Published private(set) var changes: [RenamePlan.Change] = []
     @Published private(set) var problem: String?
     @Published private(set) var working = false
     /// Capture dates load in the background; {date} and {time} wait.
     @Published private(set) var datesLoaded = false
+    /// Names from what's in each file, read only once {content} is used.
+    @Published private(set) var contentLoaded = false
+    private var contentRequested = false
+    private var contents: [URL: String] = [:]
     let files: [URL]
     private var dates: [URL: Date] = [:]
     private let done: ([HistoryEntry.Rename]) -> Void
@@ -45,6 +54,30 @@ final class RenameModel: ObservableObject {
         plan()
     }
 
+    /// Reads what's in each file, on-device, the first time the pattern
+    /// asks for {content}.
+    private func loadContentIfNeeded() {
+        guard RenamePlan.needsContent(pattern), !contentRequested else { return }
+        contentRequested = true
+        Task { [weak self] in
+            guard let self else { return }
+            let paths = self.files.map { JSONValue.string($0.path) }
+            do {
+                let result = try await EngineClient.shared.request("content_names", ["paths": .array(paths)])
+                if case .array(let names)? = result["names"] {
+                    for (url, name) in zip(self.files, names) {
+                        if let n = name.string { self.contents[url] = n }
+                    }
+                }
+                Log.app("rename: named \(self.contents.count) of \(self.files.count) files by content")
+            } catch {
+                Log.app("rename: content names failed: \(Log.code(error))")
+            }
+            self.contentLoaded = true
+            self.plan()
+        }
+    }
+
     static func photoDate(_ url: URL) -> Date? {
         guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
               let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any] else { return nil }
@@ -67,7 +100,7 @@ final class RenameModel: ObservableObject {
     var start: Int { Int(startText.trimmingCharacters(in: .whitespaces)) ?? 1 }
 
     private func plan() {
-        let inputs = files.map { RenamePlan.Input(url: $0, date: dates[$0]) }
+        let inputs = files.map { RenamePlan.Input(url: $0, date: dates[$0], content: contents[$0]) }
         switch RenamePlan.make(inputs, pattern: pattern, start: start,
                                exists: { FileManager.default.fileExists(atPath: $0.path) }) {
         case .success(let c):
@@ -86,11 +119,15 @@ final class RenameModel: ObservableObject {
     /// Dates are still loading and the pattern needs them.
     var waitingForDates: Bool { !datesLoaded && RenamePlan.needsDates(pattern) }
 
-    var canApply: Bool { problem == nil && !changes.isEmpty && !working && !waitingForDates }
+    /// What's in the files is still being read and the pattern needs it.
+    var waitingForContent: Bool { !contentLoaded && RenamePlan.needsContent(pattern) }
+
+    var canApply: Bool { problem == nil && !changes.isEmpty && !working && !waitingForDates && !waitingForContent }
 
     var note: String {
         if let problem { return problem }
         if waitingForDates { return "Reading the dates photos and videos were taken…" }
+        if waitingForContent { return "Looking at what's in each file, on this Mac…" }
         if changes.isEmpty { return "Every name stays the same." }
         let same = files.count - changes.count
         return "Renames \(changes.count) file\(changes.count == 1 ? "" : "s")" + (same > 0 ? " (\(same) already match)" : "")
@@ -187,6 +224,8 @@ struct RenameView: View {
                     Button("Date taken") { model.insert("date") }
                     Button("Time") { model.insert("time") }
                     Button("Folder") { model.insert("folder") }
+                    Button("What's in it") { model.insert("content") }
+                        .help("A short name for what's in each picture or document, made on this Mac")
                 }
                 .controlSize(.small)
             }

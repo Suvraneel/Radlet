@@ -7,10 +7,14 @@ public enum RenamePlan {
         public let url: URL
         /// When the photo or video was taken, or the file was created.
         public let date: Date?
+        /// A name for what's in it ("Golden retriever on a beach"), made
+        /// on-device; nil when there's nothing to go on.
+        public let content: String?
 
-        public init(url: URL, date: Date?) {
+        public init(url: URL, date: Date?, content: String? = nil) {
             self.url = url
             self.date = date
+            self.content = content
         }
     }
 
@@ -31,12 +35,18 @@ public enum RenamePlan {
         }
     }
 
-    public static let tokens = ["name", "n", "date", "time", "folder"]
+    public static let tokens = ["name", "n", "date", "time", "folder", "content"]
 
     /// Whether the pattern uses capture dates, which load in the background.
     public static func needsDates(_ pattern: String) -> Bool {
         let p = pattern.lowercased()
         return p.contains("{date") || p.contains("{time")
+    }
+
+    /// Whether the pattern uses what's in each file, which is read in the
+    /// background (and only when asked for: it takes a moment per file).
+    public static func needsContent(_ pattern: String) -> Bool {
+        pattern.lowercased().contains("{content")
     }
 
     /// `url` if nothing's there, otherwise the first free "name 2.ext",
@@ -128,6 +138,9 @@ public enum RenamePlan {
                 }
             case "folder":
                 out += input.url.deletingLastPathComponent().lastPathComponent
+            case "content":
+                // Nothing to go on: the file keeps its name there.
+                out += input.content ?? input.url.deletingPathExtension().lastPathComponent
             default:
                 return .failure(.unknownToken(token))
             }

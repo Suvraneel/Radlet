@@ -121,6 +121,9 @@ pub enum Need {
     /// Translation languages, downloaded in System Settings → General →
     /// Language & Region.
     TranslationLanguage,
+    /// Apple Intelligence, turned on in System Settings (macOS 26 on Apple
+    /// silicon), for its on-device language model.
+    AppleIntelligence,
 }
 
 impl Need {
@@ -133,6 +136,7 @@ impl Need {
             "numbers" => Need::Numbers,
             "speech_language" => Need::SpeechLanguage,
             "translation_language" => Need::TranslationLanguage,
+            "apple_intelligence" => Need::AppleIntelligence,
             _ => return None,
         })
     }
