@@ -1,0 +1,25 @@
+:root {
+  --name: "Mint";
+  --author: "Radlet";
+  --base: instrument;
+  /* Charcoal and fresh mint, rounded type. */
+  --accent: #3FD9A3;
+  --accent-text: #06231A;
+  --text: #E7F2EE;
+  --text-dim: #8FA39C;
+  --ground: #111816;
+  --ground-2: #18211E;
+  --segment: rgba(255, 255, 255, 0.02);
+  --divider: rgba(255, 255, 255, 0.08);
+  --bezel: #3A4642;
+  --bezel-2: #1B2320;
+  --ticks: rgba(63, 217, 163, 0.3);
+  --glow: rgba(63, 217, 163, 0.45);
+  --shadow: rgba(0, 0, 0, 0.55);
+  --highlight: wedge;
+  --tick-count: 48;
+  --bezel-width: 8px;
+  --font: system-rounded;
+  --label-weight: semibold;
+  --letter-spacing: 0;
+}

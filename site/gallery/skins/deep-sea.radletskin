@@ -1,0 +1,24 @@
+:root {
+  --name: "Deep Sea";
+  --author: "Radlet";
+  --base: instrument;
+  /* Navy depths, a sonar-blue sweep and a soft glow. */
+  --accent: #5AB3FF;
+  --accent-text: #04121F;
+  --text: #DCEBFA;
+  --text-dim: #7F95AD;
+  --ground: #0A1626;
+  --ground-2: #102236;
+  --segment: rgba(90, 179, 255, 0.025);
+  --divider: rgba(90, 179, 255, 0.12);
+  --bezel: #2B4A6B;
+  --bezel-2: #0D1C2E;
+  --ticks: rgba(90, 179, 255, 0.35);
+  --glow: rgba(90, 179, 255, 0.55);
+  --shadow: rgba(0, 0, 0, 0.6);
+  --highlight: wedge;
+  --tick-count: 72;
+  --glow-radius: 14px;
+  --font: system;
+  --label-weight: medium;
+}

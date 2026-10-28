@@ -1,0 +1,6 @@
+name = "Logo to SVG"
+description = "Traced into a few smooth shapes that stay sharp at any size"
+
+[[steps]]
+op = "trace"
+detail = "low"

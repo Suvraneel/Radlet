@@ -1,0 +1,6 @@
+name = "Subtitles"
+description = "An SRT file of what's said, made by speech recognition on your Mac"
+
+[[steps]]
+op = "transcribe"
+to = "srt"

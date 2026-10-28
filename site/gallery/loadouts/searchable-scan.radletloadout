@@ -1,0 +1,5 @@
+name = "Searchable scan"
+description = "Text recognised on your Mac, so a scan can be searched and copied"
+
+[[steps]]
+op = "make_searchable"

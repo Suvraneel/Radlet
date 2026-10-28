@@ -1,0 +1,14 @@
+name = "Thumbnail"
+description = "Longest side 400 px, WebP, no metadata: small enough for any page"
+
+[[steps]]
+op = "resize"
+max = 400
+
+[[steps]]
+op = "convert"
+to = "webp"
+quality = 75
+
+[[steps]]
+op = "strip_metadata"

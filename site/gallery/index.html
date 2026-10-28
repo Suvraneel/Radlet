@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Radlet gallery: loadouts and skins</title>
+<meta name="description" content="Loadouts and skins for Radlet, the weapon wheel for your files. Open one in Radlet with a click, see what it does, and add it if you like it.">
+<meta name="theme-color" content="#08080a">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Radlet">
+<meta property="og:title" content="Radlet gallery: loadouts and skins">
+<meta property="og:description" content="Ready-made loadouts and skins for Radlet. One click opens them in the app; nothing is added until you say so.">
+<meta property="og:image" content="https://radlet.vercel.app/og.jpg">
+<meta property="og:url" content="https://radlet.vercel.app/gallery/">
+<link rel="canonical" href="https://radlet.vercel.app/gallery/">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08080a;
+  --text: #ededf0;
+  --muted: #a0a0aa;
+  --dim: #85858f;
+  --hair: rgba(255, 255, 255, 0.07);
+  --hair-2: rgba(255, 255, 255, 0.12);
+  --panel: rgba(255, 255, 255, 0.025);
+  --accent: #4d8dff;
+  --accent-soft: #a9c8ff;
+  --ok: #7fd99a;
+  --warn: #efb27d;
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  --spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --max: 1200px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 400 16px/1.6 "Geist", ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+a { color: inherit; text-decoration: none; }
+svg { display: block; max-width: 100%; }
+::selection { background: rgba(77, 141, 255, 0.35); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+
+.atmos { position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background: radial-gradient(90vw 60vh at 50% -18%, rgba(77, 141, 255, 0.10), transparent 70%); }
+.grain { position: fixed; inset: 0; z-index: 40; pointer-events: none; opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+main, footer { position: relative; z-index: 2; }
+.wrap { max-width: var(--max); margin: 0 auto; padding: 0 32px; }
+
+/* navigation: a floating pill */
+.nav { position: fixed; z-index: 30; top: 16px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 4px; padding: 5px 5px 5px 14px; border-radius: 999px;
+  background: rgba(16, 16, 20, 0.7); backdrop-filter: blur(20px) saturate(1.4); -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  box-shadow: inset 0 0 0 1px var(--hair), 0 24px 48px -32px rgba(0, 0, 0, 0.9); }
+.brand { display: flex; align-items: center; gap: 9px; font-weight: 600; letter-spacing: -0.015em; margin-right: 12px; }
+.brand svg { width: 22px; height: 22px; flex: none; }
+.nav .links { display: flex; gap: 2px; margin-right: 6px; }
+.nav .links a { padding: 8px 12px; border-radius: 999px; font-size: 14px; color: var(--muted); transition: color .5s var(--ease), background-color .5s var(--ease); }
+.nav .links a:hover, .nav .links a[aria-current] { color: var(--text); background: rgba(255, 255, 255, 0.05); }
+
+/* buttons */
+.btn { display: inline-flex; align-items: center; gap: 10px; height: 38px; padding: 0 4px 0 15px; border-radius: 999px; font-weight: 500; font-size: 14px; white-space: nowrap;
+  transition: transform .6s var(--ease), background-color .6s var(--ease), box-shadow .6s var(--ease); }
+.btn:active { transform: scale(0.97); }
+.btn .knob { width: 30px; height: 30px; border-radius: 999px; display: grid; place-items: center; transition: transform .6s var(--spring); }
+.btn .knob svg { width: 13px; height: 13px; }
+.btn-primary { background: #f3f3f5; color: #0a0a0c;
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(255, 255, 255, 0.08), 0 16px 36px -20px rgba(77, 141, 255, 0.7); }
+.btn-primary:hover { background: #fff; }
+.btn-primary .knob { background: #0a0a0c; color: #fff; }
+.btn-primary:hover .knob { transform: translate(2px, -1px) scale(1.05); }
+.btn-quiet { color: var(--muted); padding: 0 12px; box-shadow: inset 0 0 0 1px var(--hair-2); }
+.btn-quiet:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
+.btn-icon { width: 38px; padding: 0; justify-content: center; }
+.btn-icon svg { width: 14px; height: 14px; transition: transform .6s var(--spring); }
+.btn-icon:hover svg { transform: translateY(2px); }
+
+/* type */
+h1 { font-size: clamp(44px, 6.4vw, 88px); line-height: 0.96; letter-spacing: -0.05em; font-weight: 600; text-wrap: balance; }
+h2 { font-size: clamp(30px, 3.6vw, 44px); line-height: 1.05; letter-spacing: -0.035em; font-weight: 600; }
+h3 { font-size: 19px; letter-spacing: -0.02em; font-weight: 600; line-height: 1.3; }
+.lead { font-size: clamp(17px, 1.5vw, 19px); color: var(--muted); max-width: 36em; text-wrap: pretty; }
+.label { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; font: 500 12px "Geist Mono", ui-monospace, monospace; text-transform: uppercase; letter-spacing: 0.14em; color: var(--dim); }
+.label::before { content: ""; width: 20px; height: 1px; background: var(--accent); }
+code { font: 500 .9em "Geist Mono", ui-monospace, monospace; color: var(--text); }
+
+.hero { padding: 168px 0 40px; }
+.hero h1 { margin-bottom: 26px; }
+.trust { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 30px; font: 400 12.5px/1.7 "Geist Mono", ui-monospace, monospace; color: var(--dim); }
+.trust span::before { content: ""; display: inline-block; width: 6px; height: 6px; border-radius: 999px; background: var(--ok); margin-right: 9px; vertical-align: 1px; }
+
+section { padding: 72px 0; }
+.section-head { display: flex; justify-content: space-between; align-items: end; gap: 24px; flex-wrap: wrap; margin-bottom: 34px; }
+.section-head p { color: var(--muted); max-width: 30em; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.grid.skins { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+/* A machined tray holding a panel. */
+.card { padding: 6px; border-radius: 26px; background: rgba(255, 255, 255, 0.025); box-shadow: inset 0 0 0 1px var(--hair);
+  opacity: 0; transform: translateY(18px); transition: opacity .9s var(--ease), transform .9s var(--ease); transition-delay: calc(var(--d, 0) * 70ms); }
+.card.in { opacity: 1; transform: none; }
+.card .core { height: 100%; display: flex; flex-direction: column; gap: 14px; padding: 22px; border-radius: 20px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.012));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), inset 0 0 0 1px rgba(255, 255, 255, 0.03); }
+.card p { color: var(--muted); font-size: 14.5px; }
+.card .who { font: 400 12px "Geist Mono", ui-monospace, monospace; color: var(--dim); }
+.steps { list-style: none; counter-reset: step; display: grid; gap: 6px; padding: 12px 14px; border-radius: 14px; background: rgba(0, 0, 0, 0.25); box-shadow: inset 0 0 0 1px var(--hair); }
+.steps li { counter-increment: step; display: grid; grid-template-columns: 22px 1fr; font-size: 14px; color: #d4d4de; }
+.steps li::before { content: counter(step); font: 500 12px/1.9 "Geist Mono", monospace; color: var(--accent-soft); }
+.badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.badge { font: 500 11px "Geist Mono", ui-monospace, monospace; letter-spacing: 0.02em; padding: 3px 8px; border-radius: 999px; color: var(--warn); box-shadow: inset 0 0 0 1px rgba(239, 178, 125, 0.3); }
+.actions { margin-top: auto; display: flex; flex-wrap: wrap; gap: 8px; padding-top: 4px; }
+.preview { aspect-ratio: 1; border-radius: 16px; display: grid; place-items: center; background: radial-gradient(closest-side, rgba(255, 255, 255, 0.04), transparent); }
+.preview svg { width: 78%; height: 78%; overflow: visible; }
+
+.help { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.help .core { padding: 26px; border-radius: 22px; background: var(--panel); box-shadow: inset 0 0 0 1px var(--hair); }
+.help h3 { margin-bottom: 8px; }
+.help p { color: var(--muted); font-size: 15px; }
+.u { color: var(--text); box-shadow: inset 0 -1px 0 var(--hair-2); transition: box-shadow .4s var(--ease); }
+.u:hover { box-shadow: inset 0 -1px 0 var(--accent); }
+.status { color: var(--dim); font-size: 14px; }
+.status.error { color: var(--warn); }
+
+footer { padding: 40px 0 56px; color: var(--dim); font-size: 13px; }
+footer .row { display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; padding-top: 28px; box-shadow: inset 0 1px 0 var(--hair); }
+footer nav { display: flex; gap: 22px; }
+footer a:hover { color: var(--text); }
+
+@media (max-width: 760px) {
+  .wrap { padding: 0 16px; }
+  .nav .links a:not([aria-current]):not(.keep) { display: none; }
+  .hero { padding: 132px 0 24px; }
+  section { padding: 48px 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: .01ms !important; scroll-behavior: auto !important; }
+  .card { opacity: 1; transform: none; }
+}
+</style>
+</head>
+<body>
+<div class="atmos"></div>
+<div class="grain"></div>
+
+<svg width="0" height="0" style="position: absolute" aria-hidden="true">
+  <symbol id="mark" viewBox="0 0 32 32">
+    <circle cx="16" cy="16" r="14" fill="#41455a"/>
+    <path d="M21.36 3.07A14 14 0 0 1 28.93 10.64L22.01 13.51A6.5 6.5 0 0 0 18.49 10Z" fill="#5b9bff"/>
+    <path d="M21.36 3.07 10.64 28.93M28.93 10.64 3.07 21.36M28.93 21.36 3.07 10.64M21.36 28.93 10.64 3.07" stroke="#08080a" stroke-width="1.2"/>
+    <circle cx="16" cy="16" r="6.6" fill="#08080a"/>
+    <circle cx="16" cy="16" r="4.1" fill="#08080a" stroke="#fff" stroke-width="1.9"/>
+  </symbol>
+  <symbol id="out" viewBox="0 0 16 16"><path d="M5 11 11 5M6 5h5v5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="down" viewBox="0 0 16 16"><path d="M8 2.5v9M4 7.8 8 11.8l4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<nav class="nav" aria-label="Main">
+  <a class="brand" href="../" aria-label="Radlet home"><svg aria-hidden="true"><use href="#mark"/></svg>Radlet</a>
+  <div class="links">
+    <a href="../#features">Features</a>
+    <a href="./" aria-current="page">Gallery</a>
+    <a href="#loadouts" class="keep">Loadouts</a>
+    <a href="#skins" class="keep">Skins</a>
+    <a href="https://github.com/Suvraneel/radlet">GitHub</a>
+  </div>
+</nav>
+
+<main id="top">
+  <header class="hero">
+    <div class="wrap">
+      <p class="label">Gallery</p>
+      <h1>Loadouts and skins, one click away.</h1>
+      <p class="lead">Pick a loadout for the Control wheel or a new look for the whole wheel. <b>Open in Radlet</b> shows exactly what it does first, and adds it only if you say so.</p>
+      <div class="trust">
+        <span>Nothing runs when you open one</span>
+        <span>Links hold everything; nothing is fetched</span>
+        <span>Results never replace your files</span>
+      </div>
+    </div>
+  </header>
+
+  <section id="loadouts">
+    <div class="wrap">
+      <div class="section-head">
+        <div><p class="label">Loadouts</p><h2>Steps you'd repeat, on one flick.</h2></div>
+        <p>Added loadouts sit on the Control wheel: hold <code>Control</code> while dragging files, and let go on one.</p>
+      </div>
+      <div class="grid" id="loadout-list"><p class="status">Loading loadouts…</p></div>
+    </div>
+  </section>
+
+  <section id="skins">
+    <div class="wrap">
+      <div class="section-head">
+        <div><p class="label">Skins</p><h2>A different wheel, same muscle memory.</h2></div>
+        <p>A skin only changes how the wheel looks. Slots stay where they are, and you can switch back in Settings → Wheel.</p>
+      </div>
+      <div class="grid skins" id="skin-list"><p class="status">Loading skins…</p></div>
+    </div>
+  </section>
+
+  <section id="share">
+    <div class="wrap">
+      <div class="section-head"><div><p class="label">Yours</p><h2>Share one of your own.</h2></div></div>
+      <div class="help">
+        <div class="core"><h3>From Radlet</h3><p>In Settings → Loadouts, the share button copies a <code>radlet://</code> link or saves a <code>.radletloadout</code> file. Skins have <b>Share</b> under Settings → Wheel. Anyone with Radlet can open either.</p></div>
+        <div class="core"><h3>In this gallery</h3><p>Add your file to <code>site/gallery</code> in the <a class="u" href="https://github.com/Suvraneel/radlet/tree/main/site/gallery">repository</a>, list it in <code>items.json</code>, and open a pull request. The tests check that every loadout and skin reads cleanly.</p></div>
+        <div class="core"><h3>Nothing happens?</h3><p>Opening a link needs a Radlet with sharing. Update from the menu bar (Check for Updates…), or <a class="u" href="https://github.com/Suvraneel/radlet/releases/latest">download the latest</a>. You can also download the file and double-click it.</p></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap"><div class="row">
+    <span>© 2026 Suvraneel Bhuin. Every loadout and skin here is original.</span>
+    <nav aria-label="Footer">
+      <a href="../">Radlet</a>
+      <a href="https://github.com/Suvraneel/radlet/releases/latest">Releases</a>
+      <a href="https://github.com/Suvraneel/radlet/tree/main/site/gallery">Source</a>
+    </nav>
+  </div></div>
+</footer>
+
+<noscript><p class="wrap status">The gallery needs JavaScript to list its items. The files are in the <a href="https://github.com/Suvraneel/radlet/tree/main/site/gallery">repository</a>.</p></noscript>
+
+<script>
+"use strict";
+
+/* ---------- links: the same format as the app (SharedItems.swift) ---------- */
+function base64url(text) {
+  const bytes = new TextEncoder().encode(text);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function radletLink(kind, text) {
+  return "radlet://add/" + kind + "?v=1&data=" + base64url(text);
+}
+
+/* ---------- a small TOML reader: enough for loadout files ---------- */
+function parseToml(src) {
+  const root = {};
+  let table = root;
+  let i = 0;
+  const ws = () => { while (i < src.length && (src[i] === " " || src[i] === "\t")) i++; };
+  const skipLine = () => { while (i < src.length && src[i] !== "\n") i++; };
+  function key() {
+    ws();
+    const start = i;
+    while (i < src.length && /[A-Za-z0-9_-]/.test(src[i])) i++;
+    if (i === start) throw new Error("expected a key");
+    return src.slice(start, i);
+  }
+  function str() {
+    const q = src[i++];
+    let out = "";
+    while (i < src.length && src[i] !== q) {
+      if (q === '"' && src[i] === "\\") {
+        const e = src[++i];
+        if (e === "u" || e === "U") {
+          const n = e === "u" ? 4 : 8;
+          out += String.fromCodePoint(parseInt(src.substr(i + 1, n), 16));
+          i += n;
+        } else {
+          out += { n: "\n", t: "\t", r: "\r", '"': '"', "\\": "\\", b: "\b", f: "\f" }[e] ?? e;
+        }
+        i++;
+      } else {
+        out += src[i++];
+      }
+    }
+    i++;
+    return out;
+  }
+  function value() {
+    ws();
+    const c = src[i];
+    if (c === '"' || c === "'") return str();
+    if (c === "[") {
+      i++;
+      const arr = [];
+      for (;;) {
+        while (i < src.length && /[\s,]/.test(src[i])) i++;
+        if (src[i] === "#") { skipLine(); continue; }
+        if (src[i] === "]") { i++; return arr; }
+        arr.push(value());
+      }
+    }
+    if (c === "{") {
+      i++;
+      const obj = {};
+      for (;;) {
+        while (i < src.length && /[\s,]/.test(src[i])) i++;
+        if (src[i] === "}") { i++; return obj; }
+        const k = key(); ws();
+        if (src[i++] !== "=") throw new Error("expected =");
+        obj[k] = value();
+      }
+    }
+    const start = i;
+    while (i < src.length && !/[\s,\]}#]/.test(src[i])) i++;
+    const word = src.slice(start, i);
+    if (word === "true") return true;
+    if (word === "false") return false;
+    const n = Number(word.replace(/_/g, ""));
+    if (word === "" || Number.isNaN(n)) throw new Error("unexpected " + JSON.stringify(word));
+    return n;
+  }
+  while (i < src.length) {
+    const c = src[i];
+    if (/\s/.test(c)) { i++; continue; }
+    if (c === "#") { skipLine(); continue; }
+    if (src.startsWith("[[", i)) {
+      i += 2;
+      const k = key();
+      while (src[i] !== "]") i++;
+      i += 2;
+      (root[k] = root[k] || []).push(table = {});
+      continue;
+    }
+    const k = key(); ws();
+    if (src[i++] !== "=") throw new Error("expected = after " + k);
+    table[k] = value();
+  }
+  return root;
+}
+
+/* ---------- loadout steps in words (as the app says them) ---------- */
+const FORMATS = { jpeg: "JPEG", png: "PNG", webp: "WebP", heic: "HEIC", avif: "AVIF", gif: "GIF", tiff: "TIFF", pdf: "PDF",
+  svg: "SVG", txt: "Text", md: "Markdown", html: "HTML", docx: "Word", mp4: "MP4", mov: "MOV", webm: "WebM", mp3: "MP3",
+  m4a: "M4A", wav: "WAV", flac: "FLAC", ogg: "OGG", opus: "Opus", srt: "SRT", vtt: "WebVTT", csv: "CSV", json: "JSON", xlsx: "Excel" };
+const fmt = (f) => FORMATS[f] || String(f).toUpperCase();
+const DETAIL = { low: "simple", high: "detailed" };
+function describe(s) {
+  switch (s.op) {
+    case "convert": return "Convert to " + fmt(s.to) + (s.quality ? " (quality " + s.quality + ")" : "");
+    case "resize":
+      if (s.max) return "Longest side at most " + s.max + " px";
+      if (s.percent) return "Resize to " + s.percent + "%";
+      if (s.width) return s.width + " px wide";
+      return s.height + " px high";
+    case "rotate": return "Rotate " + s.degrees + "°";
+    case "crop": return "Crop";
+    case "redact": return "Cover chosen areas";
+    case "strip_metadata": return "Remove location, camera and other metadata";
+    case "compress":
+      if (s.target_bytes) return "Compress to under " + (s.target_bytes / 1e6).toLocaleString() + " MB";
+      return "Compress (" + (s.level || "balanced") + ")";
+    case "pages": return "Keep chosen pages";
+    case "page_numbers": return "Page numbers" + (s.style === "page_of_total" ? " (Page 3 of 12)" : "");
+    case "watermark": return "Watermark “" + s.text + "”";
+    case "trim": return "Trim";
+    case "normalize_audio": return "Even out volume";
+    case "remove_background": return "Remove the background" + (s.crop ? " and trim" : "");
+    case "make_searchable": return "Make a searchable PDF";
+    case "transcribe": return { vtt: "Subtitles (WebVTT)", txt: "Transcript" }[s.to] || "Subtitles (SRT)";
+    case "blur_faces": return { blur: "Blur faces", black: "Cover faces in black" }[s.style] || "Pixelate faces";
+    case "translate": return "Translate into " + s.to;
+    case "trace": return "Trace to SVG" + (s.color === false ? " in black and white" : "") + (DETAIL[s.detail] ? ", " + DETAIL[s.detail] : "");
+    case "clean_text": return "Clean up text";
+    case "format_json": return s.minify ? "Minify JSON" : "Format JSON";
+    case "redact_text": return "Black out text";
+    default: return String(s.op).replace(/_/g, " ");
+  }
+}
+// What a loadout needs beyond Radlet itself.
+function needs(steps) {
+  const out = new Set();
+  for (const s of steps) {
+    if (s.op === "normalize_audio" || s.op === "transcribe" ||
+        (s.op === "convert" && ["mp3", "webm", "mkv", "ogg", "opus", "flac", "avi", "wmv", "wma"].includes(s.to))) out.add("FFmpeg");
+    if (s.op === "translate") out.add("macOS 26");
+  }
+  return [...out];
+}
+
+/* ---------- skins: read the tokens and draw a small wheel ---------- */
+// Instrument's tokens: what a skin falls back to here.
+const BASE = { accent: "#C5F05C", "accent-text": "#0B0C0E", text: "#ECEEF0", "text-dim": "#8D9299", ground: "#131518",
+  "ground-2": "#1C1F23", segment: "rgba(255,255,255,0.02)", divider: "rgba(255,255,255,0.09)", bezel: "#4B5057",
+  "bezel-2": "#202327", ticks: "rgba(255,255,255,0.22)", glow: "rgba(197,240,92,0.55)", shadow: "rgba(0,0,0,0.55)",
+  highlight: "wedge", shape: "round", "tick-count": "60", "bezel-width": "10", font: "system", "label-case": "none",
+  "label-weight": "500", "highlight-opacity": "0.18", "letter-spacing": "0.02em" };
+const SYSTEM = { "system-accent": "#0A84FF", label: "#FFFFFF", "secondary-label": "rgba(235,235,245,0.6)",
+  "tertiary-label": "rgba(235,235,245,0.3)", separator: "rgba(84,84,88,0.6)", window: "#1E1E1E", control: "#2C2C2E" };
+const WEIGHTS = { thin: 100, light: 300, normal: 400, regular: 400, medium: 500, semibold: 600, bold: 700, heavy: 800, black: 900 };
+function parseSkin(css) {
+  const tokens = {};
+  const body = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  for (const m of body.matchAll(/--([a-z0-9-]+)\s*:\s*((?:"[^"]*"|'[^']*'|[^;}])*)/gi)) {
+    tokens[m[1].toLowerCase()] = m[2].trim().replace(/^["']|["']$/g, "");
+  }
+  return tokens;
+}
+function fontFamily(f) {
+  switch (f) {
+    case "system": return "-apple-system, system-ui, sans-serif";
+    case "system-rounded": return "ui-rounded, 'SF Pro Rounded', system-ui, sans-serif";
+    case "system-serif": return "ui-serif, 'New York', Georgia, serif";
+    case "system-mono": return "ui-monospace, 'SF Mono', Menlo, monospace";
+    default: return "'" + f.replace(/'/g, "") + "', system-ui, sans-serif";
+  }
+}
+function drawWheel(t) {
+  const v = (k) => { const x = t[k] ?? BASE[k]; return SYSTEM[x] || x; };
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "-120 -120 240 240");
+  svg.setAttribute("role", "img");
+  const el = (name, attrs, parent = svg) => {
+    const e = document.createElementNS(NS, name);
+    for (const [k, val] of Object.entries(attrs)) e.setAttribute(k, val);
+    parent.appendChild(e);
+    return e;
+  };
+  const n = 8, R = 104, inner = 34;
+  const faceted = v("shape") === "faceted";
+  const bezel = Math.min(Math.max(parseFloat(v("bezel-width")) || 0, 0), 24);
+  const outline = (r) => faceted
+    ? "M" + Array.from({ length: n }, (_, k) => { const a = (k / n) * 2 * Math.PI - Math.PI / 2 - Math.PI / n;
+        return (r * Math.cos(a)).toFixed(2) + " " + (r * Math.sin(a)).toFixed(2); }).join("L") + "Z"
+    : `M0 ${-r}A${r} ${r} 0 1 1 0 ${r}A${r} ${r} 0 1 1 0 ${-r}Z`;
+  const defs = el("defs", {});
+  const id = "g" + Math.random().toString(36).slice(2);
+  const grad = el("radialGradient", { id }, defs);
+  el("stop", { offset: "0", "stop-color": v("ground-2") }, grad);
+  el("stop", { offset: "1", "stop-color": v("ground") }, grad);
+  svg.style.filter = `drop-shadow(0 14px 22px ${v("shadow")})`;
+  el("path", { d: outline(R + bezel * 0.6), fill: v("bezel-2") });
+  if (bezel > 0) el("path", { d: outline(R + bezel * 0.6 - 1), fill: "none", stroke: v("bezel"), "stroke-width": Math.max(bezel * 0.35, 1) });
+  el("path", { d: outline(R), fill: `url(#${id})` });
+  const ticks = parseInt(v("tick-count"), 10) || 0;
+  for (let k = 0; k < ticks; k++) {
+    const a = (k / ticks) * 2 * Math.PI;
+    el("line", { x1: (R - 4) * Math.cos(a), y1: (R - 4) * Math.sin(a), x2: (R - 9) * Math.cos(a), y2: (R - 9) * Math.sin(a), stroke: v("ticks"), "stroke-width": 1 });
+  }
+  const wedge = (k, r1, r2) => {
+    const a0 = (k / n) * 2 * Math.PI - Math.PI / 2 - Math.PI / n, a1 = a0 + (2 * Math.PI) / n;
+    const p = (r, a) => (r * Math.cos(a)).toFixed(2) + " " + (r * Math.sin(a)).toFixed(2);
+    return `M${p(r1, a0)}L${p(r2, a0)}A${r2} ${r2} 0 0 1 ${p(r2, a1)}L${p(r1, a1)}A${r1} ${r1} 0 0 0 ${p(r1, a0)}Z`;
+  };
+  for (let k = 0; k < n; k++) {
+    el("path", { d: wedge(k, inner, R - 10), fill: v("segment"), stroke: v("divider"), "stroke-width": 1 });
+  }
+  const hl = v("highlight");
+  const glow = `drop-shadow(0 0 6px ${v("glow")})`;
+  if (hl === "rim") {
+    const e = el("path", { d: wedge(0, R - 13, R - 9), fill: v("accent") });
+    e.style.filter = glow;
+  } else {
+    const op = hl === "fill" ? 1 : Math.min(Math.max(parseFloat(v("highlight-opacity")) || 0.18, 0.05), 1);
+    el("path", { d: wedge(0, inner, R - 10), fill: v("accent"), "fill-opacity": op });
+    const e = el("path", { d: wedge(0, R - 14, R - 10), fill: v("accent") });
+    e.style.filter = glow;
+  }
+  const names = ["JPEG", "PDF", "PNG", "TIFF", "WebP", "GIF", "HEIC", "More…"];
+  const upper = v("label-case") === "upper";
+  const weight = WEIGHTS[v("label-weight")] || parseInt(v("label-weight"), 10) || 500;
+  names.forEach((name, k) => {
+    const a = (k / n) * 2 * Math.PI - Math.PI / 2;
+    const r = (inner + R - 10) / 2 + 2;
+    const txt = el("text", { x: (r * Math.cos(a)).toFixed(2), y: (r * Math.sin(a) + 4).toFixed(2), "text-anchor": "middle",
+      fill: k === 0 ? (hl === "fill" ? v("accent-text") : v("accent")) : v("text"), "font-size": 11.5, "font-weight": weight });
+    txt.style.fontFamily = fontFamily(v("font"));
+    txt.style.letterSpacing = v("letter-spacing");
+    txt.textContent = upper ? name.toUpperCase() : name;
+  });
+  el("circle", { r: inner - 2, fill: v("ground-2"), stroke: v("divider") });
+  const hub = el("text", { y: -1, "text-anchor": "middle", fill: v("accent"), "font-size": 11.5, "font-weight": 600 });
+  hub.style.fontFamily = fontFamily(v("font"));
+  hub.textContent = "JPEG";
+  const sub = el("text", { y: 12, "text-anchor": "middle", fill: v("text-dim"), "font-size": 8.5 });
+  sub.style.fontFamily = fontFamily(v("font"));
+  sub.textContent = "3 photos";
+  if (v("scanlines") === "on") {
+    const pat = el("pattern", { id: id + "s", width: 4, height: 3, patternUnits: "userSpaceOnUse" }, defs);
+    el("rect", { width: 4, height: 1, fill: "rgba(0,0,0,0.22)" }, pat);
+    el("path", { d: outline(R), fill: `url(#${id}s)`, "pointer-events": "none" });
+  }
+  svg.setAttribute("aria-label", (t.name || "A skin") + " on the wheel");
+  return svg;
+}
+
+/* ---------- cards ---------- */
+function h(tag, attrs = {}, ...children) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") e.className = v; else e.setAttribute(k, v);
+  }
+  for (const c of children) if (c != null) e.append(c);
+  return e;
+}
+function icon(name) {
+  const s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  s.setAttribute("aria-hidden", "true");
+  const u = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  u.setAttribute("href", "#" + name);
+  s.append(u);
+  return s;
+}
+function actions(kind, path, text, name) {
+  return h("div", { class: "actions" },
+    h("a", { class: "btn btn-primary", href: radletLink(kind, text), "aria-label": "Open " + name + " in Radlet" },
+      "Open in Radlet", h("span", { class: "knob" }, icon("out"))),
+    h("a", { class: "btn btn-quiet btn-icon", href: path, download: path.split("/").pop(), "aria-label": "Download " + name, title: "Download the file" }, icon("down")));
+}
+function loadoutCard(path, text, d) {
+  const r = parseToml(text);
+  const steps = r.steps || [];
+  const extra = needs(steps);
+  return h("article", { class: "card", style: "--d:" + d },
+    h("div", { class: "core" },
+      h("h3", {}, r.name),
+      r.description ? h("p", {}, r.description) : null,
+      h("ol", { class: "steps" }, ...steps.map((s) => h("li", {}, describe(s)))),
+      extra.length ? h("div", { class: "badges" }, ...extra.map((x) => h("span", { class: "badge" }, "Needs " + x))) : null,
+      actions("loadout", path, text, r.name)));
+}
+function skinCard(path, text, d) {
+  const t = parseSkin(text);
+  const preview = h("div", { class: "preview" });
+  preview.append(drawWheel(t));
+  return h("article", { class: "card", style: "--d:" + d },
+    h("div", { class: "core" },
+      preview,
+      h("h3", {}, t.name || "Skin"),
+      h("p", { class: "who" }, (t.author ? "by " + t.author : "") + (t.base ? " · starts from " + t.base[0].toUpperCase() + t.base.slice(1) : "")),
+      actions("skin", path, text, t.name || "this skin")));
+}
+
+async function fill(listId, paths, make) {
+  const list = document.getElementById(listId);
+  const texts = await Promise.all(paths.map((p) => fetch(p).then((r) => r.ok ? r.text() : null).catch(() => null)));
+  const cards = [];
+  texts.forEach((text, k) => {
+    if (text == null) return;
+    try { cards.push(make(paths[k], text, k % 6)); } catch (e) { console.warn(paths[k], e); }
+  });
+  list.replaceChildren(...cards);
+  if (!cards.length) list.replaceChildren(h("p", { class: "status error" }, "Couldn't load these just now. Try again in a moment."));
+  const io = "IntersectionObserver" in window ? new IntersectionObserver((entries) => {
+    for (const e of entries) if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+  }, { rootMargin: "0px 0px -6% 0px" }) : null;
+  for (const c of cards) io ? io.observe(c) : c.classList.add("in");
+}
+
+fetch("items.json")
+  .then((r) => r.json())
+  .then((items) => Promise.all([
+    fill("loadout-list", items.loadouts || [], loadoutCard),
+    fill("skin-list", items.skins || [], skinCard),
+  ]))
+  .catch(() => {
+    for (const id of ["loadout-list", "skin-list"]) {
+      document.getElementById(id).replaceChildren(h("p", { class: "status error" }, "The gallery couldn't load. Try again in a moment."));
+    }
+  });
+</script>
+</body>
+</html>

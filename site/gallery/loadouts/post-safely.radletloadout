@@ -1,0 +1,9 @@
+name = "Post safely"
+description = "Faces blurred and location, camera and dates removed, ready to post"
+
+[[steps]]
+op = "blur_faces"
+style = "blur"
+
+[[steps]]
+op = "strip_metadata"

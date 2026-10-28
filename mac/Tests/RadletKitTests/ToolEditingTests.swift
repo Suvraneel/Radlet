@@ -344,3 +344,31 @@ final class SharedTypesTests: XCTestCase {
         }
     }
 }
+
+final class GallerySkinTests: XCTestCase {
+    /// Every skin on the website's gallery reads with no problems, the way
+    /// the app reads one opened from a link.
+    func testGallerySkinsReadCleanly() throws {
+        let repo = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let dir = repo.appendingPathComponent("site/gallery/skins")
+        let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == SharedItem.Kind.skin.fileExtension }
+        XCTAssertFalse(files.isEmpty)
+        var names: Set<String> = []
+        for file in files {
+            let item = try SharedItem.read(file: file).get()
+            let parsed = SkinCSS.parse(item.text, id: "gallery", fallbackName: "",
+                                       bases: SkinLibrary.builtIns.map(\.skin))
+            XCTAssertEqual(parsed.issues, [], file.lastPathComponent)
+            XCTAssertFalse(parsed.skin.name.isEmpty, file.lastPathComponent)
+            XCTAssertTrue(names.insert(parsed.skin.name.lowercased()).inserted, "two skins are called \(parsed.skin.name)")
+            XCTAssertFalse(SkinLibrary.builtIns.contains { $0.skin.name == parsed.skin.name }, "\(file.lastPathComponent) has a built-in's name")
+            // What the app shares back is a link that opens to the same skin.
+            let back = try SharedItem.parse(link: XCTUnwrap(SharedItem(kind: .skin, text: parsed.skin.compactCSS())).link).get()
+            XCTAssertEqual(SkinCSS.parse(back.text, id: "gallery", fallbackName: "",
+                                         bases: SkinLibrary.builtIns.map(\.skin)).skin.accent, parsed.skin.accent)
+        }
+    }
+}

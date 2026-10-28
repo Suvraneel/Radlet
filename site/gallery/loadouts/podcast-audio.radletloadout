@@ -1,0 +1,9 @@
+name = "Podcast audio"
+description = "Volume evened out to -16 LUFS, as podcasts do, then saved as MP3"
+
+[[steps]]
+op = "normalize_audio"
+
+[[steps]]
+op = "convert"
+to = "mp3"

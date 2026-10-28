@@ -1,0 +1,18 @@
+{
+  "loadouts": [
+    "loadouts/share-a-photo.radletloadout",
+    "loadouts/logo-to-svg.radletloadout",
+    "loadouts/thumbnail.radletloadout",
+    "loadouts/post-safely.radletloadout",
+    "loadouts/draft-pdf.radletloadout",
+    "loadouts/searchable-scan.radletloadout",
+    "loadouts/subtitles.radletloadout",
+    "loadouts/podcast-audio.radletloadout"
+  ],
+  "skins": [
+    "skins/mint.radletskin",
+    "skins/deep-sea.radletskin",
+    "skins/paper.radletskin",
+    "skins/arcade.radletskin"
+  ]
+}

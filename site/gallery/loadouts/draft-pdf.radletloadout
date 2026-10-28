@@ -1,0 +1,11 @@
+name = "Draft PDF"
+description = "DRAFT across every page, and page numbers at the bottom"
+
+[[steps]]
+op = "watermark"
+text = "DRAFT"
+opacity = 0.12
+
+[[steps]]
+op = "page_numbers"
+style = "page_of_total"

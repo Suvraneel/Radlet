@@ -1,0 +1,27 @@
+:root {
+  --name: "Arcade";
+  --author: "Radlet";
+  --base: neon;
+  /* Cabinet purple, coin-slot yellow, a faceted bezel and scanlines. */
+  --accent: #FFD23F;
+  --accent-text: #1A0B2E;
+  --text: #F3E9FF;
+  --text-dim: #A58FCB;
+  --ground: #1A0B2E;
+  --ground-2: #2A1446;
+  --segment: rgba(255, 210, 63, 0.03);
+  --divider: rgba(196, 120, 255, 0.25);
+  --bezel: #7B2FF7;
+  --bezel-2: #2A0E52;
+  --ticks: rgba(255, 210, 63, 0.5);
+  --glow: rgba(255, 210, 63, 0.6);
+  --shadow: rgba(0, 0, 0, 0.6);
+  --shape: faceted;
+  --highlight: rim;
+  --scanlines: on;
+  --label-case: upper;
+  --tick-count: 64;
+  --font: system-mono;
+  --label-weight: bold;
+  --letter-spacing: 0.08em;
+}

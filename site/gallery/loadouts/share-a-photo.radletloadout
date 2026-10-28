@@ -1,0 +1,14 @@
+name = "Share a photo"
+description = "Longest side 2048 px, JPEG at quality 85, no location or camera details"
+
+[[steps]]
+op = "resize"
+max = 2048
+
+[[steps]]
+op = "convert"
+to = "jpeg"
+quality = 85
+
+[[steps]]
+op = "strip_metadata"

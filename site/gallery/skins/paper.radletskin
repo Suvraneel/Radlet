@@ -1,0 +1,25 @@
+:root {
+  --name: "Paper";
+  --author: "Radlet";
+  --base: porcelain;
+  /* Warm paper, ink-brown type and a burnt-orange stamp. */
+  --accent: #C2410C;
+  --accent-text: #FFF8F0;
+  --text: #2A2420;
+  --text-dim: #7A6E64;
+  --ground: #F4EDE1;
+  --ground-2: #FBF7F0;
+  --segment: rgba(60, 40, 20, 0.025);
+  --divider: rgba(60, 40, 20, 0.12);
+  --bezel: #E2D7C6;
+  --bezel-2: #B9AA94;
+  --ticks: rgba(60, 40, 20, 0.3);
+  --glow: rgba(194, 65, 12, 0.22);
+  --shadow: rgba(80, 60, 40, 0.25);
+  --highlight: fill;
+  --tick-count: 0;
+  --bezel-width: 6px;
+  --font: system-serif;
+  --label-size: 15px;
+  --label-weight: medium;
+}
