@@ -145,7 +145,7 @@ Tools ending in "…" open a window first, with a live preview where it helps.
 - **What a conversion needs, offered.** Slots that need something this Mac doesn't have yet show a badge: FFmpeg for more audio and video, Keynote, Pages or Numbers for their documents. Choosing one explains what's missing and helps get it: Radlet installs FFmpeg with Homebrew (or, once one is published, its own FFmpeg build), and opens the App Store page for Apple's free apps. Anything installed meanwhile, in Terminal or the App Store, is found the next time you choose it. A job that needs a speech or translation language download offers to open the right settings pane.
 - **Other ways in.** Finder's right-click **Services → Convert with Radlet** (or **Radlet Tools**), **Open With → Radlet**, **⌃⌥V** in Finder for the selected files, and the menu bar (**Convert Files…**, **Tools for Files…**, **Run a Loadout…**, **Convert Finder Selection**). Each opens the wheel for the keyboard: arrow keys to choose, Return to run, Tab to switch wheels, Escape to cancel.
 - **Your shortcuts on the wheel.** The shortcuts button in **Settings → Loadouts** lists your shortcuts from the Shortcuts app; the ones you tick join the Control wheel after your loadouts. Each file goes in as the shortcut's input, and what it returns is saved beside the file, such as `photo (Resize for Web).jpg`; a shortcut that returns nothing (it shared or sent the file) saves nothing. AI agents can't run them.
-- **Command line, Shortcuts and AI agents.** The same engine is the `radlet` command. `radlet mcp` is a Model Context Protocol server, so Claude and other AI apps can inspect, convert, compress, clean, subtitle and run loadouts on your files, locally. Password tools and your own shortcuts aren't offered to agents. See [Reference](#reference).
+- **Command line, Shortcuts and AI agents.** The same engine is the `radlet` command. `radlet mcp` is a Model Context Protocol server, so Claude and other AI apps can do what the wheel does on your files, locally: convert, compress, combine, clean, read and make QR codes, make icons, tidy folders, subtitle, describe, summarize and run loadouts. Password tools and your own shortcuts aren't offered to agents. See [Reference](#reference).
 
 ## Tech stack
 
@@ -421,9 +421,31 @@ quality = 80
 op = "strip_metadata"
 ```
 
-Steps: `convert {to, quality?}`, `resize {max | percent | width | height}`, `rotate {degrees}`, `crop {rect}`, `redact {rects, style?}`, `strip_metadata`, `compress {level?: light|balanced|strong|smart, target_bytes?}`, `pages {pages, rotate?}`, `page_numbers {position?, style?, start?, size?, skip_first?}`, `watermark {text, opacity?, size?, diagonal?}`, `trim {start?, end?}`, `normalize_audio`, `remove_background {crop?}`, `trace {color?, detail?: low|medium|high}`, `make_searchable`, `transcribe {to?: srt|vtt|txt, language?}`. A `rect` is `{x, y, w, h}` in fractions of the picture; times are in seconds. Image steps share one decode and one encode, so chains never compress twice.
+Steps: `convert {to, quality?}`, `resize {max | percent | width | height}`, `rotate {degrees}`, `crop {rect}`, `redact {rects, style?}`, `strip_metadata`, `compress {level?: light|balanced|strong|smart, target_bytes?}`, `pages {pages, rotate?}`, `page_numbers {position?, style?, start?, size?, skip_first?}`, `watermark {text, opacity?, size?, diagonal?}`, `trim {start?, end?}`, `normalize_audio`, `remove_background {crop?}`, `trace {color?, detail?: low|medium|high}`, `make_searchable`, `transcribe {to?: srt|vtt|txt, language?}`, `blur_faces {style?: pixelate|blur|black}`, `translate {to, from?}`, `redact_text {words?, emails?, phones?, cards?}`, `clean_text`, `format_json {minify?}`. A `rect` is `{x, y, w, h}` in fractions of the picture; times are in seconds. Image steps share one decode and one encode, so chains never compress twice.
 
 You don't have to write TOML: **Save as Loadout…** in a tool window, or **Settings → Loadouts**, writes the file for you. Saving never overwrites another loadout; a name that's taken gets a number. Passwords can't go in a loadout. [examples/loadouts/thumbnail.toml](examples/loadouts/thumbnail.toml) is a starting point.
+
+</details>
+
+<details>
+<summary><strong>AI agents (<code>radlet mcp</code>)</strong></summary>
+
+`radlet mcp` is a Model Context Protocol server on stdin and stdout; **Settings → Advanced** has the configuration to paste into Claude or another AI app. Agents get the wheel's tools, run by the same engine: originals are never changed, results never overwrite a file, and nothing is uploaded.
+
+| Tools | What they do |
+| --- | --- |
+| `inspect_files` | What each file is, what it can become, and which steps fit it |
+| `convert`, `compress`, `run_steps` | Any conversion; compressing by level or to a size; chains of the loadout steps above |
+| `combine_into_pdf`, `combine_documents`, `combine_into_workbook` | Several files into one PDF, one document, or one Excel workbook |
+| `split_pdf`, `scan_documents` | PDFs into parts; photos of pages into one searchable PDF |
+| `extract_text`, `count_words`, `read_codes`, `checksum`, `privacy_check` | Reading without writing: text, word counts, QR codes and barcodes, SHA-256, what a file reveals |
+| `make_qr`, `make_icons` | A QR code of some text or a text file; favicon and Xcode icon sets |
+| `convert_folder`, `merge_folders`, `flatten_folders`, `sort_by_kind`, `list_folder_contents`, `find_duplicates`, `zip` | Folders: convert what's inside, merge, flatten, sort, list, find duplicates, zip |
+| `join_clips`, `burn_subtitles`, `extract_frames`, `make_subtitles` | Audio and video (offered when this Mac can do them) |
+| `suggest_names`, `describe_pictures`, `summarize` | A name from what's in a file; alt text and summaries by Apple Intelligence, when it's on |
+| `list_loadouts`, `run_loadout` | Your loadouts |
+
+Password tools and your own shortcuts aren't offered: passwords never pass through an agent's conversation, and an agent can only run steps, not shortcuts.
 
 </details>
 

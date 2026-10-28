@@ -1125,3 +1125,160 @@ fn serve_names_files_by_their_content() {
     h.send(json!({"id": 2, "method": "shutdown"}));
     let _ = h.until(|v| v["id"] == 2);
 }
+
+#[test]
+fn mcp_offers_the_wheels_tools() {
+    let dir = tempfile::tempdir().unwrap();
+    let d = dir.path();
+    let mut h = Helper::start_with(&["mcp"]);
+    h.send(json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+        "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "1"}}}));
+    h.next();
+    h.send(json!({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}));
+    let tools = h.next();
+    let listed = tools["result"]["tools"].as_array().unwrap().clone();
+    let names: Vec<&str> = listed.iter().map(|t| t["name"].as_str().unwrap()).collect();
+    for want in [
+        "combine_documents",
+        "combine_into_workbook",
+        "read_codes",
+        "make_qr",
+        "make_icons",
+        "convert_folder",
+        "merge_folders",
+        "flatten_folders",
+        "sort_by_kind",
+        "list_folder_contents",
+        "find_duplicates",
+        "suggest_names",
+    ] {
+        assert!(names.contains(&want), "{want} in {names:?}");
+    }
+    assert!(!names.iter().any(|n| n.contains("shortcut")));
+    let run_steps = listed.iter().find(|t| t["name"] == "run_steps").unwrap();
+    let help = run_steps["description"].as_str().unwrap();
+    for op in [
+        "blur_faces",
+        "translate",
+        "clean_text",
+        "format_json",
+        "trace",
+    ] {
+        assert!(help.contains(op), "{op} documented");
+    }
+
+    // A QR code from text, read back.
+    let qr = mcp_call(
+        &mut h,
+        3,
+        "make_qr",
+        json!({"text": "https://radlet.vercel.app", "output_dir": d}),
+    );
+    assert_eq!(qr["result"]["isError"], false, "{qr}");
+    let code = d.join("QR code.png");
+    assert!(code.exists());
+    let read = mcp_call(&mut h, 4, "read_codes", json!({"paths": [code]}));
+    assert!(
+        read["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("https://radlet.vercel.app"),
+        "{read}"
+    );
+    let no_dir = mcp_call(&mut h, 5, "make_qr", json!({"text": "x"}));
+    assert_eq!(no_dir["result"]["isError"], true);
+
+    // Documents and tables, combined.
+    std::fs::write(d.join("a.md"), "# Plan\n\nFirst part.\n").unwrap();
+    std::fs::write(d.join("b.md"), "Second part.\n").unwrap();
+    let joined = mcp_call(
+        &mut h,
+        6,
+        "combine_documents",
+        json!({"paths": [d.join("a.md"), d.join("b.md")]}),
+    );
+    assert_eq!(
+        joined["result"]["structuredContent"]["summary"]["done"], 1,
+        "{joined}"
+    );
+    std::fs::write(d.join("one.csv"), "a,b\n1,2\n").unwrap();
+    std::fs::write(d.join("two.csv"), "c\n3\n").unwrap();
+    let book = mcp_call(
+        &mut h,
+        7,
+        "combine_into_workbook",
+        json!({"paths": [d.join("one.csv"), d.join("two.csv")]}),
+    );
+    assert_eq!(
+        book["result"]["structuredContent"]["summary"]["done"], 1,
+        "{book}"
+    );
+
+    // A document's own title, without renaming anything.
+    let names = mcp_call(
+        &mut h,
+        8,
+        "suggest_names",
+        json!({"paths": [d.join("a.md")]}),
+    );
+    assert_eq!(
+        names["result"]["structuredContent"]["names"][0]["name"], "Plan",
+        "{names}"
+    );
+    assert!(d.join("a.md").exists());
+
+    // Folders.
+    let album = d.join("Album");
+    std::fs::create_dir_all(album.join("Day 2")).unwrap();
+    png(&album, "one.png", 20, 10);
+    png(&album.join("Day 2"), "two.png", 20, 10);
+    std::fs::copy(album.join("one.png"), album.join("Day 2/copy.png")).unwrap();
+    let converted = mcp_call(
+        &mut h,
+        9,
+        "convert_folder",
+        json!({"paths": [album], "kind": "image", "to": "jpeg"}),
+    );
+    assert_eq!(converted["result"]["isError"], false, "{converted}");
+    assert!(d.join("Album (JPEG)/Day 2/two.jpg").exists(), "{converted}");
+    let bad_kind = mcp_call(
+        &mut h,
+        10,
+        "convert_folder",
+        json!({"paths": [album], "kind": "pictures", "to": "jpeg"}),
+    );
+    assert_eq!(bad_kind["result"]["isError"], true);
+    for (id, tool) in [
+        (11, "flatten_folders"),
+        (12, "sort_by_kind"),
+        (13, "list_folder_contents"),
+        (14, "find_duplicates"),
+    ] {
+        let r = mcp_call(&mut h, id, tool, json!({"paths": [album]}));
+        assert_eq!(
+            r["result"]["structuredContent"]["summary"]["done"], 1,
+            "{tool}: {r}"
+        );
+    }
+    let icons = mcp_call(
+        &mut h,
+        15,
+        "make_icons",
+        json!({"paths": [album.join("one.png")], "set": "favicon"}),
+    );
+    assert_eq!(icons["result"]["isError"], false, "{icons}");
+
+    // The newly documented steps are suggested where they fit.
+    std::fs::write(d.join("data.json"), "{\"a\": 1}").unwrap();
+    let inspect = mcp_call(
+        &mut h,
+        16,
+        "inspect_files",
+        json!({"paths": [d.join("data.json")]}),
+    );
+    let steps = &inspect["result"]["structuredContent"]["steps"];
+    assert!(
+        steps.as_array().unwrap().iter().any(|s| s == "format_json"),
+        "{steps}"
+    );
+}

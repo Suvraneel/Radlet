@@ -4,8 +4,8 @@
 //!
 //! It runs the same engine as the app and the CLI, with the same
 //! guarantees: originals are never changed, results never overwrite a
-//! file, and each conversion runs in its own worker process (inspecting
-//! and the privacy check read files in this one). Nothing is uploaded. Password tools are left out, so passwords never pass through
+//! file, and each conversion runs in its own worker process (inspecting,
+//! suggesting names and the privacy check read files in this one). Nothing is uploaded. Password tools are left out, so passwords never pass through
 //! an agent's conversation.
 
 use std::collections::HashMap;
@@ -14,8 +14,9 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
+use radlet_core::format::Category;
 use radlet_core::job::{self, Event, Executor, Outcome, RunOptions, Status};
-use radlet_core::ops::{CompressLevel, SplitMode, Step};
+use radlet_core::ops::{CompressLevel, IconKind, SplitMode, Step};
 use radlet_core::{catalog, format, privacy, Action, Capabilities, Format, OutputLocation};
 use serde_json::{json, Value};
 
@@ -27,7 +28,7 @@ const VERSIONS: [&str; 4] = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-
 const OLD_NAMES: &[&str] = &["list_recipes", "run_recipe"];
 
 const INSTRUCTIONS: &str = "Radlet converts and edits files on this computer: images, PDFs, audio, video, \
-text and subtitles. Results are saved next to the originals (or in output_dir), with a new name: \
+documents, tables, subtitles and folders. Results are saved next to the originals (or in output_dir), with a new name: \
 originals are never changed and nothing is overwritten. Call inspect_files first to see what a file \
 can become. Paths should be absolute.";
 
@@ -258,7 +259,11 @@ page_numbers {position?, style?: number|page|page_of_total|fraction, start?, ski
 watermark {text, opacity?, diagonal?}; trim {start?, end?} in seconds; normalize_audio; \
 remove_background {crop?}; make_searchable; transcribe {to?: srt|vtt|txt, language?}; \
 redact_text {words?: [phrases], emails?, phones?, cards?} blacks out text in PDFs for real (Mac); \
-trace {color?: true|false, detail?: low|medium|high} redraws a picture as an SVG of filled shapes. \
+trace {color?: true|false, detail?: low|medium|high} redraws a picture as an SVG of filled shapes; \
+blur_faces {style?: pixelate|blur|black} hides every face in a picture (Mac); \
+translate {to, from?} translates a document or subtitles on-device, with language tags such as fr or pt-BR (macOS 26); \
+clean_text tidies a text file (UTF-8, one kind of line ending, no trailing spaces); \
+format_json {minify?} re-indents JSON, or with minify removes the spaces. \
 Steps run in order on each file, for example [{\"op\":\"resize\",\"max\":1600},{\"op\":\"convert\",\"to\":\"webp\"}].";
 
 fn tools(caps: &Capabilities) -> Vec<Value> {
@@ -274,12 +279,14 @@ fn tools(caps: &Capabilities) -> Vec<Value> {
         tool(
             "convert",
             "Convert",
-            "Convert files to another format, such as HEIC to JPEG, SVG to PNG, MKV to MP4, \
-             WAV to MP3, Markdown to Word or PDF, Word to Markdown, CSV to JSON, images to PDF, \
-             a PDF to one image per page, a folder to a ZIP, or a ZIP to a folder.",
+            "Convert files to another format, such as HEIC to JPEG, SVG to PNG, a logo to an SVG \
+             drawing (traced), MKV to MP4, WAV to MP3, Markdown to Word or PDF, Word to Markdown, \
+             CSV to Excel or JSON, images to PDF, a PDF to one image per page, a picture to text \
+             (text recognition), a folder to a ZIP, or a ZIP to a folder. inspect_files lists what \
+             each file can become.",
             json!({
                 "paths": paths_schema(),
-                "to": { "type": "string", "description": "Target format, such as jpeg, png, webp, pdf, mp4, m4a, mp3, txt, md, html, docx, rtf, csv, json, yaml, toml, xml, srt, vtt, ass, zip, tar or folder." },
+                "to": { "type": "string", "description": "Target format, such as jpeg, png, webp, heic, avif, gif, tiff, svg, ico, icns, pdf, mp4, mov, m4a, mp3, wav, flac, txt, md, html, docx, rtf, epub, xlsx, csv, json, yaml, toml, xml, srt, vtt, ass, woff2, zip, tar or folder." },
                 "quality": { "type": "integer", "minimum": 1, "maximum": 100, "description": "For lossy formats." },
                 "output_dir": output_dir_schema(),
             }),
@@ -396,7 +403,159 @@ fn tools(caps: &Capabilities) -> Vec<Value> {
             &["paths", "loadout"],
             false,
         ),
+        tool(
+            "combine_documents",
+            "Combine documents",
+            "Join documents (text, Markdown, HTML, Word, RTF, EPUB and more), in the order given, \
+             into one file in the first one's format (Markdown when that can't be written).",
+            json!({ "paths": paths_schema(), "output_dir": output_dir_schema() }),
+            &["paths"],
+            false,
+        ),
+        tool(
+            "combine_into_workbook",
+            "Combine into workbook",
+            "Put tables (CSV, TSV, JSON, Excel and other workbooks), in the order given, into one \
+             Excel workbook, a sheet for each.",
+            json!({ "paths": paths_schema(), "output_dir": output_dir_schema() }),
+            &["paths"],
+            false,
+        ),
+        tool(
+            "read_codes",
+            "Read codes",
+            if caps.vision.is_some() {
+                "The contents of the QR codes and barcodes in pictures. Writes nothing."
+            } else {
+                "The contents of the QR codes in pictures. Writes nothing."
+            },
+            json!({ "paths": paths_schema() }),
+            &["paths"],
+            true,
+        ),
+        tool(
+            "make_qr",
+            "Make QR code",
+            "A QR code picture (PNG): of text you give, saved in output_dir, or of each text \
+             file's contents, saved beside it.",
+            json!({
+                "text": { "type": "string", "minLength": 1, "description": "What the code holds, such as a link. Needs output_dir." },
+                "paths": paths_schema(),
+                "output_dir": output_dir_schema(),
+            }),
+            &[],
+            false,
+        ),
+        tool(
+            "make_icons",
+            "Make icons",
+            "Icons from pictures, in a folder beside each: a website's favicon set (favicon.ico, \
+             PNGs, Apple touch and Android icons, a web manifest and the HTML that links them) or \
+             an app icon set for Xcode. For a macOS icon, convert to icns instead.",
+            json!({
+                "paths": paths_schema(),
+                "set": { "type": "string", "enum": ["favicon", "ios"], "description": "favicon (default) or ios, an AppIcon.appiconset for Xcode." },
+                "output_dir": output_dir_schema(),
+            }),
+            &["paths"],
+            false,
+        ),
+        tool(
+            "convert_folder",
+            "Convert a folder",
+            "Convert every file of one kind inside folders (and their subfolders), such as all \
+             images to JPEG or all documents to PDF, into a new folder beside each that mirrors \
+             its structure (\"Trip (JPEG)\"). Files that can't be converted are listed in \
+             \"Not converted.txt\". Give to, or steps to run instead.",
+            json!({
+                "paths": paths_schema(),
+                "kind": { "type": "string", "enum": ["image", "document", "audio", "video", "text", "subtitle", "data", "font"] },
+                "to": { "type": "string", "description": "Target format, as for convert." },
+                "quality": { "type": "integer", "minimum": 1, "maximum": 100 },
+                "steps": { "type": "array", "items": { "type": "object" }, "minItems": 1, "description": "Instead of to: steps as for run_steps." },
+                "output_dir": output_dir_schema(),
+            }),
+            &["paths", "kind"],
+            false,
+        ),
+        tool(
+            "merge_folders",
+            "Merge folders",
+            "Copy two or more folders into one new folder. Files with the same name but different \
+             contents are both kept (the second renamed); identical ones are kept once.",
+            json!({ "paths": paths_schema(), "output_dir": output_dir_schema() }),
+            &["paths"],
+            false,
+        ),
+        tool(
+            "flatten_folders",
+            "Flatten folders",
+            "A copy of each folder with every file from its subfolders at the top level.",
+            json!({ "paths": paths_schema(), "output_dir": output_dir_schema() }),
+            &["paths"],
+            false,
+        ),
+        tool(
+            "sort_by_kind",
+            "Sort by kind",
+            "A copy of each folder with its files grouped into Images, Documents, Audio and so on.",
+            json!({ "paths": paths_schema(), "output_dir": output_dir_schema() }),
+            &["paths"],
+            false,
+        ),
+        tool(
+            "list_folder_contents",
+            "List folder contents",
+            "A list of everything in each folder, saved beside it: an indented tree (txt) or a \
+             spreadsheet with sizes and dates (csv).",
+            json!({
+                "paths": paths_schema(),
+                "format": { "type": "string", "enum": ["txt", "csv"] },
+                "output_dir": output_dir_schema(),
+            }),
+            &["paths"],
+            false,
+        ),
+        tool(
+            "find_duplicates",
+            "Find duplicates",
+            "Files with identical contents in folders (and files), compared byte for byte, in a \
+             report saved beside them. Changes nothing else.",
+            json!({ "paths": paths_schema(), "output_dir": output_dir_schema() }),
+            &["paths"],
+            false,
+        ),
+        tool(
+            "suggest_names",
+            "Suggest names",
+            "A file name for each picture, document or PDF from what's in it: what Vision \
+             recognises in a picture (on a Mac), or a document's title, written by Apple \
+             Intelligence when it's on. Renames nothing.",
+            json!({ "paths": paths_schema() }),
+            &["paths"],
+            true,
+        ),
     ];
+    if caps.apple_intelligence && caps.vision.is_some() {
+        list.push(tool(
+            "describe_pictures",
+            "Describe pictures",
+            "Alt text for each picture, written on this Mac by Apple Intelligence from what Vision \
+             sees in it. Writes nothing.",
+            json!({ "paths": paths_schema() }),
+            &["paths"],
+            true,
+        ));
+        list.push(tool(
+            "summarize",
+            "Summarize",
+            "A summary of each document or PDF, written on this Mac by Apple Intelligence, saved \
+             beside it as Markdown.",
+            json!({ "paths": paths_schema(), "output_dir": output_dir_schema() }),
+            &["paths"],
+            false,
+        ));
+    }
     if caps.media() || caps.native_media() {
         list.push(tool(
             "join_clips",
@@ -508,6 +667,69 @@ fn format_arg(args: &Value, key: &str) -> Result<Option<Format>, String> {
     }
 }
 
+fn quality_arg(args: &Value) -> Result<Option<u8>, String> {
+    match args.get("quality") {
+        None | Some(Value::Null) => Ok(None),
+        Some(q) => Ok(Some(
+            q.as_u64()
+                .filter(|q| (1..=100).contains(q))
+                .ok_or("quality is a number from 1 to 100")? as u8,
+        )),
+    }
+}
+
+/// A QR code of `text`, saved in output_dir as "QR code.png" (or the next
+/// free name).
+fn qr_from_text(text: &str, args: &Value) -> Result<(String, Value), String> {
+    if text.is_empty() {
+        return Err("give some text for the QR code".into());
+    }
+    let dir = output_dir(args)?.ok_or("say where to save the QR code (output_dir)")?;
+    let code = radlet_core::engines::codes::make(text).map_err(|e| e.to_string())?;
+    let tmp = radlet_core::naming::temp_in(&dir, "qr", "png").map_err(|e| e.to_string())?;
+    code.save(tmp.path()).map_err(|e| e.to_string())?;
+    let out = radlet_core::naming::publish(tmp.into_temp_path(), &dir.join("QR code.png"))
+        .map_err(|e| e.to_string())?;
+    Ok((
+        format!("✓ QR code → {}", out.display()),
+        json!({ "outputs": [out] }),
+    ))
+}
+
+/// A name for what's in each file, from `content::title`.
+fn suggest_names(
+    files: &[PathBuf],
+    caps: &Capabilities,
+    cancel: &AtomicBool,
+    progress: &mut (dyn FnMut(f32) + Send),
+) -> Result<(String, Value), String> {
+    let location = OutputLocation::BesideSource;
+    let mut lines = Vec::new();
+    let mut names = Vec::new();
+    for (i, path) in files.iter().enumerate() {
+        if cancel.load(Ordering::Relaxed) {
+            return Err("cancelled".into());
+        }
+        let mut quiet = |_: f32| {};
+        let mut ctx = radlet_core::pipeline::Context {
+            caps,
+            cancel,
+            progress: &mut quiet,
+            output: &location,
+            temp_tag: "names",
+        };
+        let found = radlet_core::content::title(path, caps, &mut ctx);
+        match &found {
+            Ok(Some(n)) => lines.push(format!("{}: {n}", name(path))),
+            Ok(None) => lines.push(format!("{}: nothing to go on", name(path))),
+            Err(e) => lines.push(format!("{}: {e}", name(path))),
+        }
+        names.push(json!({ "path": path, "name": found.ok().flatten() }));
+        progress((i + 1) as f32 / files.len() as f32);
+    }
+    Ok((lines.join("\n"), json!({ "names": names })))
+}
+
 /// Runs a tool: a summary for people and the same as JSON, or why not.
 fn call(
     name: &str,
@@ -537,14 +759,7 @@ fn call(
         }
         "convert" => {
             let to = format_arg(args, "to")?.ok_or("say which format to convert to")?;
-            let quality = match args.get("quality") {
-                None | Some(Value::Null) => None,
-                Some(q) => Some(
-                    q.as_u64()
-                        .filter(|q| (1..=100).contains(q))
-                        .ok_or("quality is a number from 1 to 100")? as u8,
-                ),
-            };
+            let quality = quality_arg(args)?;
             run(
                 args,
                 Action::single(Step::Convert { to, quality }),
@@ -609,6 +824,70 @@ fn call(
             };
             run(args, Action::SplitPdf { mode }, ctx, cancel, progress)
         }
+        "combine_documents" => run(args, Action::CombineText, ctx, cancel, progress),
+        "combine_into_workbook" => run(args, Action::CombineWorkbook, ctx, cancel, progress),
+        "read_codes" => run(args, Action::ReadCodes, ctx, cancel, progress),
+        "make_qr" => match args.get("text").and_then(Value::as_str) {
+            Some(text) => qr_from_text(text, args),
+            None => run(args, Action::MakeQr, ctx, cancel, progress),
+        },
+        "make_icons" => {
+            let set = match args.get("set").and_then(Value::as_str) {
+                None | Some("favicon") => IconKind::Favicon,
+                Some("ios") | Some("xcode") => IconKind::Ios,
+                Some(other) => return Err(format!("set is favicon or ios, not {other}")),
+            };
+            run(args, Action::IconSet { set }, ctx, cancel, progress)
+        }
+        "convert_folder" => {
+            let only: Category = serde_json::from_value(
+                args.get("kind").cloned().unwrap_or(Value::Null),
+            )
+            .map_err(|_| {
+                "kind is image, document, audio, video, text, subtitle, data or font".to_string()
+            })?;
+            let (steps, label) = match (format_arg(args, "to")?, args.get("steps")) {
+                (Some(to), _) => {
+                    let quality = quality_arg(args)?;
+                    (
+                        vec![Step::Convert { to, quality }],
+                        Some(to.label().to_string()),
+                    )
+                }
+                (None, Some(steps)) => {
+                    let steps: Vec<Step> = serde_json::from_value(steps.clone())
+                        .map_err(|e| format!("the steps aren't right: {e}. {STEPS_HELP}"))?;
+                    if steps.is_empty() {
+                        return Err("give at least one step".into());
+                    }
+                    (steps, None)
+                }
+                (None, None) => {
+                    return Err("say which format to convert to (to), or give steps".into())
+                }
+            };
+            run(
+                args,
+                Action::ConvertInside { steps, only, label },
+                ctx,
+                cancel,
+                progress,
+            )
+        }
+        "merge_folders" => run(args, Action::MergeFolders, ctx, cancel, progress),
+        "flatten_folders" => run(args, Action::Flatten, ctx, cancel, progress),
+        "sort_by_kind" => run(args, Action::SortByKind, ctx, cancel, progress),
+        "list_folder_contents" => {
+            let format = format_arg(args, "format")?;
+            if format.is_some_and(|f| !matches!(f, Format::Txt | Format::Csv)) {
+                return Err("format is txt or csv".into());
+            }
+            run(args, Action::ListContents { format }, ctx, cancel, progress)
+        }
+        "find_duplicates" => run(args, Action::FindDuplicates, ctx, cancel, progress),
+        "suggest_names" => suggest_names(&paths(args)?, ctx.caps, cancel, progress),
+        "describe_pictures" => run(args, Action::Describe, ctx, cancel, progress),
+        "summarize" => run(args, Action::Summarize, ctx, cancel, progress),
         "extract_text" => run(args, Action::CopyText, ctx, cancel, progress),
         "count_words" => run(args, Action::WordCount, ctx, cancel, progress),
         "zip" => run(args, Action::ZipAll, ctx, cancel, progress),
@@ -806,6 +1085,30 @@ fn inspect(files: &[PathBuf], caps: &Capabilities) -> Result<(String, Value), St
             },
         ),
         ("make_searchable", Step::MakeSearchable),
+        (
+            "blur_faces",
+            Step::BlurFaces {
+                style: Default::default(),
+            },
+        ),
+        (
+            "translate",
+            Step::Translate {
+                to: "fr".into(),
+                from: None,
+            },
+        ),
+        ("clean_text", Step::CleanText),
+        ("format_json", Step::FormatJson { minify: false }),
+        (
+            "redact_text",
+            Step::RedactText {
+                words: vec!["x".into()],
+                emails: false,
+                phones: false,
+                cards: false,
+            },
+        ),
         (
             "transcribe",
             Step::Transcribe {
