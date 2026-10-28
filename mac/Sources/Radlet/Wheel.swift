@@ -61,8 +61,10 @@ final class WheelDropView: NSView {
         // Accept the click so the matching mouseUp comes here.
     }
 
+    /// Still dragging with the key held: open presets stay out for when
+    /// the pointer comes back.
     override func draggingExited(_ sender: NSDraggingInfo?) {
-        MainActor.assumeIsolated { controller?.pointerLeft() }
+        MainActor.assumeIsolated { controller?.pointerLeft(keepOpen: true) }
     }
 
     override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
@@ -140,6 +142,8 @@ final class WheelController {
     private let driver: WheelDriver
     private var panel: WheelPanel?
     private var dropView: WheelDropView?
+    /// The drawing, centred in the panel's margin.
+    private var host: NSView?
     private let menuTarget = MenuTarget()
     private var files: [URL] = []
     private var inspectTask: Task<Void, Never>?
@@ -167,6 +171,9 @@ final class WheelController {
                                backing: .buffered, defer: false)
         panel.isOpaque = false
         panel.backgroundColor = .clear
+        // Set, not left to default: the clear margin still takes the
+        // pointer and the drop instead of passing them to what's behind.
+        panel.ignoresMouseEvents = false
         panel.hasShadow = false
         panel.level = .popUpMenu
         panel.hidesOnDeactivate = false
@@ -179,12 +186,12 @@ final class WheelController {
         let bounds = NSRect(x: 0, y: 0, width: size, height: size)
         let container = NSView(frame: bounds)
         let host = NSHostingView(rootView: WheelView(model: model))
-        // The panel sets the size; SwiftUI mustn't fight it when a style
-        // change resizes the panel.
+        // `show` sets the size; SwiftUI mustn't fight it when a style
+        // change resizes the drawing.
         host.sizingOptions = []
         host.frame = bounds
-        host.autoresizingMask = [.width, .height]
         container.addSubview(host)
+        self.host = host
         let drop = WheelDropView(frame: bounds)
         drop.controller = self
         drop.autoresizingMask = [.width, .height]
@@ -203,18 +210,22 @@ final class WheelController {
         driver.haptics = Prefs.haptics
         SkinStore.shared.refreshIfChanged()
         model.configure(style: Prefs.wheelStyle, count: Prefs.wheelSlots, skin: SkinStore.shared.current)
-        let size = model.spec.size
+        let size = model.spec.panelSize
+        let drawing = model.spec.size
+        let margin = WheelSpec.panelMargin
         let panel = self.panel ?? makePanel(size: size)
         self.panel = panel
         if abs(Double(panel.frame.width) - size) > 0.5 {
             panel.setContentSize(NSSize(width: size, height: size))
         }
+        host?.frame = NSRect(x: margin, y: margin, width: drawing, height: drawing)
 
+        // The drawing stays on screen; the margin round it may hang off.
         var origin = NSPoint(x: Double(point.x) - size / 2, y: Double(point.y) - size / 2)
         if let screen = NSScreen.screens.first(where: { NSMouseInRect(point, $0.frame, false) }) ?? NSScreen.main {
             let f = screen.visibleFrame
-            origin.x = min(max(origin.x, f.minX), f.maxX - size)
-            origin.y = min(max(origin.y, f.minY), f.maxY - size)
+            origin.x = min(max(origin.x, f.minX - margin), f.maxX - drawing - margin)
+            origin.y = min(max(origin.y, f.minY - margin), f.maxY - drawing - margin)
         }
         panel.setFrameOrigin(origin)
 
@@ -290,9 +301,9 @@ final class WheelController {
         driver.pointer(dx: dx, dy: dy)
     }
 
-    func pointerLeft() {
+    func pointerLeft(keepOpen: Bool = false) {
         guard !hiding else { return }
-        driver.pointerLeft()
+        driver.pointerLeft(keepOpen: keepOpen)
     }
 
     /// How far out the mouse still counts when it isn't dragging: past the

@@ -90,7 +90,7 @@ public struct WheelSpec: Equatable, Sendable {
     public let rim: Double
     /// Bloom: where the presets' centres sit.
     public let petalRadius: Double
-    /// Side of the square panel, with room for glow and Bloom's presets.
+    /// Side of the square drawing, with room for glow and Bloom's presets.
     public let size: Double
 
     public static let slotCounts = [6, 8, 10, 12]
@@ -133,6 +133,12 @@ public struct WheelSpec: Equatable, Sendable {
 
     public var span: Double { 360 / Double(max(count, 1)) }
     public var center: Double { size / 2 }
+    /// Room around the drawing that still belongs to the wheel, so a hand
+    /// that overshoots a slot or a preset still lets go on the wheel and
+    /// not on whatever is behind it.
+    public static let panelMargin = 80.0
+    /// Side of the app's panel: the drawing in the middle, the margin round it.
+    public var panelSize: Double { size + 2 * WheelSpec.panelMargin }
     public var labelRadius: Double { (hub + ringOuter) / 2 }
     public var presetRadius: Double { (presetInner + presetOuter) / 2 }
     /// The outermost ring of slots or presets: tick marks sit beyond it.
@@ -314,9 +320,10 @@ public enum WheelTour {
 ///
 /// Orbit and Bloom share one rule for a slot's presets: once they're all
 /// out (Bloom's fan, Orbit's widened ring), they stay out wherever the
-/// pointer goes, overshoots included, until it rests on another slot of
-/// the inner ring or returns to the centre. Past the ends of the presets
-/// nothing is picked, so letting go there does nothing.
+/// pointer goes, overshoots, the centre and (while dragging) beyond the
+/// wheel included, until it rests on another slot of the inner ring. Past
+/// the ends of the presets nothing is picked, so letting go there does
+/// nothing.
 public struct WheelTracker: Sendable {
     public let spec: WheelSpec
     /// Presets each position offers (before the style's limit).
@@ -370,8 +377,14 @@ public struct WheelTracker: Sendable {
         let a = WheelAngle.of(dx: dx, dy: dy)
         // Leaving the centre takes a little more than coming back.
         let dead = pick == nil ? spec.hub - 2 : spec.hub - 10
-        if spec.count == 0 || d <= dead {
+        if spec.count == 0 {
             clear()
+        } else if d <= dead {
+            // The centre picks nothing; open presets stay out.
+            pick = nil
+            cell = nil
+            outside = false
+            pending = nil
         } else {
             switch spec.style {
             case .dial:
@@ -419,6 +432,19 @@ public struct WheelTracker: Sendable {
         distance = 0
     }
 
+    /// The pointer left the wheel. Nothing is picked out there; with
+    /// `keepOpen` (still dragging) open presets stay out for when it comes
+    /// back.
+    public mutating func leave(keepOpen: Bool) {
+        guard keepOpen else {
+            reset()
+            return
+        }
+        pick = nil
+        cell = nil
+        pending = nil
+    }
+
     private mutating func clear() {
         pick = nil
         focus = nil
@@ -435,11 +461,19 @@ public struct WheelTracker: Sendable {
     /// The inner ring, for Orbit and Bloom. The ring follows the pointer;
     /// presets that are all out stay out, whatever the angle, until the
     /// pointer rests on another slot.
-    private mutating func innerRing(_ a: Double, _ time: Double) {
+    private mutating func innerRing(_ a: Double, _ d: Double, _ time: Double) {
         let previous = pick
         let wasOutside = outside
         outside = false
         cell = nil
+        // Under an open fan the outer edge of the ring leads to its petals:
+        // it stays with the fan's slot, so heading for a petal over a
+        // neighbour, however slowly, never swaps the fan away.
+        if spec.style == .bloom, let f = focus, d > (spec.labelRadius + spec.ringOuter) / 2, underFan(f, a) {
+            pick = WheelPick(slot: f)
+            pending = nil
+            return
+        }
         let p = ring(a)
         pick = p
         guard p != previous || wasOutside else { return }
@@ -458,7 +492,7 @@ public struct WheelTracker: Sendable {
     private mutating func orbit(_ d: Double, _ a: Double, _ time: Double) {
         let line = outside && hysteresis > 0 ? spec.ringOuter - 4 : spec.ringOuter + 6
         guard d > line else {
-            innerRing(a, time)
+            innerRing(a, d, time)
             return
         }
         let fromRing = !outside
@@ -544,7 +578,7 @@ public struct WheelTracker: Sendable {
         cell = nil
         let line = outside && hysteresis > 0 ? spec.ringOuter + 10 : spec.ringOuter + 22
         guard d > line else {
-            innerRing(a, time)
+            innerRing(a, d, time)
             return
         }
         outside = true
@@ -569,6 +603,17 @@ public struct WheelTracker: Sendable {
         // next move won't flip to another without a reason.
         focus = under
         pick = WheelPick(slot: under, preset: petal(under, a, current: 0) ?? 0)
+    }
+
+    /// Bloom: whether angle `a` is within the span of `slot`'s petals, half
+    /// a step past the outermost.
+    private func underFan(_ slot: Int, _ a: Double) -> Bool {
+        let n = presets[slot]
+        guard n > 1 else { return false }
+        let off = WheelAngle.diff(a, spec.angle(of: slot))
+        let offsets = (0..<n).map { WheelSpec.petalOffset($0, of: n) }
+        let margin = WheelSpec.petalStep / 2
+        return off >= offsets.min()! - margin && off <= offsets.max()! + margin
     }
 
     /// Bloom: the petal of `slot` nearest angle `a`, sticking to `current`

@@ -48,12 +48,15 @@ package final class WheelDriver {
         scheduleDwell()
     }
 
-    package func pointerLeft() {
+    /// The pointer left the wheel. With `keepOpen` (still dragging, the key
+    /// still held) open presets stay out; nothing is picked.
+    package func pointerLeft(keepOpen: Bool = false) {
         guard tracker.pick != nil || model.pick != nil || tracker.focus != nil || model.focus != nil
                 || model.proximity != 0 else { return }
-        tracker.reset()
+        tracker.leave(keepOpen: keepOpen)
         dwellWork?.cancel()
         model.proximity = 0
+        mouseOwnsPick = tracker.focus != nil
         sync(feedback: false)
     }
 

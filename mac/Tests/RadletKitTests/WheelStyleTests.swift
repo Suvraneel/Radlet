@@ -317,10 +317,65 @@ final class WheelStyleTests: XCTestCase {
         XCTAssertEqual(t.focus, 2)
         move(&t, 230, 130, 1.25)
         XCTAssertEqual(t.pick, WheelPick(slot: 2, preset: 2))
-        // The centre still cancels.
+        // The centre picks nothing, and the fan stays out.
         move(&t, 10, 180, 1.3)
         XCTAssertNil(t.pick)
+        XCTAssertEqual(t.focus, 2)
+        move(&t, 230, 135, 1.35)
+        XCTAssertEqual(t.pick, WheelPick(slot: 2, preset: 2))
+    }
+
+    func testHeadingSlowlyForASidePetalKeepsTheFan() {
+        // "More…" on the last diagonal, its neighbours with presets of their own.
+        let spec = WheelSpec(style: .bloom, count: 8)
+        var t = WheelTracker(spec: spec, presets: Array(repeating: 4, count: 8))
+        move(&t, spec.labelRadius, 315, 0)
+        XCTAssertTrue(t.tick(at: 0.3))
+        XCTAssertEqual(t.focus, 7)
+        // Out over the slot to the left, near the edge of the ring, resting
+        // there well past the dwell: still the same fan.
+        move(&t, 150, 280, 0.4)
+        XCTAssertEqual(t.pick, WheelPick(slot: 7))
+        XCTAssertNil(t.dwellDeadline)
+        XCTAssertFalse(t.tick(at: 2))
+        XCTAssertEqual(t.focus, 7)
+        // The petal straight out from that neighbour is the fan's last one.
+        move(&t, spec.petalRadius, 270, 2.1)
+        XCTAssertEqual(t.pick, WheelPick(slot: 7, preset: 3))
+        move(&t, spec.petalRadius, 0, 2.2)
+        XCTAssertEqual(t.pick, WheelPick(slot: 7, preset: 2))
+        // Resting on the neighbour itself, nearer the centre, still swaps.
+        move(&t, spec.labelRadius, 270, 2.3)
+        XCTAssertEqual(t.pick, WheelPick(slot: 6))
+        XCTAssertTrue(t.tick(at: 2.6))
+        XCTAssertEqual(t.focus, 6)
+    }
+
+    func testLeavingTheWheelWhileDraggingKeepsTheFan() {
+        let spec = WheelSpec(style: .bloom, count: 8)
+        var t = WheelTracker(spec: spec, presets: [0, 0, 0, 0, 0, 0, 0, 4])
+        move(&t, spec.labelRadius, 315, 0)
+        t.tick(at: 0.3)
+        move(&t, spec.petalRadius, 270, 0.4)
+        XCTAssertEqual(t.pick, WheelPick(slot: 7, preset: 3))
+        t.leave(keepOpen: true)
+        XCTAssertNil(t.pick)
+        XCTAssertEqual(t.focus, 7)
+        move(&t, spec.petalRadius + 30, 272, 0.6)
+        XCTAssertEqual(t.pick, WheelPick(slot: 7, preset: 3), "back in, the same petal")
+        t.leave(keepOpen: false)
+        XCTAssertNil(t.pick)
         XCTAssertNil(t.focus)
+    }
+
+    func testThePanelHasRoomToOvershoot() {
+        for style in WheelStyle.allCases {
+            let spec = WheelSpec(style: style, count: 8)
+            XCTAssertEqual(spec.panelSize - spec.size, 2 * WheelSpec.panelMargin)
+            // Past the outermost thing drawn, there's still wheel to let go on.
+            let outermost = style == .bloom ? spec.petalRadius + 51 : spec.rim
+            XCTAssertGreaterThanOrEqual(spec.panelSize / 2 - outermost, 80, "\(style)")
+        }
     }
 
     func testBloomFlickPicksTheFirstPresetOnAnEvenFan() {

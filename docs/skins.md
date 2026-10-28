@@ -17,7 +17,7 @@ Any skin works with any style.
 
 Pick a style in **Settings → Wheel**: Orbit and Bloom are listed under **Advanced**. Slots stay in the same places in every style, so switching never means relearning where things are.
 
-In both, a slot's presets stay out once they're showing, however far the pointer overshoots, until you rest on another slot of the inner ring or go back to the centre. Letting go past the ends of the presets does nothing.
+In both, a slot's presets stay out once they're showing, for as long as the drag goes on, until you rest on another slot of the inner ring. Overshooting, crossing the centre, briefly leaving the wheel, or heading for a side preset over a neighbouring slot (the outer edge of the ring under an open fan belongs to it) keeps them. Letting go past the ends of the presets does nothing.
 
 Some things work the same in every style:
 
