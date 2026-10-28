@@ -49,6 +49,40 @@ final class WheelStyleTests: XCTestCase {
         XCTAssertEqual(WheelLayout.fit(Array(slots.prefix(3)), max: 4, usage: ["s2": 9]).visible.map(\.id), ["s0", "s1", "s2"])
     }
 
+    func testLessKnownFormatsWaitBehindMore() {
+        func slot(_ id: String, more: Bool = false) -> Slot {
+            Slot(id: id, label: id, symbol: "photo", group: "convert", action: .null, more: more)
+        }
+        let slots = [slot("jpeg"), slot("png"), slot("pdf"), slot("tga", more: true), slot("qoi", more: true),
+                     slot("bmp", more: true)]
+        // Room for all six, but the rare three still wait behind "More…".
+        let laid = WheelLayout.fit(slots, max: 8, usage: [:])
+        XCTAssertEqual(laid.visible.map(\.id), ["jpeg", "png", "pdf", WheelLayout.moreID])
+        XCTAssertEqual(laid.overflow.map(\.id), ["tga", "qoi", "bmp"])
+        // Using one puts it first behind "More…", not on the wheel.
+        let used = WheelLayout.fit(slots, max: 8, usage: ["bmp": 4])
+        XCTAssertEqual(used.visible.map(\.id), ["jpeg", "png", "pdf", WheelLayout.moreID])
+        XCTAssertEqual(used.overflow.map(\.id), ["bmp", "tga", "qoi"])
+        // A small wheel: popular ones that don't fit come before the rare.
+        let small = WheelLayout.fit(slots, max: 3, usage: [:])
+        XCTAssertEqual(small.visible.map(\.id), ["jpeg", "png", WheelLayout.moreID])
+        XCTAssertEqual(small.overflow.map(\.id), ["pdf", "tga", "qoi", "bmp"])
+        // Just one rare slot: "More…" would only take its place.
+        let one = WheelLayout.fit(Array(slots.prefix(4)), max: 8, usage: [:])
+        XCTAssertEqual(one.visible.map(\.id), ["jpeg", "png", "pdf", "tga"])
+        // Only rare ones: shown as usual.
+        XCTAssertEqual(WheelLayout.fit(Array(slots.suffix(3)), max: 8, usage: [:]).visible.count, 3)
+    }
+
+    func testSlotsSayWhenTheyWaitBehindMore() throws {
+        let json = #"{"id":"to_tga","label":"TGA","symbol":"photo","group":"convert","action":{"kind":"convert"},"more":true}"#
+        let slot = try JSONDecoder().decode(Slot.self, from: Data(json.utf8))
+        XCTAssertTrue(slot.more)
+        XCTAssertTrue(slot.unlocked.more)
+        let plain = #"{"id":"to_png","label":"PNG","symbol":"photo","group":"convert","action":{"kind":"convert"}}"#
+        XCTAssertFalse(try JSONDecoder().decode(Slot.self, from: Data(plain.utf8)).more)
+    }
+
     /// The point where each label is drawn hits its own slot, for every
     /// style and size: ties drawing (y down) to hit-testing.
     func testEveryLabelHitsItsSlot() {

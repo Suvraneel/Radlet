@@ -36,9 +36,9 @@ public enum StepText {
     }
 
     /// Formats offered when adding a Convert step.
-    public static let convertTargets = ["jpeg", "png", "webp", "heic", "pdf", "gif", "tiff", "txt",
+    public static let convertTargets = ["jpeg", "png", "webp", "heic", "pdf", "svg", "gif", "tiff", "txt",
                                         "md", "html", "docx", "csv", "xlsx", "json",
-                                        "mp4", "mov", "webm", "mp3", "m4a", "wav", "svg"]
+                                        "mp4", "mov", "webm", "mp3", "m4a", "wav"]
 
     public static func describe(_ step: JSONValue) -> String {
         let op = step["op"]?.string ?? "?"

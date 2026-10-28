@@ -255,7 +255,7 @@ fn is_executable(p: &Path) -> bool {
 use Format::*;
 
 const IMAGE_TARGETS: &[Format] = &[
-    Jpeg, Png, Webp, Heic, Avif, Pdf, Tiff, Gif, Jxl, Bmp, Ico, Icns, Tga, Qoi,
+    Jpeg, Png, Webp, Heic, Pdf, Tiff, Gif, Avif, Ico, Icns, Bmp, Jxl, Tga, Qoi,
 ];
 /// A drawing keeps its transparency best as PNG; its PDF stays vector.
 const SVG_TARGETS: &[Format] = &[
@@ -264,7 +264,47 @@ const SVG_TARGETS: &[Format] = &[
 const AUDIO_TARGETS: &[Format] = &[Mp3, M4a, Wav, Flac, Aiff, Ogg, Opus, Wma];
 const VIDEO_TARGETS: &[Format] = &[Mp4, Mov, Webm, Mkv, Gif, Mp3, M4a, Avi, Wmv];
 
-/// The formats `from` can become, most useful first.
+/// The conversions most people want from `from`, most useful first; the
+/// first four take the wheel's quickest directions. Whatever else
+/// `targets` offers is for fewer people: those slots are marked `more` and
+/// wait behind "More…".
+fn popular_targets(from: Format) -> &'static [Format] {
+    match from {
+        // An animation is most often wanted as a video.
+        Gif => &[Mp4, Png, Jpeg, Webp, Mov, Pdf],
+        // Camera and design files go on to be edited or printed.
+        Raw | Psd => &[Jpeg, Png, Tiff, Pdf, Heic, Webp],
+        Svg => &[Png, Pdf, Jpeg, Webp],
+        Pdf => &[Docx, Jpeg, Png, Txt, Md],
+        Pptx | Key => &[Pdf, Key, Pptx, Docx, Txt, Md],
+        Numbers => &[Pdf, Xlsx, Csv],
+        Csv | Tsv => &[Xlsx, Csv, Json, Pdf, Md],
+        Xlsx | Xls | Ods | Sqlite => &[Xlsx, Csv, Pdf, Json, Md],
+        Json => &[Csv, Xlsx, Yaml],
+        Yaml | Toml | Xml => &[Json, Yaml],
+        Ttf | Otf | Woff | Woff2 => &[Woff2, Ttf, Otf],
+        f => match f.category() {
+            Category::Image => &[Jpeg, Png, Pdf, Webp, Heic, Svg, Txt],
+            Category::Audio => &[Mp3, M4a, Wav, Flac],
+            Category::Video => &[Mp4, Mov, Mp3, Gif, M4a, Webm],
+            Category::Document | Category::Text => &[Pdf, Docx, Md, Txt, Html],
+            Category::Subtitle => &[Srt, Vtt, Txt],
+            Category::Archive => &[Folder],
+            Category::Folder => &[Zip],
+            Category::Data | Category::Font => &[],
+        },
+    }
+}
+
+/// True when converting `from` to `to` is for fewer people, and waits
+/// behind "More…".
+pub fn is_rare(from: Format, to: Format) -> bool {
+    let popular = popular_targets(from);
+    !popular.is_empty() && !popular.contains(&to)
+}
+
+/// The formats `from` can become: the popular ones first, most useful
+/// first, then the rest (see `popular_targets`).
 pub fn targets(from: Format, caps: &Capabilities) -> Vec<Format> {
     let mut out: Vec<Format> = Vec::new();
     if caps.can_decode_raster(from) {
@@ -279,14 +319,9 @@ pub fn targets(from: Format, caps: &Capabilities) -> Vec<Format> {
                 .filter(|&t| t == Pdf || caps.can_encode_raster(t)),
         );
     }
-    // Pictures trace into drawings: next to PDF, so a drawing gets a slot
-    // on the wheel rather than the bottom of "More…".
+    // Pictures trace into drawings.
     if traces(from, caps) {
-        let at = out
-            .iter()
-            .position(|&t| t == Pdf)
-            .map_or(out.len(), |i| i + 1);
-        out.insert(at, Svg);
+        out.push(Svg);
     }
     // Text recognition reads images too.
     if caps.vision.is_some() && caps.can_decode_raster(from) && from != Svg {
@@ -355,6 +390,9 @@ pub fn targets(from: Format, caps: &Capabilities) -> Vec<Format> {
             true
         }
     });
+    // Stable: the rest keep the order they were added in.
+    let popular = popular_targets(from);
+    out.sort_by_key(|t| popular.iter().position(|p| p == t).unwrap_or(popular.len()));
     out
 }
 
@@ -383,7 +421,14 @@ pub fn selection_targets(formats: &[Option<Format>], caps: &Capabilities) -> Vec
         }
     }
     candidates.retain(|&t| known.iter().all(|&f| f == t || can_convert(f, t, caps)));
+    // Popular for every file first, keeping the first file's order.
+    candidates.sort_by_key(|&t| selection_rare(&known, t));
     candidates
+}
+
+/// True when `to` is for fewer people for some file in the selection.
+fn selection_rare(known: &[Format], to: Format) -> bool {
+    known.iter().any(|&f| f != to && is_rare(f, to))
 }
 
 /// Which formats a step accepts, used for tools and recipe validation.
@@ -531,6 +576,10 @@ pub struct Slot {
     /// The app offers to get it, then runs `action`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub needs: Option<Need>,
+    /// A conversion fewer people want (a less known format): the app keeps
+    /// it behind "More…" even when the wheel has room.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub more: bool,
 }
 
 /// One preset of a slot: a short label for the wheel ("Q 95", "50 %"), a
@@ -716,6 +765,7 @@ pub fn add_shortcuts(
             window: None,
             variants: Vec::new(),
             needs: None,
+            more: false,
         });
     }
 }
@@ -758,6 +808,7 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
             window: None,
             variants,
             needs: None,
+            more: known.as_deref().is_some_and(|k| selection_rare(k, t)),
         });
     }
 
@@ -772,6 +823,7 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
             window,
             variants: Vec::new(),
             needs: None,
+            more: false,
         };
     let pdfs = every(&|f| f == Pdf);
     let single = formats.len() == 1;
@@ -1589,6 +1641,7 @@ pub fn wheel(formats: &[Option<Format>], caps: &Capabilities, recipes: &[Recipe]
                     window: None,
                     variants: Vec::new(),
                     needs: None,
+                    more: false,
                 });
             }
         }
@@ -1629,6 +1682,7 @@ pub fn inside_slots(inside: &[Format], caps: &Capabilities) -> Vec<Slot> {
         window: None,
         variants: Vec::new(),
         needs: None,
+        more: false,
     };
     let image = |f: Format| inside_kind(Category::Image, f, caps);
     for to in [Jpeg, Png, Webp] {
@@ -1701,6 +1755,7 @@ pub fn wheel_for(
                 window: Some("unzip_password"),
                 variants: Vec::new(),
                 needs: None,
+                more: false,
             },
         );
     }
@@ -1996,7 +2051,7 @@ mod tests {
         };
         assert_eq!(
             targets(Pdf, &with_pdfium),
-            vec![Docx, Jpeg, Png, Webp, Tiff, Txt, Md, Html, Rtf]
+            vec![Docx, Jpeg, Png, Txt, Md, Webp, Tiff, Html, Rtf]
         );
         // Several PDFs: split each, combine, but no single-file page editor.
         let w = wheel(&[Some(Pdf), Some(Pdf)], &Capabilities::none(), &[]);
@@ -2253,13 +2308,13 @@ mod tests {
         let w = wheel(&[Some(Md)], &caps, &[]);
         assert_eq!(
             ids(&w.convert),
-            ["to_pdf", "to_html", "to_docx", "to_txt", "to_rtf", "to_epub"]
+            ["to_pdf", "to_docx", "to_txt", "to_html", "to_rtf", "to_epub"]
         );
         assert_eq!(
             ids(&w.tools),
             ["word_count", "copy_text", "clean_text", "checksum"]
         );
-        assert_eq!(w.convert[2].label, "Word");
+        assert_eq!(w.convert[1].label, "Word");
 
         // Several documents: combine into one, or into a PDF.
         let w = wheel(&[Some(Docx), Some(Md)], &caps, &[]);
@@ -2285,11 +2340,84 @@ mod tests {
         assert!(!ids(&w.tools).contains(&"combine_text"));
     }
 
+    /// A Mac with everything Radlet can use.
+    fn full_mac() -> Capabilities {
+        let p = || Some(std::path::PathBuf::from("/x/tool"));
+        Capabilities {
+            ffmpeg: p(),
+            ffprobe: p(),
+            sips: p(),
+            pdfium: p(),
+            vision: p(),
+            avfoundation: true,
+            textutil: p(),
+            bsdtar: p(),
+            keynote: true,
+            pages: true,
+            numbers: true,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn popular_conversions_come_first_and_the_rest_wait_behind_more() {
+        let caps = full_mac();
+        let ids = |w: &Wheel, more: bool| {
+            w.convert
+                .iter()
+                .filter(|s| s.more == more)
+                .map(|s| s.id.clone())
+                .collect::<Vec<_>>()
+        };
+        for &f in Format::ALL {
+            let w = wheel(&[Some(f)], &caps, &[]);
+            let first_rare = w.convert.iter().position(|s| s.more);
+            if let Some(at) = first_rare {
+                assert!(
+                    w.convert[at..].iter().all(|s| s.more),
+                    "{f:?}: popular before the rest"
+                );
+                assert!(at > 0, "{f:?}: something popular on the wheel");
+            }
+            assert!(
+                ids(&w, false).len() <= 7,
+                "{f:?}: the popular ones fit an 8-slot wheel beside More…"
+            );
+        }
+        let photo = wheel(&[Some(Jpeg)], &caps, &[]);
+        assert_eq!(
+            ids(&photo, false),
+            ["to_png", "to_pdf", "to_webp", "to_heic", "to_svg", "to_txt"]
+        );
+        assert!(ids(&photo, true).starts_with(&["to_tiff".into(), "to_gif".into()]));
+        assert!(ids(&photo, true).contains(&"to_qoi".to_string()));
+        let video = wheel(&[Some(Mov)], &caps, &[]);
+        assert_eq!(ids(&video, true), ["to_mkv", "to_avi", "to_wmv"]);
+        assert_eq!(ids(&wheel(&[Some(Gif)], &caps, &[]), false)[0], "to_mp4");
+        // Popular only when it is for every file in the selection.
+        let mixed = wheel(&[Some(Png), Some(Jpeg)], &caps, &[]);
+        assert!(ids(&mixed, false).contains(&"to_png".to_string()));
+        let gif_too = wheel(&[Some(Png), Some(Gif)], &caps, &[]);
+        assert!(ids(&gif_too, true).contains(&"to_heic".to_string()));
+        // What a Mac could get is ranked the same way.
+        let mut mac = full_mac();
+        mac.ffmpeg = None;
+        mac.ffprobe = None;
+        let mut w = wheel(&[Some(Mov)], &mac, &[]);
+        add_installable(&mut w, &[Some(Mov)], &mac, false);
+        let avi = w.convert.iter().find(|s| s.id == "to_avi").unwrap();
+        assert!(avi.more && avi.needs == Some(Need::Ffmpeg));
+        // Sent only when set.
+        let json = serde_json::to_value(&photo.convert).unwrap();
+        assert!(json[0].get("more").is_none());
+        assert_eq!(json.as_array().unwrap().last().unwrap()["more"], true);
+    }
+
     #[test]
     fn svg_is_an_image() {
         let caps = Capabilities::none();
         let t = targets(Svg, &caps);
-        assert_eq!(&t[..4], [Png, Jpeg, Webp, Pdf]);
+        assert_eq!(&t[..4], [Png, Pdf, Jpeg, Webp]);
         assert!(t.contains(&Ico) && !t.contains(&Heic) && !t.contains(&Txt));
         let w = wheel(&[Some(Svg)], &caps, &[]);
         check_variants(&w, &[Svg], &caps);
@@ -2329,12 +2457,12 @@ mod tests {
     #[test]
     fn data_files() {
         let caps = Capabilities::none();
-        assert_eq!(targets(Csv, &caps), [Xlsx, Json, Tsv, Md, Html, Pdf]);
-        assert_eq!(targets(Json, &caps), [Csv, Xlsx, Tsv, Yaml, Toml, Xml]);
-        assert_eq!(targets(Xlsx, &caps), [Csv, Json, Tsv, Pdf, Html, Md]);
+        assert_eq!(targets(Csv, &caps), [Xlsx, Json, Pdf, Md, Tsv, Html]);
+        assert_eq!(targets(Json, &caps), [Csv, Xlsx, Yaml, Tsv, Toml, Xml]);
+        assert_eq!(targets(Xlsx, &caps), [Csv, Pdf, Json, Md, Tsv, Html]);
         assert_eq!(targets(Yaml, &caps), [Json, Toml]);
         assert_eq!(targets(Xml, &caps), [Json]);
-        assert_eq!(targets(Xls, &caps), [Xlsx, Csv, Json, Tsv, Pdf, Html, Md]);
+        assert_eq!(targets(Xls, &caps), [Xlsx, Csv, Pdf, Json, Md, Tsv, Html]);
         assert_eq!(targets(Ods, &caps)[0], Xlsx);
         let w = wheel(&[Some(Csv), Some(Xlsx)], &caps, &[]);
         assert!(ids(&w.tools).contains(&"combine_workbook"));
@@ -2353,7 +2481,7 @@ mod tests {
         let w = wheel(&[Some(Csv), Some(Tsv)], &caps, &[]);
         assert_eq!(
             ids(&w.convert),
-            ["to_xlsx", "to_json", "to_tsv", "to_md", "to_html", "to_pdf", "to_csv"]
+            ["to_xlsx", "to_json", "to_pdf", "to_md", "to_csv", "to_tsv", "to_html"]
         );
         assert!(
             !ids(&w.tools).contains(&"clean_text"),
@@ -2473,11 +2601,8 @@ mod tests {
         );
         assert_eq!(
             targets(Gif, &mac),
-            [Jpeg, Png, Webp, Avif, Pdf, Svg, Tiff, Jxl, Bmp, Ico, Icns, Tga, Qoi, Txt, Mp4, Mov]
+            [Mp4, Png, Jpeg, Webp, Mov, Pdf, Tiff, Avif, Ico, Icns, Bmp, Jxl, Tga, Qoi, Svg, Txt]
         );
-        let photo = wheel(&[Some(Jpeg)], &mac, &[]);
-        let at = photo.convert.iter().position(|s| s.id == "to_svg").unwrap();
-        assert!(at < 7, "SVG gets a slot on an 8-slot wheel, not \"More…\"");
         let clips = ids(&wheel(&[Some(Mov), Some(Mp4)], &mac, &[]));
         assert!(clips.contains(&"join_media".to_string()), "{clips:?}");
         let subtitled = ids(&wheel(&[Some(Mov), Some(Srt)], &mac, &[]));

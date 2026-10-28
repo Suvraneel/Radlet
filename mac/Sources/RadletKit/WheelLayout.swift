@@ -18,7 +18,28 @@ public enum WheelLayout {
     /// wheel. They keep the engine's order (most useful first), so a slot
     /// never moves just because another got used more; the rest go behind
     /// "More…", most used first.
+    ///
+    /// Slots marked `more` (conversions to formats fewer people want) wait
+    /// behind "More…" even when there's room, unless there's only one of
+    /// them: "More…" would take its place anyway.
     public static func fit(_ slots: [Slot], max: Int, usage: [String: Int]) -> (visible: [Slot], overflow: [Slot]) {
+        let rare = slots.indices.filter { slots[$0].more }
+        let popular = slots.indices.filter { !slots[$0].more }
+        guard max > 1, rare.count >= 2, !popular.isEmpty else { return byUse(slots, max: max, usage: usage) }
+        let uses: (Int) -> Int = { usage[slots[$0].id] ?? 0 }
+        let ranked = popular.sorted { a, b in uses(a) != uses(b) ? uses(a) > uses(b) : a < b }
+        let keep = Set(ranked.prefix(max - 1))
+        let shown = popular.filter { keep.contains($0) }.map { slots[$0] }
+        // Most used first; on a tie, popular ones before the rest.
+        let rest = (Array(ranked.dropFirst(max - 1)) + rare).sorted { a, b in
+            if uses(a) != uses(b) { return uses(a) > uses(b) }
+            if slots[a].more != slots[b].more { return !slots[a].more }
+            return a < b
+        }
+        return (shown + [moreSlot], rest.map { slots[$0] })
+    }
+
+    private static func byUse(_ slots: [Slot], max: Int, usage: [String: Int]) -> (visible: [Slot], overflow: [Slot]) {
         guard max > 1, slots.count > max else { return fit(slots, max: max) }
         // By position, not id: two recipes can share a name.
         let ranked = slots.indices.sorted { a, b in

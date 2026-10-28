@@ -112,9 +112,12 @@ public struct Slot: Codable, Identifiable, Equatable, Sendable {
     /// Set when this can't run until something is got (see `Need`): the
     /// wheel marks it, and choosing it offers the install first.
     public let needs: String?
+    /// A conversion fewer people want (a less known format): it waits
+    /// behind "More…" even when the wheel has room.
+    public let more: Bool
 
     public init(id: String, label: String, symbol: String, group: String, action: JSONValue, window: String? = nil,
-                variants: [SlotVariant] = [], needs: String? = nil) {
+                variants: [SlotVariant] = [], needs: String? = nil, more: Bool = false) {
         self.id = id
         self.label = label
         self.symbol = symbol
@@ -123,10 +126,11 @@ public struct Slot: Codable, Identifiable, Equatable, Sendable {
         self.window = window
         self.variants = variants
         self.needs = needs
+        self.more = more
     }
 
     private enum CodingKeys: String, CodingKey {
-        case id, label, symbol, group, action, window, variants, needs
+        case id, label, symbol, group, action, window, variants, needs, more
     }
 
     public init(from decoder: Decoder) throws {
@@ -139,6 +143,7 @@ public struct Slot: Codable, Identifiable, Equatable, Sendable {
         window = try c.decodeIfPresent(String.self, forKey: .window)
         variants = try c.decodeIfPresent([SlotVariant].self, forKey: .variants) ?? []
         needs = try c.decodeIfPresent(String.self, forKey: .needs)
+        more = try c.decodeIfPresent(Bool.self, forKey: .more) ?? false
     }
 
     /// What this needs first, when it's something the app knows how to get.
@@ -146,12 +151,13 @@ public struct Slot: Codable, Identifiable, Equatable, Sendable {
 
     /// The same slot, ready to run once what it needed is there.
     public var unlocked: Slot {
-        Slot(id: id, label: label, symbol: symbol, group: group, action: action, window: window, variants: variants)
+        Slot(id: id, label: label, symbol: symbol, group: group, action: action, window: window, variants: variants,
+             more: more)
     }
 
     /// The same slot running a different action, without its window.
     public func with(action: JSONValue) -> Slot {
-        Slot(id: id, label: label, symbol: symbol, group: group, action: action, window: nil, needs: needs)
+        Slot(id: id, label: label, symbol: symbol, group: group, action: action, window: nil, needs: needs, more: more)
     }
 
     /// One of this slot's presets as a slot of its own, for running and
