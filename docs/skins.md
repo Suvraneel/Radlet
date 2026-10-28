@@ -176,3 +176,12 @@ It draws the wheel with the app's own code (`mac/Sources/RadletUI`), so what you
 - Files over 64 KB, files that aren't UTF-8 text, and anything that isn't a regular file are skipped. A `var()` that loops, names nothing, or grows past a kilobyte is reported and skipped.
 - Skins hold only colours, sizes, keywords and font names: no paths, URLs, images or code. A skin from anywhere is safe to drop in.
 - Please don't ship skins that copy a game's logos, artwork or licensed fonts. A genre's mood is fair game; someone else's trademarks aren't.
+
+## Sharing skins
+
+Choose one of your skins in **Settings → Wheel**, then **Share**:
+
+- **Copy Link** puts a `radlet://add/skin?…` link on the clipboard. Anyone with Radlet who opens it sees the skin on a live wheel and can add it.
+- **Save as File…** saves a `.radletskin` file, which opens in Radlet the same way.
+
+Either way, what's shared is the skin's name, author and base, plus only the tokens that differ from that base. Adding a shared skin writes it afresh into the Skins folder with Radlet's own tokens only; lines Radlet doesn't understand are left out, and a name you already have gets a number. Links hold the skin itself, so they work offline and never fetch anything.

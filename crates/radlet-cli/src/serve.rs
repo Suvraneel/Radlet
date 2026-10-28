@@ -77,6 +77,18 @@ struct RecipesParams {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct TextParams {
+    text: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RecipeParams {
+    recipe: Recipe,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct SaveRecipeParams {
     recipe: Recipe,
     #[serde(default)]
@@ -242,6 +254,22 @@ pub fn serve(
                         .collect();
                     send(&out, &json!({ "id": id, "result": { "reports": reports } }));
                 }));
+            }
+            // A loadout shared as a file or link: checked, never saved here.
+            "parse_recipe" => {
+                let p = params!(TextParams);
+                match Recipe::from_shared(&p.text) {
+                    Ok(r) => send(&out, &json!({ "id": id, "result": { "recipe": r } })),
+                    Err(e) => send(&out, &error_response(&id, e.code(), e.to_string())),
+                }
+            }
+            // The text to share a loadout as.
+            "recipe_toml" => {
+                let p = params!(RecipeParams);
+                match p.recipe.validate().and_then(|()| p.recipe.to_toml()) {
+                    Ok(text) => send(&out, &json!({ "id": id, "result": { "text": text } })),
+                    Err(e) => send(&out, &error_response(&id, e.code(), e.to_string())),
+                }
             }
             "save_recipe" => {
                 let p = params!(SaveRecipeParams);

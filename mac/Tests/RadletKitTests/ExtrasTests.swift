@@ -493,3 +493,74 @@ final class NeedsTests: XCTestCase {
         XCTAssertNil(elsewhere.releasePage)
     }
 }
+
+final class SharedItemTests: XCTestCase {
+    let toml = """
+    name = "Web-ready image"
+    description = "Longest side 2048 px, WebP at quality 80, no metadata"
+
+    [[steps]]
+    op = "resize"
+    max = 2048
+    """
+
+    func testLinksRoundTrip() throws {
+        let item = try XCTUnwrap(SharedItem(kind: .loadout, text: toml))
+        let link = item.link
+        XCTAssertEqual(link.scheme, "radlet")
+        XCTAssertTrue(link.absoluteString.hasPrefix("radlet://add/loadout?v=1&data="), link.absoluteString)
+        XCTAssertFalse(link.absoluteString.contains("+") || link.absoluteString.contains("/data"))
+        XCTAssertEqual(try SharedItem.parse(link: link).get(), item)
+        let skin = try XCTUnwrap(SharedItem(kind: .skin, text: ":root { --name: \"Mint\"; --accent: #3FD9A3; }\n"))
+        XCTAssertEqual(try SharedItem.parse(link: skin.link).get(), skin)
+    }
+
+    func testBadLinksSayWhy() {
+        func problem(_ s: String) -> String? {
+            guard let url = URL(string: s), case .failure(let p) = SharedItem.parse(link: url) else { return nil }
+            return p.message
+        }
+        XCTAssertNotNil(problem("https://example.com/add/loadout?data=eA"))
+        XCTAssertTrue(problem("radlet://add/theme?data=eA")?.contains("doesn't have") == true)
+        XCTAssertTrue(problem("radlet://add/loadout?v=2&data=eA")?.contains("newer Radlet") == true)
+        XCTAssertTrue(problem("radlet://add/loadout?v=1")?.contains("damaged") == true)
+        XCTAssertTrue(problem("radlet://add/loadout?v=1&data=*not*base64*")?.contains("damaged") == true)
+        // Empty, and too big.
+        XCTAssertTrue(problem("radlet://add/loadout?data=ICAg")?.contains("empty") == true)
+        let huge = SharedItem.base64URL(Data(String(repeating: "x", count: 20_000).utf8))
+        XCTAssertNotNil(problem("radlet://add/loadout?data=\(huge)"))
+    }
+
+    func testPaddedAndSpacedLinksStillOpen() throws {
+        let item = try XCTUnwrap(SharedItem(kind: .loadout, text: "name = \"a?b>c\"\n"))
+        var standard = Data(item.text.utf8).base64EncodedString()
+        XCTAssertTrue(standard.contains("+") || standard.contains("/") || standard.hasSuffix("="))
+        standard = standard.replacingOccurrences(of: "+", with: " ")
+        let url = try XCTUnwrap(URL(string: "radlet://add/loadout?data=\(standard.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? "")"))
+        XCTAssertEqual(try SharedItem.parse(link: url).get(), item)
+    }
+
+    func testFiles() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let item = try XCTUnwrap(SharedItem(kind: .loadout, text: toml))
+        XCTAssertEqual(item.fileName(for: "Web/ready: image"), "Web-ready- image.radletloadout")
+        XCTAssertEqual(item.fileName(for: "  "), "Loadout.radletloadout")
+        let file = dir.appendingPathComponent(item.fileName(for: "Web-ready image"))
+        try toml.write(to: file, atomically: true, encoding: .utf8)
+        XCTAssertEqual(SharedItem.kind(ofFile: file), .loadout)
+        XCTAssertEqual(try SharedItem.read(file: file).get(), item)
+        XCTAssertEqual(SharedItem.kind(ofFile: dir.appendingPathComponent("Mint.RADLETSKIN")), .skin)
+        XCTAssertNil(SharedItem.kind(ofFile: dir.appendingPathComponent("notes.toml")))
+        let big = dir.appendingPathComponent("big.radletloadout")
+        try String(repeating: "#", count: 17_000).write(to: big, atomically: true, encoding: .utf8)
+        XCTAssertThrowsError(try SharedItem.read(file: big).get())
+    }
+
+    func testImportedNamesDontClash() {
+        XCTAssertEqual(ImportNaming.free("Web-ready image", taken: ["Email-friendly photo"]), "Web-ready image")
+        XCTAssertEqual(ImportNaming.free("Web-ready image", taken: ["web-ready image", "Web-ready image 2"]),
+                       "Web-ready image 3")
+    }
+}

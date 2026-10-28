@@ -36,6 +36,13 @@ pub struct Recipe {
 
 const MAX_STEPS: usize = 16;
 
+/// The extension of a loadout shared as a file (the same TOML as the
+/// loadouts folder holds), so it opens in Radlet rather than an editor.
+pub const SHARED_EXTENSION: &str = "radletloadout";
+
+/// The largest shared loadout read, in bytes: far more than 16 steps need.
+pub const MAX_SHARED_BYTES: usize = 16 * 1024;
+
 /// A recipe file that couldn't be read, and why.
 pub type BrokenRecipe = (PathBuf, String);
 
@@ -45,6 +52,17 @@ impl Recipe {
             toml::from_str(src).map_err(|e| Error::Invalid(format!("loadout: {}", e.message())))?;
         r.validate()?;
         Ok(r)
+    }
+
+    /// Reads a loadout someone shared, as a file or a link: the same TOML,
+    /// with a size limit since it comes from outside.
+    pub fn from_shared(src: &str) -> Result<Recipe> {
+        if src.len() > MAX_SHARED_BYTES {
+            return Err(Error::TooLarge(
+                "this loadout is too big to be one Radlet made".into(),
+            ));
+        }
+        Recipe::from_toml(src)
     }
 
     pub fn to_toml(&self) -> Result<String> {
@@ -297,6 +315,9 @@ impl Recipe {
         if p.extension().is_some_and(|e| e == "toml") && p.is_file() {
             return Recipe::from_toml(&std::fs::read_to_string(p)?);
         }
+        if p.extension().is_some_and(|e| e == SHARED_EXTENSION) && p.is_file() {
+            return Recipe::from_shared(&std::fs::read_to_string(p)?);
+        }
         let q = query.to_lowercase();
         recipes
             .iter()
@@ -309,6 +330,31 @@ impl Recipe {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shared_loadouts_are_read_with_care() {
+        let r = &Recipe::builtin()[0];
+        let text = r.to_toml().unwrap();
+        assert_eq!(&Recipe::from_shared(&text).unwrap(), r);
+        let padded = format!("{text}\n# {}\n", "x".repeat(MAX_SHARED_BYTES));
+        assert!(matches!(
+            Recipe::from_shared(&padded),
+            Err(Error::TooLarge(_))
+        ));
+        assert!(Recipe::from_shared("name = \"x\"\nsteps = []\n").is_err());
+        assert!(
+            Recipe::from_shared(
+                "name = \"x\"\nrun = \"rm -rf\"\n[[steps]]\nop = \"strip_metadata\"\n"
+            )
+            .is_err(),
+            "unknown keys refused"
+        );
+        // A shared file is found by its path, like a .toml one.
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join(format!("Web.{SHARED_EXTENSION}"));
+        std::fs::write(&file, &text).unwrap();
+        assert_eq!(&Recipe::find(file.to_str().unwrap(), &[]).unwrap(), r);
+    }
 
     #[test]
     fn toml_round_trip() {

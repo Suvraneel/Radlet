@@ -251,6 +251,37 @@ final class RecipeLibrary: ObservableObject {
         }
     }
 
+    /// Shares the loadout shown, as it is in the editor, as a link or a
+    /// file anyone with Radlet can add.
+    func share(asFile: Bool) {
+        guard let draft else { return }
+        let recipe: JSONValue
+        switch draft.built {
+        case .failure(let p):
+            draft.error = p.message
+            return
+        case .success(let r):
+            recipe = r
+        }
+        let name = draft.name.trimmingCharacters(in: .whitespaces)
+        Task {
+            do {
+                let result = try await EngineClient.shared.request("recipe_toml", ["recipe": recipe])
+                guard let text = result["text"]?.string, let item = SharedItem(kind: .loadout, text: text) else {
+                    draft.error = "This loadout couldn't be shared."
+                    return
+                }
+                if asFile {
+                    ShareExport.saveFile(item, name: name)
+                } else {
+                    ShareExport.copyLink(item, name: name)
+                }
+            } catch {
+                draft.error = error.localizedDescription
+            }
+        }
+    }
+
     var canDelete: Bool { selectedItem?.path != nil }
 
     func deleteSelected() {
@@ -320,6 +351,17 @@ struct RecipesSettings: View {
                     Button(action: library.duplicate) { Image(systemName: "plus.square.on.square") }
                         .disabled(library.draft == nil)
                         .help("Duplicate")
+                    Menu {
+                        Button("Copy Link") { library.share(asFile: false) }
+                        Button("Save as File…") { library.share(asFile: true) }
+                    } label: {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .disabled(library.draft == nil)
+                    .help("Share as a link or a file; anyone with Radlet can add it")
                     Button(action: library.revealFolder) { Image(systemName: "folder") }
                         .help("Show in Finder")
                 }

@@ -34,15 +34,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated { AppState.shared.start(showWelcome: true) }
     }
 
-    /// Finder's Open With → Radlet. On a cold launch this arrives before
+    /// Finder's Open With → Radlet, shared loadout and skin files, and
+    /// radlet:// links. On a cold launch this arrives before
     /// applicationDidFinishLaunching, so start here, without the welcome
     /// window (it would steal the keyboard from the wheel).
     func application(_ application: NSApplication, open urls: [URL]) {
-        let files = urls.filter(\.isFileURL)
-        guard !files.isEmpty else { return }
-        Log.app("open with: \(describeFiles(files))")
         MainActor.assumeIsolated {
             AppState.shared.start(showWelcome: false)
+            // Loadouts and skins open their own windows; other files go to
+            // the wheel.
+            let files = SharedImport.shared.take(urls).filter(\.isFileURL)
+            guard !files.isEmpty else { return }
+            Log.app("open with: \(describeFiles(files))")
             AppState.shared.showWheel(for: files, mode: .convert)
         }
     }

@@ -68,6 +68,18 @@ final class SkinStore: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting([url])
     }
 
+    /// Shares the chosen skin (one of yours) as a link or a file: just its
+    /// name and the tokens that differ from its base.
+    func share(asFile: Bool) {
+        guard let file = selected, !file.skin.isBuiltIn,
+              let item = SharedItem(kind: .skin, text: file.skin.compactCSS()) else { return }
+        if asFile {
+            ShareExport.saveFile(item, name: file.skin.name)
+        } else {
+            ShareExport.copyLink(item, name: file.skin.name)
+        }
+    }
+
     func editSelected() {
         guard let url = selected?.url else { return }
         NSWorkspace.shared.open(url)
@@ -192,8 +204,15 @@ struct WheelSettings: View {
                     .disabled(skins.selected?.url == nil)
                 Button("Open Skins Folder") { skins.openFolder() }
                 Button("Reload") { skins.reload() }
+                Menu("Share") {
+                    Button("Copy Link") { skins.share(asFile: false) }
+                    Button("Save as File…") { skins.share(asFile: true) }
+                }
+                .fixedSize()
+                .disabled(skins.selected.map(\.skin.isBuiltIn) ?? true)
+                .help("Share this skin as a link or a file; anyone with Radlet can add it")
             }
-            Text("A skin is a CSS file of custom properties, such as --accent: #C5F05C. Change one in any text editor and save; Radlet picks it up the next time the wheel opens.")
+            Text("A skin is a CSS file of custom properties, such as --accent: #C5F05C. Change one in any text editor and save; Radlet picks it up the next time the wheel opens. Skins shared with you open in Radlet from a link or a .radletskin file.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

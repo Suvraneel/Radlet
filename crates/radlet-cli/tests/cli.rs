@@ -478,6 +478,22 @@ fn serve_protocol_end_to_end() {
     h.send(json!({"id": 12, "method": "save_recipe", "params": {"recipes_dir": recipes, "recipe": {"name": "Bad", "steps": []}}}));
     assert_eq!(h.next()["error"]["code"], "invalid");
 
+    // Sharing: a loadout becomes text, and shared text is checked before
+    // anything is saved.
+    h.send(json!({"id": 13, "method": "recipe_toml", "params": {"recipe": {"name": "Half size", "steps": [{"op": "resize", "percent": 50}]}}}));
+    let text = h.next()["result"]["text"].as_str().unwrap().to_string();
+    assert!(text.contains("name = \"Half size\""), "{text}");
+    h.send(json!({"id": 14, "method": "parse_recipe", "params": {"text": text}}));
+    let parsed = h.next();
+    assert_eq!(
+        parsed["result"]["recipe"]["steps"][0]["percent"], 50,
+        "{parsed}"
+    );
+    h.send(json!({"id": 15, "method": "parse_recipe", "params": {"text": "name = \"x\"\n[[steps]]\nop = \"melt\"\n"}}));
+    assert_eq!(h.next()["error"]["code"], "invalid");
+    h.send(json!({"id": 16, "method": "recipe_toml", "params": {"recipe": {"name": " ", "steps": [{"op": "strip_metadata"}]}}}));
+    assert_eq!(h.next()["error"]["code"], "invalid");
+
     // Errors are answered, not fatal.
     h.send_raw("{not json");
     assert_eq!(h.next()["error"]["code"], "bad_request");

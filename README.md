@@ -119,6 +119,7 @@ Tools ending in "…" open a window first, with a live preview where it helps.
 - **Replace originals** (Settings → Output, off by default): originals go to the Trash, and a same-format result takes the original's name.
 - **Watch folders** (Settings → Watch): files added to a folder are converted, compressed or run through a loadout automatically, into a `Converted` folder inside.
 - **Loadouts** (Control wheel): your own sets of steps, like a game loadout for your files. **Save as Loadout…** in a tool window keeps its settings, and **Settings → Loadouts** edits them.
+- **Share loadouts and skins.** The share button in **Settings → Loadouts**, and **Share** under **Settings → Wheel → Skin**, copy a `radlet://` link or save a `.radletloadout` or `.radletskin` file. Opening one shows what it holds (a loadout's steps in words, a skin on a live wheel) and adds it only if you say so; nothing runs by itself, and a name already taken gets a number.
 - **What a conversion needs, offered.** Slots that need something this Mac doesn't have yet show a badge: FFmpeg for more audio and video, Keynote, Pages or Numbers for their documents. Choosing one explains what's missing and helps get it: Radlet installs FFmpeg with Homebrew (or, once one is published, its own FFmpeg build), and opens the App Store page for Apple's free apps. Anything installed meanwhile, in Terminal or the App Store, is found the next time you choose it. A job that needs a speech or translation language download offers to open the right settings pane.
 - **Other ways in.** Finder's right-click **Services → Convert with Radlet** (or **Radlet Tools**), **Open With → Radlet**, **⌃⌥V** in Finder for the selected files, and the menu bar (**Convert Files…**, **Tools for Files…**, **Run a Loadout…**, **Convert Finder Selection**). Each opens the wheel for the keyboard: arrow keys to choose, Return to run, Tab to switch wheels, Escape to cancel.
 - **Command line, Shortcuts and AI agents.** The same engine is the `radlet` command. `radlet mcp` is a Model Context Protocol server, so Claude and other AI apps can inspect, convert, compress, clean, subtitle and run loadouts on your files, locally. Password tools aren't offered to agents. See [Reference](#reference).
@@ -413,6 +414,8 @@ JSON, one object per line. Every request gets exactly one reply with the same `i
 | `recipes` | `recipes_dir?` | `recipes` (built-ins marked `builtin`, the user's with their `path`), `errors` |
 | `privacy` | `paths` | `reports`: per file, `findings` (`kind`, `label`, `detail`, `removable`, `latitude`/`longitude` for places) or an `error` |
 | `save_recipe` | `recipe`, `recipes_dir?`, `replace?` | `path`. A new file never overwrites; `replace` rewrites one loadout file in the loadouts folder. |
+| `parse_recipe` | `text` | `recipe`: a shared loadout (TOML, at most 16 KB) checked and read, not saved |
+| `recipe_toml` | `recipe` | `text`: the loadout as TOML, to share as a file or link |
 | `shutdown` | none | `{}`, then the helper exits |
 
 </details>

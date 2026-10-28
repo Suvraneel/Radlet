@@ -8,6 +8,30 @@
 	<array>
 		<dict>
 			<key>CFBundleTypeName</key>
+			<string>Radlet Loadout</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.suvraneel.radlet.loadout</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Radlet Skin</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.suvraneel.radlet.skin</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
 			<string>Any file</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
@@ -31,6 +55,17 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>0.2.0</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.suvraneel.radlet.share</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>radlet</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>
@@ -43,6 +78,43 @@
 	<true/>
 	<key>NSHumanReadableCopyright</key>
 	<string>© 2026 Suvraneel Bhuin</string>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.suvraneel.radlet.loadout</string>
+			<key>UTTypeDescription</key>
+			<string>Radlet Loadout</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.utf8-plain-text</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>radletloadout</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.suvraneel.radlet.skin</string>
+			<key>UTTypeDescription</key>
+			<string>Radlet Skin</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.utf8-plain-text</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>radletskin</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 	<key>NSServices</key>
 	<array>
 		<dict>

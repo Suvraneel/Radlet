@@ -320,3 +320,27 @@ final class JobNeedsTests: XCTestCase {
         XCTAssertEqual(p.needing, [:])
     }
 }
+
+final class SharedTypesTests: XCTestCase {
+    /// Shared files open in Radlet only if the app declares their types
+    /// and the radlet:// scheme, under the names SharedItem uses.
+    func testTheAppDeclaresWhatItShares() throws {
+        let mac = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let data = try Data(contentsOf: mac.appendingPathComponent("Resources/Info.plist"))
+        let plist = try XCTUnwrap(try PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any])
+        let schemes = (plist["CFBundleURLTypes"] as? [[String: Any]] ?? [])
+            .flatMap { $0["CFBundleURLSchemes"] as? [String] ?? [] }
+        XCTAssertTrue(schemes.contains(SharedItem.scheme))
+        let exported = plist["UTExportedTypeDeclarations"] as? [[String: Any]] ?? []
+        let owned = (plist["CFBundleDocumentTypes"] as? [[String: Any]] ?? [])
+            .filter { $0["LSHandlerRank"] as? String == "Owner" }
+            .flatMap { $0["LSItemContentTypes"] as? [String] ?? [] }
+        for kind in SharedItem.Kind.allCases {
+            let type = try XCTUnwrap(exported.first { $0["UTTypeIdentifier"] as? String == kind.typeIdentifier })
+            let tags = type["UTTypeTagSpecification"] as? [String: Any]
+            XCTAssertEqual(tags?["public.filename-extension"] as? [String], [kind.fileExtension])
+            XCTAssertTrue(owned.contains(kind.typeIdentifier), "\(kind) opens in Radlet")
+        }
+    }
+}
