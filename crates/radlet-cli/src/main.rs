@@ -14,7 +14,7 @@ use anyhow::{bail, Context as _, Result};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use radlet_core::job::{self, Event, Executor, RunOptions, Status};
 use radlet_core::ops::{
-    IconKind, NumberPosition, NumberStyle, PageTurn, Rect, RedactStyle, SplitMode,
+    IconKind, NumberPosition, NumberStyle, PageTurn, Rect, RedactStyle, SplitMode, TraceDetail,
 };
 use radlet_core::{
     catalog, format, Action, Capabilities, CompressLevel, Format, OutputLocation, Recipe, Step,
@@ -137,6 +137,16 @@ fn parse_turn(s: &str) -> std::result::Result<PageTurn, String> {
 fn parse_size_arg(s: &str) -> std::result::Result<u64, String> {
     radlet_core::ops::parse_size(s)
         .ok_or_else(|| format!("\"{s}\" isn't a size (try 500KB or 2MB)"))
+}
+
+#[derive(Copy, Clone, ValueEnum)]
+enum DetailArg {
+    /// Few colours and smooth shapes, for logos
+    Low,
+    /// Most icons and illustrations
+    Medium,
+    /// More colours and small shapes kept
+    High,
 }
 
 #[derive(Copy, Clone, ValueEnum)]
@@ -400,6 +410,17 @@ enum Command {
         /// Trim the result to the subject.
         #[arg(long)]
         crop: bool,
+    },
+    /// Trace pictures into SVG drawings: logos, icons and line art that stay
+    /// sharp at any size.
+    Trace {
+        #[command(flatten)]
+        run: RunArgs,
+        /// Dark parts as black shapes, the rest transparent.
+        #[arg(long)]
+        bw: bool,
+        #[arg(long, value_enum, default_value = "medium")]
+        detail: DetailArg,
     },
     /// Remove location, camera and other personal metadata.
     Strip {
@@ -1164,6 +1185,18 @@ fn dispatch(cli: Cli) -> Result<ExitCode> {
         Command::Normalize { run: r } => run(&r, Action::single(Step::NormalizeAudio), json_out),
         Command::Text { run: r } => run(&r, Action::CopyText, json_out),
         Command::Searchable { run: r } => run(&r, Action::single(Step::MakeSearchable), json_out),
+        Command::Trace { run: r, bw, detail } => run(
+            &r,
+            Action::single(Step::Trace {
+                color: !bw,
+                detail: match detail {
+                    DetailArg::Low => TraceDetail::Low,
+                    DetailArg::Medium => TraceDetail::Medium,
+                    DetailArg::High => TraceDetail::High,
+                },
+            }),
+            json_out,
+        ),
         Command::Cutout { run: r, crop } => run(
             &r,
             Action::single(Step::RemoveBackground { crop }),

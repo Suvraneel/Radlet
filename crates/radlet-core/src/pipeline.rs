@@ -12,12 +12,12 @@ use crate::engines::image::{self as img, EncodeOptions, Picture, ResizeSpec};
 use crate::engines::media::{self, MediaJob};
 use crate::engines::{
     anim, archive, data, doc, docpdf, folder, font, iwork, meta, pdf, pdfedit, pdfium, sheet,
-    speech, svg, text, vision,
+    speech, svg, text, trace, vision,
 };
 use crate::error::{Error, Result};
 use crate::format::{self, display_name, Category, Format};
 use crate::naming::{self, OutputLocation};
-use crate::ops::{CompressLevel, SplitMode, Step};
+use crate::ops::{CompressLevel, SplitMode, Step, TraceDetail};
 
 /// Everything a unit needs from its surroundings.
 pub struct Context<'a> {
@@ -503,6 +503,7 @@ fn step_name(step: &Step) -> &'static str {
         Step::Translate { .. } => "Translate",
         Step::FormatJson { .. } => "Format JSON",
         Step::RedactText { .. } => "Black out text",
+        Step::Trace { .. } => "Trace to SVG",
     }
 }
 
@@ -560,6 +561,10 @@ fn apply(
                         fmt: to,
                     });
                 }
+            }
+            // A picture converted to SVG is traced into shapes.
+            if to == Format::Svg && cur != Format::Svg && caps.can_decode_raster(cur) {
+                return trace_state(state, true, TraceDetail::default(), dst, caps, cancel);
             }
             // Moving pictures keep every frame between GIF, WebP and PNG.
             if let State::File { path, fmt } = &state {
@@ -771,6 +776,7 @@ fn apply(
             Ok(px.with_img(redacted).into_state())
         }
         Step::StripMetadata => strip(state, dst, caps, cancel, progress),
+        Step::Trace { color, detail } => trace_state(state, *color, *detail, dst, caps, cancel),
         Step::RedactText {
             words,
             emails,
@@ -1049,6 +1055,24 @@ fn apply(
 
 /// Markdown pages are titled after the file, not the scratch name a
 /// chain step had.
+/// Traces the picture (decoded, or as earlier steps left it) into `dst`.
+fn trace_state(
+    state: State,
+    color: bool,
+    detail: TraceDetail,
+    dst: &Path,
+    caps: &Capabilities,
+    cancel: &AtomicBool,
+) -> Result<State> {
+    let px = pixels(state, caps)?;
+    let svg = trace::trace(&px.pic.img, color, detail, cancel)?;
+    std::fs::write(dst, svg)?;
+    Ok(State::File {
+        path: dst.to_path_buf(),
+        fmt: Format::Svg,
+    })
+}
+
 fn retitle_html(path: &Path, title: &str) -> Result<()> {
     let html = std::fs::read_to_string(path)?;
     if let (Some(a), Some(b)) = (html.find("<title>"), html.find("</title>")) {
@@ -2226,6 +2250,80 @@ mod tests {
         assert!(std::fs::read_to_string(vtt.output.unwrap())
             .unwrap()
             .starts_with("WEBVTT"));
+    }
+
+    #[test]
+    fn pictures_trace_into_svg_drawings() {
+        let dir = tempfile::tempdir().unwrap();
+        let caps = Capabilities::none();
+        let logo = dir.path().join("logo.png");
+        let mut img = image::RgbaImage::from_pixel(96, 64, image::Rgba([0, 0, 0, 0]));
+        for y in 16..48 {
+            for x in 16..80 {
+                img.put_pixel(x, y, image::Rgba([30, 90, 200, 255]));
+            }
+        }
+        img.save(&logo).unwrap();
+        // Converting to SVG traces it.
+        let svg = run_with(
+            &caps,
+            &logo,
+            &[Step::Convert {
+                to: Format::Svg,
+                quality: None,
+            }],
+        )
+        .unwrap()
+        .output
+        .unwrap();
+        assert_eq!(svg.file_name().unwrap(), "logo.svg");
+        let text = std::fs::read_to_string(&svg).unwrap();
+        assert!(text.contains("width=\"96\" height=\"64\""), "{text}");
+        assert_eq!(
+            text.matches("<path").count(),
+            1,
+            "the blue bar only: {text}"
+        );
+        // The drawing reads back as an image.
+        assert_eq!(format::detect(&svg).unwrap(), Format::Svg);
+        // Earlier steps run on the pixels first: crop the left half, then
+        // trace in black and white.
+        let half = run_with(
+            &caps,
+            &logo,
+            &[
+                Step::Crop {
+                    rect: crate::ops::Rect {
+                        x: 0.0,
+                        y: 0.0,
+                        w: 0.5,
+                        h: 1.0,
+                    },
+                },
+                Step::Trace {
+                    color: false,
+                    detail: TraceDetail::Low,
+                },
+            ],
+        )
+        .unwrap()
+        .output
+        .unwrap();
+        let text = std::fs::read_to_string(&half).unwrap();
+        assert!(text.contains("width=\"48\" height=\"64\""), "{text}");
+        assert!(text.contains("fill=\"#000000\""));
+        // A drawing has nothing to trace.
+        assert!(matches!(
+            run_with(
+                &caps,
+                &svg,
+                &[Step::Trace {
+                    color: true,
+                    detail: TraceDetail::Medium,
+                }]
+            ),
+            Err(Error::UnsupportedInput(_))
+        ));
     }
 
     fn run_with(caps: &Capabilities, input: &Path, steps: &[Step]) -> Result<Produced> {

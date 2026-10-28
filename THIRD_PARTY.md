@@ -27,6 +27,7 @@ Radlet's own code is original. It depends on the following open-source component
 | libc | Process-group signalling on macOS and Linux; local time for archive dates | MIT OR Apache-2.0 |
 | resvg / usvg / tiny-skia (with fontdb and rustybuzz for text) | Drawing SVGs into pixels | Apache-2.0 OR MIT; tiny-skia BSD-3-Clause |
 | svg2pdf / pdf-writer | SVG to vector PDF | MIT OR Apache-2.0 |
+| visioncortex (with flo_curves and bit-vec) | Tracing pictures into SVG drawings; the tracing steps follow visioncortex's VTracer (MIT OR Apache-2.0) | MIT OR Apache-2.0; flo_curves Apache-2.0 |
 | zip | Making and extracting ZIP archives (with AES encryption); reading Word, PowerPoint and EPUB files | MIT |
 | aes, pbkdf2, hmac, sha1 (through zip) | ZIP passwords | MIT OR Apache-2.0 |
 | lzma-rust2, zstd / zstd-sys (bundles Zstandard), deflate64 (through zip) | LZMA, XZ, Zstandard and Deflate64 ZIP entries | Apache-2.0; BSD-3-Clause; MIT |

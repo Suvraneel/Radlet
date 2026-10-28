@@ -83,7 +83,7 @@ Radlet is two programs. The **Mac app** (Swift) spots the drag, draws the wheel 
 
 | Kind | What you get |
 | --- | --- |
-| **Images** | JPEG, PNG, WebP, HEIC, AVIF, JPEG XL, TIFF, GIF, BMP, ICO, ICNS, TGA and QOI to each other or to PDF. Camera RAW (DNG, CR2, CR3, NEF, ARW, RAF, ORF, RW2 and more), Photoshop PSD and JPEG 2000 read in too, through macOS. Moving pictures keep every frame and its timing between GIF, WebP and PNG (APNG), and a GIF becomes an MP4 or MOV video. A picture converts to **Text** through text recognition. A PDF converted to JPEG, PNG, WebP or TIFF gives one image per page. |
+| **Images** | JPEG, PNG, WebP, HEIC, AVIF, JPEG XL, TIFF, GIF, BMP, ICO, ICNS, TGA and QOI to each other or to PDF. Any picture also traces into an **SVG** drawing of filled shapes that stays sharp at any size, for logos, icons and line art: in colour, in black and white, Simple (few colours, smooth shapes) or Detailed. Camera RAW (DNG, CR2, CR3, NEF, ARW, RAF, ORF, RW2 and more), Photoshop PSD and JPEG 2000 read in too, through macOS. Moving pictures keep every frame and its timing between GIF, WebP and PNG (APNG), and a GIF becomes an MP4 or MOV video. A picture converts to **Text** through text recognition. A PDF converted to JPEG, PNG, WebP or TIFF gives one image per page. |
 | **SVG** | Treated as an image: PNG, JPEG, WebP, ICO and the rest, drawn sharp at 1×, 2× or 4× (at least 1024 px on its longest side by default). SVG to PDF stays vector. |
 | **Icons** | Any picture or SVG to a macOS ICNS (16 to 1024 px) or an ICO. |
 | **Documents** | TXT, Markdown, HTML, Word (.docx), RTF and **EPUB** e-books convert to each other and to PDF, keeping headings, lists, quotes, code, tables, bold, italic and links. Word 97 (.doc) and OpenDocument (.odt) files read in too, through macOS, and so does the text of **PowerPoint** slides (titles, bullets, tables and speaker notes). A PDF converts to **Word**, text, Markdown, HTML or RTF; on a Mac, scanned pages are read with text recognition first. |
@@ -293,6 +293,7 @@ radlet text receipt.jpg                     # prints the recognised text (macOS 
 radlet convert scan.png --to txt            # saves it as scan.txt instead
 radlet searchable scan.pdf                  # "scan (searchable).pdf"
 radlet cutout portrait.jpg --crop           # transparent PNG trimmed to the subject
+radlet convert logo.png --to svg            # traced into shapes; or: radlet trace logo.png --bw --detail low
 radlet resize photos/*.jpg --max 1600 --out ~/Desktop/small
 radlet resize banner.png --width 1200       # exact width, keeps the aspect ratio
 radlet crop photo.jpg --rect 0.1,0.1,0.8,0.8 # fractions x,y,w,h: keeps the middle 80%
@@ -391,7 +392,7 @@ quality = 80
 op = "strip_metadata"
 ```
 
-Steps: `convert {to, quality?}`, `resize {max | percent | width | height}`, `rotate {degrees}`, `crop {rect}`, `redact {rects, style?}`, `strip_metadata`, `compress {level?: light|balanced|strong|smart, target_bytes?}`, `pages {pages, rotate?}`, `page_numbers {position?, style?, start?, size?, skip_first?}`, `watermark {text, opacity?, size?, diagonal?}`, `trim {start?, end?}`, `normalize_audio`, `remove_background {crop?}`, `make_searchable`, `transcribe {to?: srt|vtt|txt, language?}`. A `rect` is `{x, y, w, h}` in fractions of the picture; times are in seconds. Image steps share one decode and one encode, so chains never compress twice.
+Steps: `convert {to, quality?}`, `resize {max | percent | width | height}`, `rotate {degrees}`, `crop {rect}`, `redact {rects, style?}`, `strip_metadata`, `compress {level?: light|balanced|strong|smart, target_bytes?}`, `pages {pages, rotate?}`, `page_numbers {position?, style?, start?, size?, skip_first?}`, `watermark {text, opacity?, size?, diagonal?}`, `trim {start?, end?}`, `normalize_audio`, `remove_background {crop?}`, `trace {color?, detail?: low|medium|high}`, `make_searchable`, `transcribe {to?: srt|vtt|txt, language?}`. A `rect` is `{x, y, w, h}` in fractions of the picture; times are in seconds. Image steps share one decode and one encode, so chains never compress twice.
 
 You don't have to write TOML: **Save as Loadout…** in a tool window, or **Settings → Loadouts**, writes the file for you. Saving never overwrites another loadout; a name that's taken gets a number. Passwords can't go in a loadout. [examples/loadouts/thumbnail.toml](examples/loadouts/thumbnail.toml) is a starting point.
 

@@ -29,6 +29,7 @@ pub mod sips;
 pub mod speech;
 pub mod svg;
 pub mod text;
+pub mod trace;
 pub mod translate;
 pub mod tree;
 pub mod vision;

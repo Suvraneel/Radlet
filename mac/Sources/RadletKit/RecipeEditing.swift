@@ -51,6 +51,9 @@ public struct StepFields: Equatable, Sendable {
     /// Transcribe: "srt", "vtt" or "txt", and a language tag or "".
     public var subtitleFormat = "srt"
     public var language = ""
+    /// Trace: keep the colours, and how closely to follow the picture.
+    public var traceColor = true
+    public var traceDetail = StepText.TraceDetail.medium
     /// The step as loaded, so options the editor doesn't show survive.
     public let original: [String: JSONValue]
 
@@ -86,6 +89,9 @@ public struct StepFields: Equatable, Sendable {
             end = o["end"]?.double.map(TimeText.format) ?? ""
         case "remove_background":
             crop = o["crop"]?.bool ?? false
+        case "trace":
+            traceColor = o["color"]?.bool ?? true
+            traceDetail = StepText.TraceDetail(rawValue: o["detail"]?.string ?? "") ?? .medium
         case "transcribe":
             subtitleFormat = o["to"]?.string ?? "srt"
             language = o["language"]?.string ?? ""
@@ -98,7 +104,7 @@ public struct StepFields: Equatable, Sendable {
     /// Pages…) are kept exactly as recorded.
     public var hasOptions: Bool {
         ["convert", "resize", "rotate", "compress", "watermark", "page_numbers", "trim", "remove_background",
-         "transcribe"]
+         "transcribe", "trace"]
             .contains(op)
     }
 
@@ -173,6 +179,13 @@ public struct StepFields: Equatable, Sendable {
             }
         case "remove_background":
             if crop { o["crop"] = .bool(true) } else { o.removeValue(forKey: "crop") }
+        case "trace":
+            if traceColor { o.removeValue(forKey: "color") } else { o["color"] = .bool(false) }
+            if traceDetail == .medium {
+                o.removeValue(forKey: "detail")
+            } else {
+                o["detail"] = .string(traceDetail.rawValue)
+            }
         case "transcribe":
             o["to"] = .string(Self.subtitleFormats.contains(subtitleFormat) ? subtitleFormat : "srt")
             let tag = language.trimmingCharacters(in: .whitespaces)

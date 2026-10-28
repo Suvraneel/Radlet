@@ -16,6 +16,21 @@ public enum StepText {
         "pages": "Pages", "numbers": "Numbers", "sqlite": "SQLite",
     ]
 
+    /// How closely a traced drawing follows the picture (the engine's
+    /// `detail`).
+    public enum TraceDetail: String, CaseIterable, Identifiable, Sendable {
+        case low, medium, high
+        public var id: String { rawValue }
+
+        public var title: String {
+            switch self {
+            case .low: return "Simple"
+            case .medium: return "Standard"
+            case .high: return "Detailed"
+            }
+        }
+    }
+
     public static func formatName(_ id: String) -> String {
         formatNames[id] ?? id.uppercased()
     }
@@ -23,7 +38,7 @@ public enum StepText {
     /// Formats offered when adding a Convert step.
     public static let convertTargets = ["jpeg", "png", "webp", "heic", "pdf", "gif", "tiff", "txt",
                                         "md", "html", "docx", "csv", "xlsx", "json",
-                                        "mp4", "mov", "webm", "mp3", "m4a", "wav"]
+                                        "mp4", "mov", "webm", "mp3", "m4a", "wav", "svg"]
 
     public static func describe(_ step: JSONValue) -> String {
         let op = step["op"]?.string ?? "?"
@@ -72,6 +87,10 @@ public enum StepText {
             return "Even out volume"
         case "remove_background":
             return step["crop"]?.bool == true ? "Remove background and trim" : "Remove background"
+        case "trace":
+            let detail = TraceDetail(rawValue: step["detail"]?.string ?? "medium") ?? .medium
+            let base = step["color"]?.bool == false ? "Trace to SVG in black and white" : "Trace to SVG"
+            return detail == .medium ? base : "\(base), \(detail.title.lowercased())"
         case "make_searchable":
             return "Make searchable PDF"
         case "transcribe":
@@ -124,6 +143,7 @@ public enum StepText {
         ("Compress", .object(["op": .string("compress"), "level": .string("balanced")])),
         ("Remove metadata", .object(["op": .string("strip_metadata")])),
         ("Remove background", .object(["op": .string("remove_background")])),
+        ("Trace to SVG", .object(["op": .string("trace")])),
         ("Make searchable PDF", .object(["op": .string("make_searchable")])),
         ("Page numbers", .object(["op": .string("page_numbers"), "style": .string("number")])),
         ("Watermark", .object(["op": .string("watermark"), "text": .string("DRAFT")])),

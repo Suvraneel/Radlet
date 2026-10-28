@@ -9,7 +9,9 @@ use serde::Serialize;
 use crate::engines::avmedia;
 use crate::error::Need;
 use crate::format::{Category, Format};
-use crate::ops::{Action, CompressLevel, IconKind, Rect, RedactStyle, SplitMode, Step};
+use crate::ops::{
+    Action, CompressLevel, IconKind, Rect, RedactStyle, SplitMode, Step, TraceDetail,
+};
 use crate::recipe::Recipe;
 
 /// Optional external programs. Everything else is built in.
@@ -236,6 +238,10 @@ pub fn targets(from: Format, caps: &Capabilities) -> Vec<Format> {
                 .filter(|&t| t == Pdf || caps.can_encode_raster(t)),
         );
     }
+    // Pictures trace into drawings.
+    if traces(from, caps) {
+        out.push(Svg);
+    }
     // Text recognition reads images too.
     if caps.vision.is_some() && caps.can_decode_raster(from) && from != Svg {
         out.push(Txt);
@@ -304,6 +310,11 @@ pub fn targets(from: Format, caps: &Capabilities) -> Vec<Format> {
         }
     });
     out
+}
+
+/// True for pictures that can be traced into an SVG drawing.
+fn traces(f: Format, caps: &Capabilities) -> bool {
+    f != Svg && caps.can_decode_raster(f)
 }
 
 pub fn can_convert(from: Format, to: Format, caps: &Capabilities) -> bool {
@@ -396,6 +407,7 @@ pub fn step_accepts(step: &Step, f: Format, caps: &Capabilities) -> bool {
         }
         Step::FormatJson { .. } => f == Json,
         Step::RedactText { .. } => caps.vision.is_some() && f == Pdf,
+        Step::Trace { .. } => traces(f, caps),
     }
 }
 
@@ -408,6 +420,7 @@ pub fn step_output(step: &Step, f: Format) -> Format {
         Step::RemoveBackground { .. } => Png,
         Step::MakeSearchable => Pdf,
         Step::Transcribe { to, .. } => *to,
+        Step::Trace { .. } => Svg,
         // A drawing resized becomes pixels.
         Step::Resize { .. } if f == Svg => Png,
         Step::Compress { .. } if f.category() == Category::Video => Mp4,
@@ -569,6 +582,47 @@ fn convert_variants(
             quality("small", "Small", 60),
         ],
         Heic if images => vec![quality("best", "Best", 92), quality("small", "Small", 60)],
+        Svg if images => {
+            let trace = |key: &str, label: &str, hint: &str, color: bool, detail: TraceDetail| {
+                variant(
+                    id,
+                    key,
+                    label,
+                    hint,
+                    Action::single(Step::Trace { color, detail }),
+                )
+            };
+            vec![
+                trace(
+                    "color",
+                    "Colour",
+                    "Traced into shapes, keeping the colours",
+                    true,
+                    TraceDetail::Medium,
+                ),
+                trace(
+                    "bw",
+                    "B & W",
+                    "Dark parts as black shapes, the rest transparent",
+                    false,
+                    TraceDetail::Medium,
+                ),
+                trace(
+                    "simple",
+                    "Simple",
+                    "Few colours and smooth shapes, for logos",
+                    true,
+                    TraceDetail::Low,
+                ),
+                trace(
+                    "detailed",
+                    "Detailed",
+                    "More colours and small shapes kept",
+                    true,
+                    TraceDetail::High,
+                ),
+            ]
+        }
         Pdf if combinable => vec![variant(
             id,
             "combine",
@@ -1935,6 +1989,10 @@ mod tests {
         assert_eq!(labels(&w.convert, "to_pdf"), ["One PDF"]);
         assert!(labels(&w.convert, "to_tiff").is_empty());
         assert_eq!(
+            labels(&w.convert, "to_svg"),
+            ["Colour", "B & W", "Simple", "Detailed"]
+        );
+        assert_eq!(
             labels(&w.tools, "resize"),
             ["50 %", "1920 px", "25 %", "1280 px"]
         );
@@ -2240,7 +2298,7 @@ mod tests {
         );
         assert_eq!(
             targets(Gif, &mac),
-            [Jpeg, Png, Webp, Avif, Pdf, Tiff, Jxl, Bmp, Ico, Icns, Tga, Qoi, Txt, Mp4, Mov]
+            [Jpeg, Png, Webp, Avif, Pdf, Tiff, Jxl, Bmp, Ico, Icns, Tga, Qoi, Svg, Txt, Mp4, Mov]
         );
         let clips = ids(&wheel(&[Some(Mov), Some(Mp4)], &mac, &[]));
         assert!(clips.contains(&"join_media".to_string()), "{clips:?}");

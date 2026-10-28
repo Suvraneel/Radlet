@@ -202,6 +202,17 @@ pub enum Step {
         #[serde(default, skip_serializing_if = "std::ops::Not::not")]
         minify: bool,
     },
+    /// Trace a picture into an SVG drawing of filled shapes, for logos,
+    /// icons and line art that should stay sharp at any size. `color`
+    /// (default) keeps the colours; without it dark areas become black
+    /// shapes and the rest is left transparent. `detail` trades likeness
+    /// for fewer, smoother shapes.
+    Trace {
+        #[serde(default = "yes", skip_serializing_if = "Clone::clone")]
+        color: bool,
+        #[serde(default)]
+        detail: TraceDetail,
+    },
     /// Black out text in a PDF for real (Mac helper): every `words` phrase
     /// (any case), and with the flags every email address, phone number or
     /// card number. Pages with a match become pictures with black boxes
@@ -224,6 +235,19 @@ fn pixelate() -> RedactStyle {
 
 fn subtitle_format() -> Format {
     Format::Srt
+}
+
+/// How closely a traced drawing follows the picture.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TraceDetail {
+    /// Few colours and smooth shapes: logos and flat artwork.
+    Low,
+    /// What most icons and illustrations want.
+    #[default]
+    Medium,
+    /// Many colours and small shapes kept: detailed artwork.
+    High,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -308,6 +332,7 @@ impl Step {
             Step::FormatJson { minify: false } => Some("formatted"),
             Step::FormatJson { minify: true } => Some("minified"),
             Step::RedactText { .. } => Some("redacted"),
+            Step::Trace { .. } => Some("traced"),
         }
     }
 }

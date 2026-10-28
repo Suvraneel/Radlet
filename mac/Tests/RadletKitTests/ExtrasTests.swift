@@ -55,6 +55,10 @@ final class ExtraActionTests: XCTestCase {
         XCTAssertEqual(StepText.describe(.object(["op": .string("page_numbers"), "style": .string("fraction")])),
                        "Page numbers (3 / 12)")
         XCTAssertEqual(StepText.describe(.object(["op": .string("future_thing")])), "Future Thing")
+        XCTAssertEqual(StepText.describe(.object(["op": .string("trace")])), "Trace to SVG")
+        XCTAssertEqual(StepText.describe(.object(["op": .string("trace"), "color": .bool(false),
+                                                  "detail": .string("low")])),
+                       "Trace to SVG in black and white, simple")
     }
 }
 
@@ -291,6 +295,21 @@ final class RecipeEditingTests: XCTestCase {
                                        "rect": .object(["x": .double(0.1), "y": .int(0), "w": .double(0.5), "h": .int(1)])])
         XCTAssertFalse(StepFields(crop).hasOptions)
         XCTAssertEqual(try StepFields(crop).build().get(), crop)
+    }
+
+    func testTraceOptions() throws {
+        let plain: JSONValue = .object(["op": .string("trace")])
+        var f = StepFields(plain)
+        XCTAssertTrue(f.hasOptions)
+        XCTAssertTrue(f.traceColor)
+        XCTAssertEqual(f.traceDetail, .medium)
+        XCTAssertEqual(try f.build().get(), plain, "defaults stay out of the loadout")
+        f.traceColor = false
+        f.traceDetail = .high
+        XCTAssertEqual(try f.build().get(),
+                       .object(["op": .string("trace"), "color": .bool(false), "detail": .string("high")]))
+        XCTAssertTrue(StepText.templates.contains { $0.step["op"]?.string == "trace" })
+        XCTAssertTrue(StepText.convertTargets.contains("svg"))
     }
 
     func testEditingChangesOnlyWhatsShown() throws {

@@ -498,6 +498,13 @@ private struct StepEditor: View {
             }
         case "remove_background":
             Toggle("Trim the picture to the subject", isOn: $step.fields.crop)
+        case "trace":
+            HStack {
+                Toggle("Keep the colours", isOn: $step.fields.traceColor)
+                Picker("Detail", selection: $step.fields.traceDetail) {
+                    ForEach(StepText.TraceDetail.allCases) { d in Text(d.title).tag(d) }
+                }
+            }
         case "transcribe":
             HStack {
                 Picker("Save as", selection: $step.fields.subtitleFormat) {

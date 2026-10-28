@@ -257,7 +257,8 @@ compress {level?: light|balanced|strong|smart, target_bytes?}; pages {pages: [nu
 page_numbers {position?, style?: number|page|page_of_total|fraction, start?, skip_first?}; \
 watermark {text, opacity?, diagonal?}; trim {start?, end?} in seconds; normalize_audio; \
 remove_background {crop?}; make_searchable; transcribe {to?: srt|vtt|txt, language?}; \
-redact_text {words?: [phrases], emails?, phones?, cards?} blacks out text in PDFs for real (Mac). \
+redact_text {words?: [phrases], emails?, phones?, cards?} blacks out text in PDFs for real (Mac); \
+trace {color?: true|false, detail?: low|medium|high} redraws a picture as an SVG of filled shapes. \
 Steps run in order on each file, for example [{\"op\":\"resize\",\"max\":1600},{\"op\":\"convert\",\"to\":\"webp\"}].";
 
 fn tools(caps: &Capabilities) -> Vec<Value> {
@@ -797,6 +798,13 @@ fn inspect(files: &[PathBuf], caps: &Capabilities) -> Result<(String, Value), St
         ),
         ("normalize_audio", Step::NormalizeAudio),
         ("remove_background", Step::RemoveBackground { crop: false }),
+        (
+            "trace",
+            Step::Trace {
+                color: true,
+                detail: Default::default(),
+            },
+        ),
         ("make_searchable", Step::MakeSearchable),
         (
             "transcribe",
