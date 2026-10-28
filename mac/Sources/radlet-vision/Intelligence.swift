@@ -20,8 +20,10 @@
 
 import Foundation
 import Vision
-#if compiler(>=6.2)
+#if compiler(>=6.2) && arch(arm64) && canImport(FoundationModels)
 // Weakly linked: the helper still starts on Macs without the framework.
+// Apple silicon only, like the model itself, so the Intel slice of the
+// universal build never imports it.
 @_weakLinked import FoundationModels
 #endif
 
@@ -181,7 +183,7 @@ func summarise(_ text: String) throws -> String {
 /// The on-device model's answer, or nil when this Mac has no model and
 /// `required` is false. Without one where it's required: exit 4.
 func ask(_ instructions: String, _ prompt: String, required: Bool) throws -> String? {
-    #if compiler(>=6.2)
+    #if compiler(>=6.2) && arch(arm64) && canImport(FoundationModels)
     if #available(macOS 26.0, *) {
         let model = SystemLanguageModel.default
         switch model.availability {
@@ -217,7 +219,7 @@ func ask(_ instructions: String, _ prompt: String, required: Bool) throws -> Str
 
 /// For selftest: whether the on-device model can be used here.
 func intelligenceStatus() -> String {
-    #if compiler(>=6.2)
+    #if compiler(>=6.2) && arch(arm64) && canImport(FoundationModels)
     if #available(macOS 26.0, *) {
         switch SystemLanguageModel.default.availability {
         case .available: return "on"
@@ -228,5 +230,9 @@ func intelligenceStatus() -> String {
         }
     }
     #endif
+    #if arch(arm64)
     return "needs macOS 26"
+    #else
+    return "needs Apple silicon"
+    #endif
 }
