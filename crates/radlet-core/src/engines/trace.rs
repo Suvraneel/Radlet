@@ -160,7 +160,7 @@ fn color_shapes(
         Color::default()
     };
     // Every other pixel is treated as opaque.
-    for px in image.pixels.chunks_exact_mut(4) {
+    for px in image.pixels.as_chunks_mut::<4>().0 {
         px[3] = 255;
     }
     let runner = Runner::new(
@@ -246,7 +246,7 @@ fn black_shapes(
 /// True when any of the picture is see-through. Those pixels are left out
 /// of the drawing rather than traced in whatever colour they hide.
 fn has_transparency(image: &ColorImage) -> bool {
-    image.pixels.chunks_exact(4).any(|p| p[3] < 128)
+    image.pixels.as_chunks::<4>().0.iter().any(|p| p[3] < 128)
 }
 
 /// A colour no opaque pixel uses, to stand for transparency.
@@ -255,7 +255,7 @@ fn unused_color(image: &ColorImage) -> Option<Color> {
     let bucket = |r: u8, g: u8, b: u8| {
         ((r as usize >> 3) << 10) | ((g as usize >> 3) << 5) | (b as usize >> 3)
     };
-    for p in image.pixels.chunks_exact(4) {
+    for p in image.pixels.as_chunks::<4>().0 {
         if p[3] >= 128 {
             used[bucket(p[0], p[1], p[2])] = true;
         }
